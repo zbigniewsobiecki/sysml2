@@ -96,6 +96,8 @@ file(GLOB PACKCC_VALID_FIXTURES
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/official/phase3-domain/*.sysml
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/official/phase3-domain/*/*.sysml
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/official/phase4-advanced/*/*.sysml
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/official/phase5-framework/*/*.sysml
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/official/phase5-framework/*/*/*.sysml
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/vehicle.sysml
 )
 foreach(fixture ${PACKCC_VALID_FIXTURES})
