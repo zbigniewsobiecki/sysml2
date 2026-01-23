@@ -1,0 +1,55 @@
+/*
+ * SysML v2 Parser - CLI Options
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#ifndef SYSML2_CLI_H
+#define SYSML2_CLI_H
+
+#include "common.h"
+#include "diagnostic.h"
+
+/* Output formats */
+typedef enum {
+    SYSML2_OUTPUT_NONE,      /* Validation only */
+    SYSML2_OUTPUT_JSON,      /* JSON AST output */
+    SYSML2_OUTPUT_XML,       /* XML AST output (future) */
+} Sysml2OutputFormat;
+
+/* CLI options */
+typedef struct {
+    /* Input/output */
+    const char **input_files;       /* Array of input file paths */
+    size_t input_file_count;
+    const char *output_file;        /* Output file (NULL for stdout) */
+    Sysml2OutputFormat output_format;
+
+    /* Diagnostics */
+    Sysml2ColorMode color_mode;
+    size_t max_errors;
+    bool treat_warnings_as_errors;
+
+    /* Debug options */
+    bool dump_tokens;           /* Print lexer tokens */
+    bool dump_ast;              /* Print parsed AST */
+    bool verbose;               /* Verbose output */
+
+    /* Meta */
+    bool show_help;
+    bool show_version;
+} Sysml2CliOptions;
+
+/* Parse command line arguments */
+Sysml2Result sysml2_cli_parse(Sysml2CliOptions *options, int argc, char **argv);
+
+/* Free allocated memory in options */
+void sysml2_cli_cleanup(Sysml2CliOptions *options);
+
+/* Print help message */
+void sysml2_cli_print_help(FILE *output);
+
+/* Print version information */
+void sysml2_cli_print_version(FILE *output);
+
+#endif /* SYSML2_CLI_H */

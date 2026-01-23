@@ -1,0 +1,264 @@
+/*
+ * SysML v2 Parser - Token Definitions
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#ifndef SYSML2_TOKEN_H
+#define SYSML2_TOKEN_H
+
+#include "common.h"
+
+/* Token types for KerML and SysML v2 */
+typedef enum {
+    /* Special tokens */
+    SYSML2_TOKEN_EOF = 0,
+    SYSML2_TOKEN_ERROR,
+
+    /* Literals */
+    SYSML2_TOKEN_IDENTIFIER,        /* Regular identifier */
+    SYSML2_TOKEN_UNRESTRICTED_NAME, /* 'quoted name' */
+    SYSML2_TOKEN_INTEGER,           /* 123 */
+    SYSML2_TOKEN_REAL,              /* 1.23, 1e10 */
+    SYSML2_TOKEN_STRING,            /* "string" */
+
+    /* Keywords - KerML Core */
+    SYSML2_TOKEN_KW_ABOUT,
+    SYSML2_TOKEN_KW_ABSTRACT,
+    SYSML2_TOKEN_KW_ALIAS,
+    SYSML2_TOKEN_KW_ALL,
+    SYSML2_TOKEN_KW_AND,
+    SYSML2_TOKEN_KW_AS,
+    SYSML2_TOKEN_KW_ASSOC,
+    SYSML2_TOKEN_KW_BEHAVIOR,
+    SYSML2_TOKEN_KW_BINDING,
+    SYSML2_TOKEN_KW_BOOL,
+    SYSML2_TOKEN_KW_BY,
+    SYSML2_TOKEN_KW_CHAINS,
+    SYSML2_TOKEN_KW_CLASS,
+    SYSML2_TOKEN_KW_CLASSIFIER,
+    SYSML2_TOKEN_KW_COMMENT,
+    SYSML2_TOKEN_KW_COMPOSITE,
+    SYSML2_TOKEN_KW_CONJUGATE,
+    SYSML2_TOKEN_KW_CONJUGATES,
+    SYSML2_TOKEN_KW_CONJUGATION,
+    SYSML2_TOKEN_KW_CONNECTOR,
+    SYSML2_TOKEN_KW_DATATYPE,
+    SYSML2_TOKEN_KW_DEFAULT,
+    SYSML2_TOKEN_KW_DERIVED,
+    SYSML2_TOKEN_KW_DIFFERENCES,
+    SYSML2_TOKEN_KW_DISJOINING,
+    SYSML2_TOKEN_KW_DISJOINT,
+    SYSML2_TOKEN_KW_DOC,
+    SYSML2_TOKEN_KW_ELSE,
+    SYSML2_TOKEN_KW_END,
+    SYSML2_TOKEN_KW_EXPR,
+    SYSML2_TOKEN_KW_FALSE,
+    SYSML2_TOKEN_KW_FEATURE,
+    SYSML2_TOKEN_KW_FEATURED,
+    SYSML2_TOKEN_KW_FEATURING,
+    SYSML2_TOKEN_KW_FILTER,
+    SYSML2_TOKEN_KW_FIRST,
+    SYSML2_TOKEN_KW_FROM,
+    SYSML2_TOKEN_KW_FUNCTION,
+    SYSML2_TOKEN_KW_HASTYPE,
+    SYSML2_TOKEN_KW_IF,
+    SYSML2_TOKEN_KW_IMPLIES,
+    SYSML2_TOKEN_KW_IMPORT,
+    SYSML2_TOKEN_KW_IN,
+    SYSML2_TOKEN_KW_INOUT,
+    SYSML2_TOKEN_KW_INTERACTION,
+    SYSML2_TOKEN_KW_INTERSECTS,
+    SYSML2_TOKEN_KW_INTERSECTING,
+    SYSML2_TOKEN_KW_INV,
+    SYSML2_TOKEN_KW_INVERSE,
+    SYSML2_TOKEN_KW_ISTYPE,
+    SYSML2_TOKEN_KW_LANGUAGE,
+    SYSML2_TOKEN_KW_LIBRARY,
+    SYSML2_TOKEN_KW_LOCALE,
+    SYSML2_TOKEN_KW_LOOP,
+    SYSML2_TOKEN_KW_MEMBER,
+    SYSML2_TOKEN_KW_METACLASS,
+    SYSML2_TOKEN_KW_METADATA,
+    SYSML2_TOKEN_KW_MULTIPLICITY,
+    SYSML2_TOKEN_KW_NAMESPACE,
+    SYSML2_TOKEN_KW_NONUNIQUE,
+    SYSML2_TOKEN_KW_NOT,
+    SYSML2_TOKEN_KW_NULL,
+    SYSML2_TOKEN_KW_OF,
+    SYSML2_TOKEN_KW_OR,
+    SYSML2_TOKEN_KW_ORDERED,
+    SYSML2_TOKEN_KW_OUT,
+    SYSML2_TOKEN_KW_PACKAGE,
+    SYSML2_TOKEN_KW_PORTION,
+    SYSML2_TOKEN_KW_PREDICATE,
+    SYSML2_TOKEN_KW_PRIVATE,
+    SYSML2_TOKEN_KW_PROTECTED,
+    SYSML2_TOKEN_KW_PUBLIC,
+    SYSML2_TOKEN_KW_READONLY,
+    SYSML2_TOKEN_KW_REDEFINES,
+    SYSML2_TOKEN_KW_REDEFINITION,
+    SYSML2_TOKEN_KW_REF,
+    SYSML2_TOKEN_KW_REFERENCES,
+    SYSML2_TOKEN_KW_REP,
+    SYSML2_TOKEN_KW_RETURN,
+    SYSML2_TOKEN_KW_SPECIALIZATION,
+    SYSML2_TOKEN_KW_SPECIALIZES,
+    SYSML2_TOKEN_KW_STEP,
+    SYSML2_TOKEN_KW_STRUCT,
+    SYSML2_TOKEN_KW_SUBCLASSIFIER,
+    SYSML2_TOKEN_KW_SUBSET,
+    SYSML2_TOKEN_KW_SUBSETS,
+    SYSML2_TOKEN_KW_SUBTYPE,
+    SYSML2_TOKEN_KW_SUCCESSION,
+    SYSML2_TOKEN_KW_THEN,
+    SYSML2_TOKEN_KW_TO,
+    SYSML2_TOKEN_KW_TRUE,
+    SYSML2_TOKEN_KW_TYPE,
+    SYSML2_TOKEN_KW_TYPED,
+    SYSML2_TOKEN_KW_TYPING,
+    SYSML2_TOKEN_KW_UNIONS,
+    SYSML2_TOKEN_KW_UNIONING,
+    SYSML2_TOKEN_KW_XOR,
+
+    /* SysML v2 Keywords */
+    SYSML2_TOKEN_KW_ACCEPT,
+    SYSML2_TOKEN_KW_ACTION,
+    SYSML2_TOKEN_KW_ACTOR,
+    SYSML2_TOKEN_KW_AFTER,
+    SYSML2_TOKEN_KW_ALLOCATION,
+    SYSML2_TOKEN_KW_ANALYSIS,
+    SYSML2_TOKEN_KW_ASSERT,
+    SYSML2_TOKEN_KW_ASSIGN,
+    SYSML2_TOKEN_KW_ASSUMPTION,
+    SYSML2_TOKEN_KW_AT,
+    SYSML2_TOKEN_KW_ATTRIBUTE,
+    SYSML2_TOKEN_KW_CALC,
+    SYSML2_TOKEN_KW_CASE,
+    SYSML2_TOKEN_KW_CONCERN,
+    SYSML2_TOKEN_KW_CONNECTION,
+    SYSML2_TOKEN_KW_CONSTRAINT,
+    SYSML2_TOKEN_KW_DECIDE,
+    SYSML2_TOKEN_KW_DEF,
+    SYSML2_TOKEN_KW_DEPENDENCY,
+    SYSML2_TOKEN_KW_DO,
+    SYSML2_TOKEN_KW_ENTRY,
+    SYSML2_TOKEN_KW_ENUM,
+    SYSML2_TOKEN_KW_EVENT,
+    SYSML2_TOKEN_KW_EXHIBIT,
+    SYSML2_TOKEN_KW_EXIT,
+    SYSML2_TOKEN_KW_EXPOSE,
+    SYSML2_TOKEN_KW_FLOW,
+    SYSML2_TOKEN_KW_FOR,
+    SYSML2_TOKEN_KW_FORK,
+    SYSML2_TOKEN_KW_FRAME,
+    SYSML2_TOKEN_KW_INCLUDE,
+    SYSML2_TOKEN_KW_INDIVIDUAL,
+    SYSML2_TOKEN_KW_INTERFACE,
+    SYSML2_TOKEN_KW_ITEM,
+    SYSML2_TOKEN_KW_JOIN,
+    SYSML2_TOKEN_KW_MERGE,
+    SYSML2_TOKEN_KW_MESSAGE,
+    SYSML2_TOKEN_KW_OBJECTIVE,
+    SYSML2_TOKEN_KW_OCCURRENCE,
+    SYSML2_TOKEN_KW_PARALLEL,
+    SYSML2_TOKEN_KW_PART,
+    SYSML2_TOKEN_KW_PERFORM,
+    SYSML2_TOKEN_KW_PORT,
+    SYSML2_TOKEN_KW_RECEIVE,
+    SYSML2_TOKEN_KW_RENDERING,
+    SYSML2_TOKEN_KW_REQ,
+    SYSML2_TOKEN_KW_REQUIRE,
+    SYSML2_TOKEN_KW_REQUIREMENT,
+    SYSML2_TOKEN_KW_SATISFY,
+    SYSML2_TOKEN_KW_SEND,
+    SYSML2_TOKEN_KW_SNAPSHOT,
+    SYSML2_TOKEN_KW_STAKEHOLDER,
+    SYSML2_TOKEN_KW_STATE,
+    SYSML2_TOKEN_KW_SUBJECT,
+    SYSML2_TOKEN_KW_TIMESLICE,
+    SYSML2_TOKEN_KW_TRANSITION,
+    SYSML2_TOKEN_KW_USE,
+    SYSML2_TOKEN_KW_VARIANT,
+    SYSML2_TOKEN_KW_VERIFICATION,
+    SYSML2_TOKEN_KW_VERIFY,
+    SYSML2_TOKEN_KW_VIA,
+    SYSML2_TOKEN_KW_VIEW,
+    SYSML2_TOKEN_KW_VIEWPOINT,
+    SYSML2_TOKEN_KW_WHEN,
+    SYSML2_TOKEN_KW_WHILE,
+
+    /* Operators and delimiters */
+    SYSML2_TOKEN_LBRACE,            /* { */
+    SYSML2_TOKEN_RBRACE,            /* } */
+    SYSML2_TOKEN_LBRACKET,          /* [ */
+    SYSML2_TOKEN_RBRACKET,          /* ] */
+    SYSML2_TOKEN_LPAREN,            /* ( */
+    SYSML2_TOKEN_RPAREN,            /* ) */
+    SYSML2_TOKEN_SEMICOLON,         /* ; */
+    SYSML2_TOKEN_COMMA,             /* , */
+    SYSML2_TOKEN_DOT,               /* . */
+    SYSML2_TOKEN_COLON,             /* : (typed-by) */
+    SYSML2_TOKEN_COLON_GT,          /* :> (specializes) */
+    SYSML2_TOKEN_COLON_COLON,       /* :: (qualified name) */
+    SYSML2_TOKEN_COLON_COLON_GT,    /* ::> (references/subsets) */
+    SYSML2_TOKEN_COLON_GT_GT,       /* :>> (redefines) */
+    SYSML2_TOKEN_TILDE,             /* ~ (conjugates) */
+    SYSML2_TOKEN_DOT_DOT,           /* .. (range) */
+    SYSML2_TOKEN_ARROW,             /* -> */
+    SYSML2_TOKEN_AT,                /* @ */
+    SYSML2_TOKEN_HASH,              /* # */
+    SYSML2_TOKEN_QUESTION,          /* ? */
+
+    /* Arithmetic operators */
+    SYSML2_TOKEN_PLUS,              /* + */
+    SYSML2_TOKEN_MINUS,             /* - */
+    SYSML2_TOKEN_STAR,              /* * */
+    SYSML2_TOKEN_SLASH,             /* / */
+    SYSML2_TOKEN_PERCENT,           /* % */
+    SYSML2_TOKEN_STAR_STAR,         /* ** (power) */
+
+    /* Comparison operators */
+    SYSML2_TOKEN_EQ,                /* = */
+    SYSML2_TOKEN_EQ_EQ,             /* == */
+    SYSML2_TOKEN_BANG_EQ,           /* != */
+    SYSML2_TOKEN_EQ_EQ_EQ,          /* === (meta equality) */
+    SYSML2_TOKEN_BANG_EQ_EQ,        /* !== (meta inequality) */
+    SYSML2_TOKEN_LT,                /* < */
+    SYSML2_TOKEN_GT,                /* > */
+    SYSML2_TOKEN_LT_EQ,             /* <= */
+    SYSML2_TOKEN_GT_EQ,             /* >= */
+
+    /* Logical operators */
+    SYSML2_TOKEN_AMP,               /* & */
+    SYSML2_TOKEN_PIPE,              /* | */
+    SYSML2_TOKEN_BANG,              /* ! */
+    SYSML2_TOKEN_CARET,             /* ^ */
+
+    /* Special */
+    SYSML2_TOKEN_DOT_DOT_DOT,       /* ... */
+
+    /* Internal token count */
+    SYSML2_TOKEN_COUNT
+} Sysml2TokenType;
+
+/* Token structure */
+typedef struct {
+    Sysml2TokenType type;
+    Sysml2SourceRange range;
+    Sysml2StringView text;      /* Source text of the token */
+} Sysml2Token;
+
+/* Get string name of token type */
+const char *sysml2_token_type_to_string(Sysml2TokenType type);
+
+/* Check if token is a keyword */
+bool sysml2_token_is_keyword(Sysml2TokenType type);
+
+/* Check if token is a literal */
+bool sysml2_token_is_literal(Sysml2TokenType type);
+
+/* Check if token is an operator */
+bool sysml2_token_is_operator(Sysml2TokenType type);
+
+#endif /* SYSML2_TOKEN_H */
