@@ -37,6 +37,7 @@ endif()
 
 # Include directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)  # for packcc-generated parser
 
 # Source files
 set(SYSML2_SOURCES
@@ -44,11 +45,9 @@ set(SYSML2_SOURCES
     src/intern.c
     src/keywords.c
     src/lexer.c
-    src/parser.c
-    src/parser_expr.c
+    src/sysml_parser.c   # packcc-generated parser
     src/ast.c
     src/symbol.c
-    src/semantic.c
     src/diagnostic.c
     src/main.c
 )
@@ -80,29 +79,39 @@ if(UNIX)
     target_link_libraries(test_lexer m)
 endif()
 
-add_executable(test_parser
-    src/arena.c
-    src/intern.c
-    src/keywords.c
-    src/lexer.c
-    src/parser.c
-    src/parser_expr.c
-    src/ast.c
-    src/diagnostic.c
-    tests/test_parser.c
+# PackCC-generated parser test
+add_executable(test_packcc_parser
+    src/sysml_parser.c
+    tests/test_packcc_parser.c
 )
-if(UNIX)
-    target_link_libraries(test_parser m)
-endif()
+target_include_directories(test_packcc_parser PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # Add tests
 add_test(NAME lexer_tests COMMAND test_lexer)
-add_test(NAME parser_tests COMMAND test_parser)
+
+# PackCC parser tests - valid syntax files
+file(GLOB PACKCC_VALID_FIXTURES
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/official/*.sysml
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/official/phase2-basic/*.sysml
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/vehicle.sysml
+)
+foreach(fixture ${PACKCC_VALID_FIXTURES})
+    get_filename_component(fixture_name ${fixture} NAME_WE)
+    add_test(NAME packcc_valid_${fixture_name}
+        COMMAND test_packcc_parser ${fixture}
+    )
+endforeach()
+
+# PackCC parser tests - error reporting
+add_test(NAME packcc_error_reporting
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_error_reporting.sh $<TARGET_FILE:test_packcc_parser>
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
 
 # Custom target for running tests
 add_custom_target(check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS test_lexer test_parser
+    DEPENDS test_lexer test_packcc_parser
 )
 
 # Print configuration summary

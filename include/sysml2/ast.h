@@ -77,6 +77,93 @@ typedef enum {
     SYSML2_AST_ITEM_USAGE,
     SYSML2_AST_VIEW_DEF,
     SYSML2_AST_VIEWPOINT_DEF,
+    SYSML2_AST_INTERFACE_USAGE,
+    SYSML2_AST_CONNECTION_USAGE,
+    SYSML2_AST_FLOW_USAGE,
+    SYSML2_AST_VIEW_USAGE,
+    SYSML2_AST_VIEWPOINT_USAGE,
+    SYSML2_AST_ENUM_DEF,
+    SYSML2_AST_ENUM_USAGE,
+    SYSML2_AST_CALC_DEF,
+    SYSML2_AST_CALC_USAGE,
+    SYSML2_AST_CASE_DEF,
+    SYSML2_AST_CASE_USAGE,
+    SYSML2_AST_ANALYSIS_DEF,
+    SYSML2_AST_ANALYSIS_USAGE,
+    SYSML2_AST_VERIFICATION_DEF,
+    SYSML2_AST_VERIFICATION_USAGE,
+    SYSML2_AST_USECASE_DEF,
+    SYSML2_AST_USECASE_USAGE,
+    SYSML2_AST_ALLOCATION_DEF,
+    SYSML2_AST_ALLOCATION_USAGE,
+    SYSML2_AST_RENDERING_DEF,
+    SYSML2_AST_RENDERING_USAGE,
+    SYSML2_AST_OCCURRENCE_DEF,
+    SYSML2_AST_OCCURRENCE_USAGE,
+    SYSML2_AST_TRANSITION,
+    SYSML2_AST_ENTRY_ACTION,
+    SYSML2_AST_EXIT_ACTION,
+    SYSML2_AST_DO_ACTION,
+
+    /* Control nodes */
+    SYSML2_AST_THEN,
+    SYSML2_AST_JOIN_NODE,
+    SYSML2_AST_FORK_NODE,
+    SYSML2_AST_MERGE_NODE,
+    SYSML2_AST_FIRST,
+
+    /* Individual prefix */
+    SYSML2_AST_INDIVIDUAL_DEF,
+    SYSML2_AST_INDIVIDUAL_USAGE,
+
+    /* Perform action */
+    SYSML2_AST_PERFORM,
+
+    /* Succession flow */
+    SYSML2_AST_SUCCESSION_FLOW,
+
+    /* Behavioral action constructs */
+    SYSML2_AST_BIND,
+    SYSML2_AST_ACCEPT,
+    SYSML2_AST_SEND,
+    SYSML2_AST_DECIDE,
+    SYSML2_AST_TERMINATE,
+    SYSML2_AST_ASSIGN,
+    SYSML2_AST_IF_ACTION,
+    SYSML2_AST_WHILE_LOOP,
+    SYSML2_AST_FOR_LOOP,
+    SYSML2_AST_LOOP,
+
+    /* Requirement constructs */
+    SYSML2_AST_SUBJECT,
+    SYSML2_AST_ACTOR,
+    SYSML2_AST_OBJECTIVE,
+    SYSML2_AST_SATISFY,
+    SYSML2_AST_ASSUME,
+    SYSML2_AST_ASSERT,
+    SYSML2_AST_INCLUDE,
+    SYSML2_AST_RETURN,
+
+    /* Allocation and dependency */
+    SYSML2_AST_ALLOCATE,
+    SYSML2_AST_DEPENDENCY,
+
+    /* View constructs */
+    SYSML2_AST_CONCERN_DEF,
+    SYSML2_AST_CONCERN_USAGE,
+    SYSML2_AST_STAKEHOLDER,
+    SYSML2_AST_FRAME,
+    SYSML2_AST_EXPOSE,
+    SYSML2_AST_RENDER,
+    SYSML2_AST_VERIFY,
+
+    /* Textual representation */
+    SYSML2_AST_REP,
+    SYSML2_AST_LANGUAGE,
+
+    /* Connection constructs */
+    SYSML2_AST_CONNECT,
+    SYSML2_AST_MESSAGE,
 } Sysml2AstKind;
 
 /* Visibility modifiers */
@@ -156,6 +243,7 @@ typedef struct Sysml2AstRelationship {
     struct Sysml2AstRelationship *next;
     Sysml2RelationshipKind kind;
     Sysml2AstQualifiedName *target;
+    bool is_conjugated;         /* For typed-by: ~Type means conjugated type */
     Sysml2SourceRange range;
 } Sysml2AstRelationship;
 

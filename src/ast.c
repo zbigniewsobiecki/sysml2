@@ -188,6 +188,73 @@ const char *sysml2_ast_kind_to_string(Sysml2AstKind kind) {
         case SYSML2_AST_ITEM_USAGE: return "item";
         case SYSML2_AST_VIEW_DEF: return "view def";
         case SYSML2_AST_VIEWPOINT_DEF: return "viewpoint def";
+        case SYSML2_AST_INTERFACE_USAGE: return "interface";
+        case SYSML2_AST_CONNECTION_USAGE: return "connection";
+        case SYSML2_AST_FLOW_USAGE: return "flow";
+        case SYSML2_AST_VIEW_USAGE: return "view";
+        case SYSML2_AST_VIEWPOINT_USAGE: return "viewpoint";
+        case SYSML2_AST_ENUM_DEF: return "enum def";
+        case SYSML2_AST_ENUM_USAGE: return "enum";
+        case SYSML2_AST_CALC_DEF: return "calc def";
+        case SYSML2_AST_CALC_USAGE: return "calc";
+        case SYSML2_AST_CASE_DEF: return "case def";
+        case SYSML2_AST_CASE_USAGE: return "case";
+        case SYSML2_AST_ANALYSIS_DEF: return "analysis def";
+        case SYSML2_AST_ANALYSIS_USAGE: return "analysis";
+        case SYSML2_AST_VERIFICATION_DEF: return "verification def";
+        case SYSML2_AST_VERIFICATION_USAGE: return "verification";
+        case SYSML2_AST_USECASE_DEF: return "use case def";
+        case SYSML2_AST_USECASE_USAGE: return "use case";
+        case SYSML2_AST_ALLOCATION_DEF: return "allocation def";
+        case SYSML2_AST_ALLOCATION_USAGE: return "allocation";
+        case SYSML2_AST_RENDERING_DEF: return "rendering def";
+        case SYSML2_AST_RENDERING_USAGE: return "rendering";
+        case SYSML2_AST_OCCURRENCE_DEF: return "occurrence def";
+        case SYSML2_AST_OCCURRENCE_USAGE: return "occurrence";
+        case SYSML2_AST_TRANSITION: return "transition";
+        case SYSML2_AST_ENTRY_ACTION: return "entry";
+        case SYSML2_AST_EXIT_ACTION: return "exit";
+        case SYSML2_AST_DO_ACTION: return "do";
+        case SYSML2_AST_THEN: return "then";
+        case SYSML2_AST_JOIN_NODE: return "join";
+        case SYSML2_AST_FORK_NODE: return "fork";
+        case SYSML2_AST_MERGE_NODE: return "merge";
+        case SYSML2_AST_FIRST: return "first";
+        case SYSML2_AST_INDIVIDUAL_DEF: return "individual def";
+        case SYSML2_AST_INDIVIDUAL_USAGE: return "individual";
+        case SYSML2_AST_PERFORM: return "perform";
+        case SYSML2_AST_SUCCESSION_FLOW: return "succession flow";
+        case SYSML2_AST_BIND: return "bind";
+        case SYSML2_AST_ACCEPT: return "accept";
+        case SYSML2_AST_SEND: return "send";
+        case SYSML2_AST_DECIDE: return "decide";
+        case SYSML2_AST_TERMINATE: return "terminate";
+        case SYSML2_AST_ASSIGN: return "assign";
+        case SYSML2_AST_IF_ACTION: return "if";
+        case SYSML2_AST_WHILE_LOOP: return "while";
+        case SYSML2_AST_FOR_LOOP: return "for";
+        case SYSML2_AST_LOOP: return "loop";
+        case SYSML2_AST_SUBJECT: return "subject";
+        case SYSML2_AST_ACTOR: return "actor";
+        case SYSML2_AST_OBJECTIVE: return "objective";
+        case SYSML2_AST_SATISFY: return "satisfy";
+        case SYSML2_AST_ASSUME: return "assume";
+        case SYSML2_AST_ASSERT: return "assert";
+        case SYSML2_AST_INCLUDE: return "include";
+        case SYSML2_AST_RETURN: return "return";
+        case SYSML2_AST_ALLOCATE: return "allocate";
+        case SYSML2_AST_DEPENDENCY: return "dependency";
+        case SYSML2_AST_CONCERN_DEF: return "concern def";
+        case SYSML2_AST_CONCERN_USAGE: return "concern";
+        case SYSML2_AST_STAKEHOLDER: return "stakeholder";
+        case SYSML2_AST_FRAME: return "frame";
+        case SYSML2_AST_EXPOSE: return "expose";
+        case SYSML2_AST_RENDER: return "render";
+        case SYSML2_AST_VERIFY: return "verify";
+        case SYSML2_AST_REP: return "rep";
+        case SYSML2_AST_LANGUAGE: return "language";
+        case SYSML2_AST_CONNECT: return "connect";
+        case SYSML2_AST_MESSAGE: return "message";
         default: return "unknown";
     }
 }
@@ -329,7 +396,22 @@ void sysml2_ast_print_members(Sysml2AstMember *members, int indent) {
             case SYSML2_AST_CONSTRAINT_DEF:
             case SYSML2_AST_PORT_DEF:
             case SYSML2_AST_ATTRIBUTE_DEF:
-            case SYSML2_AST_ITEM_DEF: {
+            case SYSML2_AST_ITEM_DEF:
+            case SYSML2_AST_INTERFACE_DEF:
+            case SYSML2_AST_CONNECTION_DEF:
+            case SYSML2_AST_FLOW_DEF:
+            case SYSML2_AST_VIEW_DEF:
+            case SYSML2_AST_VIEWPOINT_DEF:
+            case SYSML2_AST_ENUM_DEF:
+            case SYSML2_AST_CALC_DEF:
+            case SYSML2_AST_CASE_DEF:
+            case SYSML2_AST_ANALYSIS_DEF:
+            case SYSML2_AST_VERIFICATION_DEF:
+            case SYSML2_AST_USECASE_DEF:
+            case SYSML2_AST_ALLOCATION_DEF:
+            case SYSML2_AST_RENDERING_DEF:
+            case SYSML2_AST_OCCURRENCE_DEF:
+            case SYSML2_AST_INDIVIDUAL_DEF: {
                 Sysml2AstClassifier *cls = (Sysml2AstClassifier *)m->node;
                 if (cls) {
                     printf(" ");
@@ -355,7 +437,31 @@ void sysml2_ast_print_members(Sysml2AstMember *members, int indent) {
             case SYSML2_AST_CONSTRAINT_USAGE:
             case SYSML2_AST_PORT_USAGE:
             case SYSML2_AST_ATTRIBUTE_USAGE:
-            case SYSML2_AST_ITEM_USAGE: {
+            case SYSML2_AST_ITEM_USAGE:
+            case SYSML2_AST_INTERFACE_USAGE:
+            case SYSML2_AST_CONNECTION_USAGE:
+            case SYSML2_AST_FLOW_USAGE:
+            case SYSML2_AST_VIEW_USAGE:
+            case SYSML2_AST_VIEWPOINT_USAGE:
+            case SYSML2_AST_ENUM_USAGE:
+            case SYSML2_AST_CALC_USAGE:
+            case SYSML2_AST_CASE_USAGE:
+            case SYSML2_AST_ANALYSIS_USAGE:
+            case SYSML2_AST_VERIFICATION_USAGE:
+            case SYSML2_AST_USECASE_USAGE:
+            case SYSML2_AST_ALLOCATION_USAGE:
+            case SYSML2_AST_RENDERING_USAGE:
+            case SYSML2_AST_OCCURRENCE_USAGE:
+            case SYSML2_AST_TRANSITION:
+            case SYSML2_AST_ENTRY_ACTION:
+            case SYSML2_AST_EXIT_ACTION:
+            case SYSML2_AST_DO_ACTION:
+            case SYSML2_AST_THEN:
+            case SYSML2_AST_JOIN_NODE:
+            case SYSML2_AST_FORK_NODE:
+            case SYSML2_AST_MERGE_NODE:
+            case SYSML2_AST_FIRST:
+            case SYSML2_AST_INDIVIDUAL_USAGE: {
                 Sysml2AstFeature *feat = (Sysml2AstFeature *)m->node;
                 if (feat) {
                     printf(" ");

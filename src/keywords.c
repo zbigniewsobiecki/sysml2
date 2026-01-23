@@ -131,6 +131,7 @@ static const KeywordEntry keywords[] = {
     {"calc", SYSML2_TOKEN_KW_CALC},
     {"case", SYSML2_TOKEN_KW_CASE},
     {"concern", SYSML2_TOKEN_KW_CONCERN},
+    {"connect", SYSML2_TOKEN_KW_CONNECT},
     {"connection", SYSML2_TOKEN_KW_CONNECTION},
     {"constraint", SYSML2_TOKEN_KW_CONSTRAINT},
     {"decide", SYSML2_TOKEN_KW_DECIDE},
@@ -169,6 +170,7 @@ static const KeywordEntry keywords[] = {
     {"send", SYSML2_TOKEN_KW_SEND},
     {"snapshot", SYSML2_TOKEN_KW_SNAPSHOT},
     {"stakeholder", SYSML2_TOKEN_KW_STAKEHOLDER},
+    {"standard", SYSML2_TOKEN_KW_STANDARD},
     {"state", SYSML2_TOKEN_KW_STATE},
     {"subject", SYSML2_TOKEN_KW_SUBJECT},
     {"timeslice", SYSML2_TOKEN_KW_TIMESLICE},
@@ -182,12 +184,20 @@ static const KeywordEntry keywords[] = {
     {"viewpoint", SYSML2_TOKEN_KW_VIEWPOINT},
     {"when", SYSML2_TOKEN_KW_WHEN},
     {"while", SYSML2_TOKEN_KW_WHILE},
+    {"bind", SYSML2_TOKEN_KW_BIND},
+    {"terminate", SYSML2_TOKEN_KW_TERMINATE},
+    {"until", SYSML2_TOKEN_KW_UNTIL},
+    {"done", SYSML2_TOKEN_KW_DONE},
+    {"render", SYSML2_TOKEN_KW_RENDER},
+    {"assume", SYSML2_TOKEN_KW_ASSUME},
+    {"allocate", SYSML2_TOKEN_KW_ALLOCATE},
+    {"new", SYSML2_TOKEN_KW_NEW},
 };
 
 #define KEYWORD_COUNT (sizeof(keywords) / sizeof(keywords[0]))
 
 /* Hash table size (should be prime and larger than KEYWORD_COUNT * 2) */
-#define HASH_TABLE_SIZE 353
+#define HASH_TABLE_SIZE 397
 
 /* Hash table bucket */
 typedef struct {

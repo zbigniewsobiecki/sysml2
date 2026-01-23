@@ -10,8 +10,7 @@
 #include "sysml2/diagnostic.h"
 #include "sysml2/cli.h"
 #include "sysml2/lexer.h"
-#include "sysml2/parser.h"
-#include "sysml2/semantic.h"
+#include "sysml_parser.h"  /* packcc-generated parser */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -230,6 +229,8 @@ static Sysml2Result process_file(
     Sysml2Intern *intern,
     Sysml2DiagContext *diag_ctx
 ) {
+    (void)arena;  /* Unused until we add AST building */
+
     if (options->verbose) {
         fprintf(stderr, "Processing: %s\n", path);
     }
@@ -242,29 +243,27 @@ static Sysml2Result process_file(
         return SYSML2_ERROR_FILE_READ;
     }
 
-    /* Build line offsets */
-    uint32_t line_count;
-    uint32_t *line_offsets = build_line_offsets(content, content_length, &line_count);
-    if (!line_offsets) {
-        free(content);
-        return SYSML2_ERROR_OUT_OF_MEMORY;
-    }
-
-    /* Create source file */
-    Sysml2SourceFile source_file = {
-        .path = sysml2_intern(intern, path),
-        .content = content,
-        .content_length = content_length,
-        .line_offsets = line_offsets,
-        .line_count = line_count,
-    };
-
-    /* Create lexer */
-    Sysml2Lexer lexer;
-    sysml2_lexer_init(&lexer, &source_file, intern, diag_ctx);
-
-    /* Dump tokens if requested */
+    /* Dump tokens if requested (uses the old lexer) */
     if (options->dump_tokens) {
+        /* Build line offsets for lexer */
+        uint32_t line_count;
+        uint32_t *line_offsets = build_line_offsets(content, content_length, &line_count);
+        if (!line_offsets) {
+            free(content);
+            return SYSML2_ERROR_OUT_OF_MEMORY;
+        }
+
+        Sysml2SourceFile source_file = {
+            .path = sysml2_intern(intern, path),
+            .content = content,
+            .content_length = content_length,
+            .line_offsets = line_offsets,
+            .line_count = line_count,
+        };
+
+        Sysml2Lexer lexer;
+        sysml2_lexer_init(&lexer, &source_file, intern, diag_ctx);
+
         Sysml2Token token;
         printf("Tokens for %s:\n", path);
         printf("%-6s %-20s %-10s %s\n", "Line", "Type", "Loc", "Text");
@@ -284,58 +283,53 @@ static Sysml2Result process_file(
             }
         }
         printf("\n");
-
-        /* Reset lexer for parsing */
-        sysml2_lexer_init(&lexer, &source_file, intern, diag_ctx);
+        free(line_offsets);
     }
 
-    /* Parse file */
-    Sysml2Parser parser;
-    sysml2_parser_init(&parser, &lexer, arena, diag_ctx);
+    /* Parse file using packcc-generated parser */
+    SysmlParserContext ctx = {
+        .filename = path,
+        .input = content,
+        .input_len = content_length,
+        .input_pos = 0,
+        .error_count = 0,
+        .line = 1,
+        .col = 1
+    };
 
-    Sysml2AstNamespace *ast = sysml2_parser_parse(&parser);
-
-    /* Dump AST if requested */
-    if (options->dump_ast && ast) {
-        printf("AST for %s:\n", path);
-        sysml2_ast_print(ast, 0);
-        printf("\n");
+    sysml_context_t *parser = sysml_create(&ctx);
+    if (!parser) {
+        fprintf(stderr, "error: failed to create parser\n");
+        free(content);
+        return SYSML2_ERROR_OUT_OF_MEMORY;
     }
 
-    /* Run semantic analysis if no syntax errors */
-    if (ast && diag_ctx->error_count == 0) {
-        Sysml2SemanticContext sem_ctx;
-        sysml2_semantic_init(&sem_ctx, arena, intern, diag_ctx);
-        sysml2_semantic_analyze(&sem_ctx, ast);
-        sysml2_semantic_destroy(&sem_ctx);
+    void *result = NULL;
+    int parse_ok = sysml_parse(parser, &result);
+
+    /* Track errors in the diagnostic context */
+    if (ctx.error_count > 0) {
+        diag_ctx->error_count += ctx.error_count;
     }
 
-    /* Output JSON if requested */
-    if (options->output_format == SYSML2_OUTPUT_JSON && ast) {
-        FILE *out = stdout;
-        if (options->output_file) {
-            out = fopen(options->output_file, "w");
-            if (!out) {
-                fprintf(stderr, "error: cannot open output file '%s': %s\n",
-                    options->output_file, strerror(errno));
-                free(content);
-                free(line_offsets);
-                return SYSML2_ERROR_FILE_NOT_FOUND;
-            }
-        }
-
-        sysml2_ast_to_json(ast, out);
-
-        if (options->output_file && out != stdout) {
-            fclose(out);
+    /* Dump AST if requested - not yet implemented */
+    if (options->dump_ast) {
+        if (parse_ok) {
+            fprintf(stderr, "note: --dump-ast not yet implemented with new parser\n");
         }
     }
 
-    /* Cleanup */
+    /* JSON output - not yet implemented */
+    if (options->output_format == SYSML2_OUTPUT_JSON) {
+        if (parse_ok) {
+            fprintf(stderr, "note: JSON output not yet implemented with new parser\n");
+        }
+    }
+
+    sysml_destroy(parser);
     free(content);
-    free(line_offsets);
 
-    return diag_ctx->error_count > 0 ? SYSML2_ERROR_SYNTAX : SYSML2_OK;
+    return (parse_ok && ctx.error_count == 0) ? SYSML2_OK : SYSML2_ERROR_SYNTAX;
 }
 
 /* Result code to string */

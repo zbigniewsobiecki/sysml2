@@ -1,0 +1,3 @@
+package Test {
+    import Foo:::*;
+}

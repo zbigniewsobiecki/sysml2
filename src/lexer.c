@@ -582,6 +582,7 @@ const char *sysml2_token_type_to_string(Sysml2TokenType type) {
         case SYSML2_TOKEN_KW_CALC: return "calc";
         case SYSML2_TOKEN_KW_CASE: return "case";
         case SYSML2_TOKEN_KW_CONCERN: return "concern";
+        case SYSML2_TOKEN_KW_CONNECT: return "connect";
         case SYSML2_TOKEN_KW_CONNECTION: return "connection";
         case SYSML2_TOKEN_KW_CONSTRAINT: return "constraint";
         case SYSML2_TOKEN_KW_DECIDE: return "decide";
