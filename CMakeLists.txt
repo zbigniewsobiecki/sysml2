@@ -93,6 +93,8 @@ add_test(NAME lexer_tests COMMAND test_lexer)
 file(GLOB PACKCC_VALID_FIXTURES
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/official/*.sysml
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/official/phase2-basic/*.sysml
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/official/phase3-domain/*.sysml
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/official/phase3-domain/*/*.sysml
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/vehicle.sysml
 )
 foreach(fixture ${PACKCC_VALID_FIXTURES})
