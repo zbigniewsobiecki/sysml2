@@ -150,6 +150,33 @@ static void write_name(Sysml2Writer *w, const char *name) {
 static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemanticModel *model);
 
 /*
+ * Comparison function for sorting imports alphabetically by target
+ */
+static int compare_imports(const void *a, const void *b) {
+    const SysmlImport *imp_a = *(const SysmlImport **)a;
+    const SysmlImport *imp_b = *(const SysmlImport **)b;
+
+    const char *target_a = imp_a->target ? imp_a->target : "";
+    const char *target_b = imp_b->target ? imp_b->target : "";
+
+    return strcmp(target_a, target_b);
+}
+
+/*
+ * Comparison function for sorting aliases alphabetically by name
+ */
+static int compare_aliases(const void *a, const void *b) {
+    const SysmlAlias *alias_a = *(const SysmlAlias **)a;
+    const SysmlAlias *alias_b = *(const SysmlAlias **)b;
+
+    const char *name_a = alias_a->name ? alias_a->name : "";
+    const char *name_b = alias_b->name ? alias_b->name : "";
+
+    return strcmp(name_a, name_b);
+}
+
+
+/*
  * Get child nodes for a parent
  */
 static size_t get_children(const SysmlSemanticModel *model, const char *parent_id,
@@ -225,6 +252,11 @@ static size_t get_imports(const SysmlSemanticModel *model, const char *scope_id,
         } else if (scope_id && imp->owner_scope && strcmp(scope_id, imp->owner_scope) == 0) {
             imports[idx++] = imp;
         }
+    }
+
+    /* Sort imports alphabetically by target */
+    if (count > 1) {
+        qsort(imports, count, sizeof(SysmlImport *), compare_imports);
     }
 
     *out_imports = imports;
@@ -700,6 +732,11 @@ static size_t get_aliases(const SysmlSemanticModel *model, const char *scope_id,
         } else if (scope_id && alias->owner_scope && strcmp(scope_id, alias->owner_scope) == 0) {
             aliases[idx++] = alias;
         }
+    }
+
+    /* Sort aliases alphabetically by name */
+    if (count > 1) {
+        qsort(aliases, count, sizeof(SysmlAlias *), compare_aliases);
     }
 
     *out_aliases = aliases;

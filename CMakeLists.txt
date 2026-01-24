@@ -203,6 +203,12 @@ add_test(NAME format_cross_file
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/format/10-cross-file
 )
 
+# CLI CRUD operations integration test
+add_test(NAME cli_crud_integration
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_crud.sh
+        $<TARGET_FILE:sysml2>
+)
+
 # Custom target for running tests
 add_custom_target(check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
