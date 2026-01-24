@@ -294,7 +294,13 @@ static Sysml2Result process_file(
         .input_pos = 0,
         .error_count = 0,
         .line = 1,
-        .col = 1
+        .col = 1,
+        /* Furthest failure tracking */
+        .furthest_pos = 0,
+        .furthest_line = 0,
+        .furthest_col = 0,
+        .failed_rule_count = 0,
+        .context_rule = NULL,
     };
 
     sysml_context_t *parser = sysml_create(&ctx);

@@ -39,24 +39,26 @@ endif()
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)  # for packcc-generated parser
 
-# Source files
-set(SYSML2_SOURCES
+# Core library (shared between main executable and tests)
+add_library(sysml2_core STATIC
     src/arena.c
     src/intern.c
     src/keywords.c
     src/lexer.c
-    src/sysml_parser.c   # packcc-generated parser
     src/diagnostic.c
-    src/main.c
 )
-
-# Main executable
-add_executable(sysml2 ${SYSML2_SOURCES})
 
 # Link math library on Unix
 if(UNIX)
-    target_link_libraries(sysml2 m)
+    target_link_libraries(sysml2_core m)
 endif()
+
+# Main executable
+add_executable(sysml2
+    src/main.c
+    src/sysml_parser.c
+)
+target_link_libraries(sysml2 sysml2_core)
 
 # Install
 install(TARGETS sysml2 DESTINATION bin)
@@ -65,17 +67,8 @@ install(TARGETS sysml2 DESTINATION bin)
 enable_testing()
 
 # Test executable
-add_executable(test_lexer
-    src/arena.c
-    src/intern.c
-    src/keywords.c
-    src/lexer.c
-    src/diagnostic.c
-    tests/test_lexer.c
-)
-if(UNIX)
-    target_link_libraries(test_lexer m)
-endif()
+add_executable(test_lexer tests/test_lexer.c)
+target_link_libraries(test_lexer sysml2_core)
 
 # PackCC-generated parser test
 add_executable(test_packcc_parser
@@ -105,7 +98,27 @@ foreach(fixture ${PACKCC_VALID_FIXTURES})
     )
 endforeach()
 
-# PackCC parser tests - error reporting
+# PackCC parser tests - invalid syntax files (should fail with errors)
+file(GLOB PACKCC_ERROR_FIXTURES
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/errors/*.sysml
+)
+foreach(fixture ${PACKCC_ERROR_FIXTURES})
+    get_filename_component(fixture_name ${fixture} NAME_WE)
+    get_filename_component(fixture_dir ${fixture} DIRECTORY)
+    # Read expected error location from .expected file
+    set(expected_file "${fixture_dir}/${fixture_name}.expected")
+    if(EXISTS "${expected_file}")
+        file(READ "${expected_file}" expected_loc)
+        string(STRIP "${expected_loc}" expected_loc)
+        # Test that parser fails and reports error at expected location
+        add_test(NAME packcc_error_${fixture_name}
+            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_error_case.sh
+                $<TARGET_FILE:test_packcc_parser> ${fixture} ${expected_loc}
+        )
+    endif()
+endforeach()
+
+# Legacy error reporting test (runs all error cases together)
 add_test(NAME packcc_error_reporting
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_error_reporting.sh $<TARGET_FILE:test_packcc_parser>
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}

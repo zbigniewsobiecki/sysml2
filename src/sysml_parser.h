@@ -15,6 +15,14 @@ typedef struct {
     int error_count;
     int line;
     int col;
+
+    /* Furthest failure tracking for better error messages */
+    size_t furthest_pos;
+    int furthest_line;
+    int furthest_col;
+    const char *failed_rules[16];  /* Rules that failed at furthest pos */
+    int failed_rule_count;
+    const char *context_rule;       /* Enclosing rule for context */
 } SysmlParserContext;
 
 #define PCC_GETCHAR(auxil) sysml_getchar(auxil)
@@ -32,31 +40,218 @@ static inline int sysml_getchar(SysmlParserContext *ctx) {
     return c;
 }
 
+/* Check if a rule name is "noise" that we don't want to report */
+static inline int sysml_is_noise_rule(const char *rule) {
+    return strcmp(rule, "_") == 0 || strcmp(rule, "WS") == 0 ||
+           strcmp(rule, "LineComment") == 0 || strcmp(rule, "BlockComment") == 0 ||
+           strcmp(rule, "IdentCont") == 0 || strcmp(rule, "StringChar") == 0 ||
+           strcmp(rule, "EscapeSequence") == 0 || strcmp(rule, "UnrestrictedNameChar") == 0;
+}
+
+/* Debug hook to track furthest failure position */
+static inline void sysml_debug_hook(SysmlParserContext *ctx, int event,
+                                     const char *rule, size_t pos) {
+    if (event != 2) return;  /* Only track NOMATCH (event == 2) */
+    if (sysml_is_noise_rule(rule)) return;
+
+    if (pos > ctx->furthest_pos) {
+        /* New furthest position - reset tracking */
+        ctx->furthest_pos = pos;
+        ctx->furthest_line = ctx->line;
+        ctx->furthest_col = ctx->col;
+        ctx->failed_rule_count = 0;
+        ctx->context_rule = NULL;
+    }
+
+    if (pos == ctx->furthest_pos && ctx->failed_rule_count < 16) {
+        /* Record this failure at furthest position */
+        for (int i = 0; i < ctx->failed_rule_count; i++) {
+            if (strcmp(ctx->failed_rules[i], rule) == 0) return;
+        }
+        ctx->failed_rules[ctx->failed_rule_count++] = rule;
+    }
+}
+
+#define PCC_DEBUG(auxil, event, rule, level, pos, buffer, length) \
+    sysml_debug_hook((auxil), (event), (rule), (pos))
+
 #define ANSI_BOLD    "\x1b[1m"
 #define ANSI_RED     "\x1b[31m"
 #define ANSI_GREEN   "\x1b[32m"
+#define ANSI_CYAN    "\x1b[36m"
 #define ANSI_RESET   "\x1b[0m"
+
+/* Rule-to-message mapping for better error diagnostics */
+typedef struct {
+    const char *rule;
+    const char *expectation;
+    const char *help;
+} SysmlExpectation;
+
+static const SysmlExpectation expectations[] = {
+    /* Terminals */
+    {"SEMICOLON", "';'", NULL},
+    {"LBRACE", "'{'", NULL},
+    {"RBRACE", "'}'", NULL},
+    {"LPAREN", "'('", NULL},
+    {"RPAREN", "')'", NULL},
+    {"LBRACKET", "'['", NULL},
+    {"RBRACKET", "']'", NULL},
+    {"COLON", "':'", NULL},
+    {"EQ", "'='", NULL},
+    {"COMMA", "','", NULL},
+    {"DOT", "'.'", NULL},
+    {"DOTDOT", "'..'", NULL},
+    {"ARROW", "'->'", NULL},
+    {"COLONGT", "':>'", NULL},
+    {"COLONGTGT", "':>>'", NULL},
+
+    /* Names and identifiers */
+    {"NAME", "identifier", NULL},
+    {"BasicName", "identifier", NULL},
+    {"QualifiedName", "qualified name", NULL},
+    {"Identification", "name", NULL},
+
+    /* Expressions */
+    {"OwnedExpression", "expression", NULL},
+    {"PrimaryExpression", "expression", NULL},
+    {"LiteralExpression", "literal value", NULL},
+    {"MultiplicityBounds", "multiplicity value",
+     "use [1], [0..1], [*], or [1..*]"},
+
+    /* Declarations */
+    {"UsageDeclaration", "declaration", NULL},
+    {"TypedBy", "type", "use ':' followed by a type name"},
+    {"FeatureValue", "value", "use '=' followed by an expression"},
+
+    /* Keywords - common ones users might mis-type or forget */
+    {"KW_PACKAGE", "'package'", NULL},
+    {"KW_PART", "'part'", NULL},
+    {"KW_DEF", "'def'", NULL},
+    {"KW_IMPORT", "'import'", NULL},
+    {"KW_ACTION", "'action'", NULL},
+    {"KW_ITEM", "'item'", NULL},
+    {"KW_ATTRIBUTE", "'attribute'", NULL},
+    {"KW_PORT", "'port'", NULL},
+    {"KW_CONNECTION", "'connection'", NULL},
+    {"KW_FLOW", "'flow'", NULL},
+    {"KW_STATE", "'state'", NULL},
+    {"KW_CONSTRAINT", "'constraint'", NULL},
+    {"KW_REQUIREMENT", "'requirement'", NULL},
+    {"KW_CALC", "'calc'", NULL},
+    {"KW_CASE", "'case'", NULL},
+    {"KW_IF", "'if'", NULL},
+    {"KW_THEN", "'then'", NULL},
+    {"KW_ELSE", "'else'", NULL},
+    {"KW_TO", "'to'", NULL},
+    {"KW_FROM", "'from'", NULL},
+    {"KW_FOR", "'for'", NULL},
+
+    /* Body elements */
+    {"PackageBodyElement", "package member", NULL},
+    {"DefinitionBodyItem", "definition member", NULL},
+    {"UsageBodyItem", "usage member", NULL},
+    {"ActionBodyItem", "action body member", NULL},
+
+    /* Definitions and usages */
+    {"DefinitionElement", "definition", NULL},
+    {"UsageElement", "usage", NULL},
+
+    {NULL, NULL, NULL}
+};
+
+static const SysmlExpectation *sysml_lookup_expectation(const char *rule) {
+    for (int i = 0; expectations[i].rule; i++) {
+        if (strcmp(expectations[i].rule, rule) == 0) {
+            return &expectations[i];
+        }
+    }
+    return NULL;
+}
+
+/* Compute line and column from position */
+static void sysml_pos_to_line_col(SysmlParserContext *ctx, size_t pos,
+                                   int *out_line, int *out_col) {
+    int line = 1;
+    int col = 1;
+    for (size_t i = 0; i < pos && i < ctx->input_len; i++) {
+        if (ctx->input[i] == '\n') {
+            line++;
+            col = 1;
+        } else {
+            col++;
+        }
+    }
+    *out_line = line;
+    *out_col = col;
+}
 
 static inline void sysml_error(SysmlParserContext *ctx) {
     ctx->error_count++;
+
+    /* Use furthest position for error location if available */
+    int err_line, err_col;
+    if (ctx->furthest_pos > 0 && ctx->failed_rule_count > 0) {
+        sysml_pos_to_line_col(ctx, ctx->furthest_pos, &err_line, &err_col);
+    } else {
+        err_line = ctx->line;
+        err_col = ctx->col;
+    }
+
+    /* Build expectation message from failed rules */
+    char expected[256] = "";
+    const char *help = NULL;
+    int count = 0;
+
+    for (int i = 0; i < ctx->failed_rule_count && count < 3; i++) {
+        const SysmlExpectation *exp = sysml_lookup_expectation(ctx->failed_rules[i]);
+        if (!exp) continue;
+
+        if (count > 0) {
+            if (count == 1 && ctx->failed_rule_count <= 2) {
+                strcat(expected, " or ");
+            } else {
+                strcat(expected, ", ");
+            }
+        }
+        strcat(expected, exp->expectation);
+        if (!help && exp->help) help = exp->help;
+        count++;
+    }
+
+    /* Find the source line for display */
     const char *line_start = ctx->input;
     int cur_line = 1;
-    while (cur_line < ctx->line && *line_start) {
+    while (cur_line < err_line && *line_start) {
         if (*line_start == '\n') cur_line++;
         line_start++;
     }
     const char *line_end = line_start;
     while (*line_end && *line_end != '\n') line_end++;
 
-    fprintf(stderr, ANSI_BOLD "%s:%d:%d: " ANSI_RED "error: " ANSI_RESET ANSI_BOLD "syntax error" ANSI_RESET "\n",
-            ctx->filename, ctx->line, ctx->col);
-    fprintf(stderr, " %5d | %.*s\n", ctx->line, (int)(line_end - line_start), line_start);
+    /* Print error header with specific expectation if available */
+    fprintf(stderr, ANSI_BOLD "%s:%d:%d: " ANSI_RED "error: " ANSI_RESET ANSI_BOLD,
+            ctx->filename, err_line, err_col);
+
+    if (count > 0) {
+        fprintf(stderr, "expected %s" ANSI_RESET "\n", expected);
+    } else {
+        fprintf(stderr, "syntax error" ANSI_RESET "\n");
+    }
+
+    /* Print source line context */
+    fprintf(stderr, " %5d | %.*s\n", err_line, (int)(line_end - line_start), line_start);
     fprintf(stderr, "       | " ANSI_GREEN);
-    for (int i = 1; i < ctx->col; i++) {
+    for (int i = 1; i < err_col; i++) {
         char c = (i <= (int)(line_end - line_start)) ? line_start[i-1] : ' ';
         fprintf(stderr, "%c", (c == '\t') ? '\t' : ' ');
     }
     fprintf(stderr, "^" ANSI_RESET "\n");
+
+    /* Print help text if available */
+    if (help) {
+        fprintf(stderr, "       = " ANSI_CYAN "help: " ANSI_RESET "%s\n", help);
+    }
 }
 
 #ifdef __cplusplus
