@@ -48,6 +48,10 @@ SysmlBuildContext *sysml_build_context_create(
     ctx->imports = SYSML2_ARENA_NEW_ARRAY(arena, SysmlImport *, ctx->import_capacity);
     ctx->import_count = 0;
 
+    /* Initialize trivia list */
+    ctx->pending_trivia_head = NULL;
+    ctx->pending_trivia_tail = NULL;
+
     return ctx;
 }
 
@@ -175,6 +179,11 @@ SysmlNode *sysml_build_node(
     node->typed_by = NULL;
     node->typed_by_count = 0;
     node->loc = SYSML2_LOC_INVALID;
+    node->leading_trivia = NULL;
+    node->trailing_trivia = NULL;
+
+    /* Attach any pending trivia as leading trivia */
+    sysml_build_attach_pending_trivia(ctx, node);
 
     return node;
 }
@@ -356,4 +365,194 @@ SysmlSemanticModel *sysml_build_finalize(SysmlBuildContext *ctx) {
     model->import_capacity = ctx->import_capacity;
 
     return model;
+}
+
+/*
+ * Create a trivia node
+ */
+SysmlTrivia *sysml_build_trivia(
+    SysmlBuildContext *ctx,
+    SysmlTriviaKind kind,
+    const char *text,
+    Sysml2SourceLoc loc
+) {
+    if (!ctx) return NULL;
+
+    SysmlTrivia *trivia = SYSML2_ARENA_NEW(ctx->arena, SysmlTrivia);
+    if (!trivia) return NULL;
+
+    trivia->kind = kind;
+    trivia->text = text ? sysml2_intern(ctx->intern, text) : NULL;
+    trivia->loc = loc;
+    trivia->next = NULL;
+
+    return trivia;
+}
+
+/*
+ * Add a trivia node to the pending list
+ */
+void sysml_build_add_pending_trivia(SysmlBuildContext *ctx, SysmlTrivia *trivia) {
+    if (!ctx || !trivia) return;
+
+    if (ctx->pending_trivia_tail) {
+        ctx->pending_trivia_tail->next = trivia;
+        ctx->pending_trivia_tail = trivia;
+    } else {
+        ctx->pending_trivia_head = trivia;
+        ctx->pending_trivia_tail = trivia;
+    }
+}
+
+/*
+ * Attach pending trivia to a node
+ */
+void sysml_build_attach_pending_trivia(SysmlBuildContext *ctx, SysmlNode *node) {
+    if (!ctx || !node) return;
+
+    if (ctx->pending_trivia_head) {
+        node->leading_trivia = ctx->pending_trivia_head;
+        ctx->pending_trivia_head = NULL;
+        ctx->pending_trivia_tail = NULL;
+    }
+}
+
+/*
+ * Trivia capture functions called from grammar actions
+ * These are the entry points from the packcc-generated parser
+ */
+
+/* Forward declaration - defined in sysml_parser.c via grammar */
+struct SysmlParserContext;
+
+void sysml_capture_line_comment(struct SysmlParserContext *pctx, size_t start_offset, size_t end_offset) {
+    if (!pctx) return;
+
+    /* The parser context struct layout - access input and build_ctx */
+    typedef struct {
+        const char *filename;
+        const char *input;
+        size_t input_len;
+        size_t input_pos;
+        int error_count;
+        int line;
+        int col;
+        size_t furthest_pos;
+        int furthest_line;
+        int furthest_col;
+        const char *failed_rules[16];
+        int failed_rule_count;
+        const char *context_rule;
+        SysmlBuildContext *build_ctx;
+    } ParserCtx;
+
+    ParserCtx *ctx = (ParserCtx *)pctx;
+    SysmlBuildContext *build_ctx = ctx->build_ctx;
+    if (!build_ctx) return;
+
+    /* Convert offsets to pointers */
+    const char *start = ctx->input + start_offset;
+    const char *end = ctx->input + end_offset;
+
+    /* Extract comment text without the leading // */
+    size_t len = end - start;
+    if (len < 2) return;  /* Must have at least // */
+
+    const char *text = start + 2;  /* Skip // */
+    size_t text_len = len - 2;
+
+    /* Trim leading whitespace */
+    while (text_len > 0 && (*text == ' ' || *text == '\t')) {
+        text++;
+        text_len--;
+    }
+
+    /* Intern the comment text */
+    const char *interned_text = text_len > 0 ? sysml2_intern_n(build_ctx->intern, text, text_len) : NULL;
+
+    /* Create trivia node */
+    SysmlTrivia *trivia = sysml_build_trivia(build_ctx, SYSML_TRIVIA_LINE_COMMENT, interned_text, SYSML2_LOC_INVALID);
+    if (trivia) {
+        sysml_build_add_pending_trivia(build_ctx, trivia);
+    }
+}
+
+void sysml_capture_block_comment(struct SysmlParserContext *pctx, size_t start_offset, size_t end_offset) {
+    if (!pctx) return;
+
+    typedef struct {
+        const char *filename;
+        const char *input;
+        size_t input_len;
+        size_t input_pos;
+        int error_count;
+        int line;
+        int col;
+        size_t furthest_pos;
+        int furthest_line;
+        int furthest_col;
+        const char *failed_rules[16];
+        int failed_rule_count;
+        const char *context_rule;
+        SysmlBuildContext *build_ctx;
+    } ParserCtx;
+
+    ParserCtx *ctx = (ParserCtx *)pctx;
+    SysmlBuildContext *build_ctx = ctx->build_ctx;
+    if (!build_ctx) return;
+
+    /* Convert offsets to pointers */
+    const char *start = ctx->input + start_offset;
+    const char *end = ctx->input + end_offset;
+
+    /* Extract doc comment text (delimiters are 3 chars open + 2 chars close) */
+    size_t len = end - start;
+    if (len < 5) return;  /* Must have at least 5 chars total */
+
+    const char *text = start + 3;  /* Skip opening 3-char delimiter */
+    size_t text_len = len - 5;     /* Remove 5 chars total for delimiters */
+
+    /* Intern the comment text */
+    const char *interned_text = text_len > 0 ? sysml2_intern_n(build_ctx->intern, text, text_len) : NULL;
+
+    /* Create trivia node */
+    SysmlTrivia *trivia = sysml_build_trivia(build_ctx, SYSML_TRIVIA_BLOCK_COMMENT, interned_text, SYSML2_LOC_INVALID);
+    if (trivia) {
+        sysml_build_add_pending_trivia(build_ctx, trivia);
+    }
+}
+
+void sysml_capture_blank_lines(struct SysmlParserContext *pctx, size_t start_offset, size_t end_offset) {
+    if (!pctx) return;
+
+    typedef struct {
+        const char *filename;
+        const char *input;
+        size_t input_len;
+        size_t input_pos;
+        int error_count;
+        int line;
+        int col;
+        size_t furthest_pos;
+        int furthest_line;
+        int furthest_col;
+        const char *failed_rules[16];
+        int failed_rule_count;
+        const char *context_rule;
+        SysmlBuildContext *build_ctx;
+    } ParserCtx;
+
+    ParserCtx *ctx = (ParserCtx *)pctx;
+    SysmlBuildContext *build_ctx = ctx->build_ctx;
+    if (!build_ctx) return;
+
+    /* Count the number of blank lines (consecutive newlines indicate blank lines) */
+    size_t len = end_offset - start_offset;
+    if (len < 2) return;  /* Need at least 2 newlines for a blank line */
+
+    /* Create trivia node - text is NULL for blank lines */
+    SysmlTrivia *trivia = sysml_build_trivia(build_ctx, SYSML_TRIVIA_BLANK_LINE, NULL, SYSML2_LOC_INVALID);
+    if (trivia) {
+        sysml_build_add_pending_trivia(build_ctx, trivia);
+    }
 }

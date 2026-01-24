@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "version": "1.0"
+  },
+  "elements": [
+    {
+      "id": "KerMLFeatures",
+      "name": "KerMLFeatures",
+      "type": "Package",
+      "parent": null
+    },
+    {
+      "id": "KerMLFeatures::Container",
+      "name": "Container",
+      "type": "Class",
+      "parent": "KerMLFeatures"
+    },
+    {
+      "id": "KerMLFeatures::Container::count",
+      "name": "count",
+      "type": "Feature",
+      "parent": "KerMLFeatures::Container"
+    },
+    {
+      "id": "KerMLFeatures::Container::items",
+      "name": "items",
+      "type": "Feature",
+      "parent": "KerMLFeatures::Container"
+    },
+    {
+      "id": "KerMLFeatures::Container::process",
+      "name": "process",
+      "type": "Step",
+      "parent": "KerMLFeatures::Container"
+    }
+  ],
+  "relationships": [
+  ]
+}

@@ -26,8 +26,9 @@ if [ ! -f "$FIXTURE" ]; then
     exit 1
 fi
 
-# Determine expected JSON file
+# Determine expected JSON file (supports .sysml and .kerml)
 base=$(basename "$FIXTURE" .sysml)
+base=$(basename "$base" .kerml)
 dir=$(dirname "$FIXTURE")
 expected="$dir/${base}.json"
 

@@ -15,6 +15,7 @@ typedef enum {
     SYSML2_OUTPUT_NONE,      /* Validation only */
     SYSML2_OUTPUT_JSON,      /* JSON AST output */
     SYSML2_OUTPUT_XML,       /* XML AST output (future) */
+    SYSML2_OUTPUT_SYSML,     /* Formatted SysML/KerML source */
 } Sysml2OutputFormat;
 
 /* CLI options */
@@ -24,6 +25,11 @@ typedef struct {
     size_t input_file_count;
     const char *output_file;        /* Output file (NULL for stdout) */
     Sysml2OutputFormat output_format;
+
+    /* Library paths for import resolution */
+    const char **library_paths;     /* Array of library search paths (-I) */
+    size_t library_path_count;
+    size_t library_path_capacity;
 
     /* Diagnostics */
     Sysml2ColorMode color_mode;
@@ -37,6 +43,8 @@ typedef struct {
 
     /* Mode options */
     bool parse_only;            /* Skip semantic validation */
+    bool fix_in_place;          /* --fix: rewrite files with formatting */
+    bool no_resolve;            /* --no-resolve: disable import resolution */
 
     /* Meta */
     bool show_help;

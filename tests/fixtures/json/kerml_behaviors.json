@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "version": "1.0"
+  },
+  "elements": [
+    {
+      "id": "KerMLBehaviors",
+      "name": "KerMLBehaviors",
+      "type": "Package",
+      "parent": null
+    },
+    {
+      "id": "KerMLBehaviors::BaseBehavior",
+      "name": "BaseBehavior",
+      "type": "Behavior",
+      "parent": "KerMLBehaviors"
+    },
+    {
+      "id": "KerMLBehaviors::computeValue",
+      "name": "computeValue",
+      "type": "Function",
+      "parent": "KerMLBehaviors"
+    },
+    {
+      "id": "KerMLBehaviors::isValid",
+      "name": "isValid",
+      "type": "Predicate",
+      "parent": "KerMLBehaviors"
+    }
+  ],
+  "relationships": [
+  ]
+}

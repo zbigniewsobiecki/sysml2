@@ -49,7 +49,9 @@ add_library(sysml2_core STATIC
     src/ast.c
     src/ast_builder.c
     src/json_writer.c
+    src/sysml_writer.c
     src/validator.c
+    src/import_resolver.c
 )
 
 # Link math library on Unix
@@ -140,7 +142,9 @@ add_test(NAME packcc_error_reporting
 )
 
 # JSON output fixture tests
-file(GLOB JSON_FIXTURES ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/json/*.sysml)
+file(GLOB JSON_FIXTURES
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/json/*.sysml
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/json/*.kerml)
 foreach(fixture ${JSON_FIXTURES})
     get_filename_component(fixture_name ${fixture} NAME_WE)
     add_test(NAME json_output_${fixture_name}

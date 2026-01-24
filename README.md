@@ -37,7 +37,12 @@ Usage: sysml2 [options] <file>...
 
 Options:
   -o, --output <file>    Write output to file
-  -f, --format <fmt>     Output format: json, xml (default: none)
+  -f, --format <fmt>     Output format: json, xml, sysml (default: none)
+  -I <path>              Add library search path for imports
+      --fix              Format and rewrite files in place
+  -P, --parse-only       Parse only, skip semantic validation
+      --no-validate      Same as --parse-only
+      --no-resolve       Disable automatic import resolution
   --color[=when]         Colorize output (auto, always, never)
   --max-errors <n>       Stop after n errors (default: 20)
   -W<warning>            Enable warning (e.g., -Werror)
@@ -46,6 +51,9 @@ Options:
   -v, --verbose          Verbose output
   -h, --help             Show help
   --version              Show version
+
+Environment:
+  SYSML2_LIBRARY_PATH    Colon-separated list of library search paths
 ```
 
 ### Examples
@@ -111,7 +119,45 @@ The parser performs semantic validation to catch errors beyond syntax:
 
 ### Cross-File Import Resolution
 
-When multiple files are provided, types can be resolved across files via imports:
+The parser supports two modes of cross-file import resolution:
+
+#### Automatic Import Resolution (Recommended)
+
+Use the `-I` flag to specify library search paths. The parser will automatically find and parse imported files:
+
+```bash
+# Specify library paths with -I
+./sysml2 -I /path/to/library model.sysml
+
+# Multiple library paths
+./sysml2 -I /path/to/kernel -I /path/to/domain model.sysml
+
+# Using environment variable
+export SYSML2_LIBRARY_PATH="/path/to/kernel:/path/to/domain"
+./sysml2 model.sysml
+```
+
+Example with verbose output:
+```bash
+$ ./sysml2 -v -I ./my-library test.sysml
+note: added library path: /home/user/my-library
+Processing: test.sysml
+note: resolving import 'MyTypes' -> /home/user/my-library/MyTypes.sysml
+```
+
+The resolver searches library paths for files matching the package name:
+- For `import Foo::*;`, searches for `Foo.sysml` or `Foo.kerml`
+- Searches recursively in subdirectories (up to 5 levels deep)
+- Caches parsed files to avoid re-parsing
+
+Use `--no-resolve` to disable automatic resolution:
+```bash
+./sysml2 --no-resolve model.sysml  # Like the old behavior
+```
+
+#### Manual Multi-File Mode
+
+Alternatively, provide all files explicitly on the command line:
 
 ```bash
 # File A defines types, File B imports them
@@ -205,8 +251,9 @@ sysml2/
 │   ├── cli.h           # CLI options
 │   ├── ast.h           # AST node types
 │   ├── ast_builder.h   # AST builder context
-│   ├── json_writer.h   # JSON serialization
-│   └── validator.h     # Semantic validator
+│   ├── json_writer.h       # JSON serialization
+│   ├── import_resolver.h   # Automatic import resolution
+│   └── validator.h         # Semantic validator
 ├── src/
 │   ├── arena.c         # Arena allocator implementation
 │   ├── intern.c        # String interning implementation
@@ -215,9 +262,10 @@ sysml2/
 │   ├── diagnostic.c    # Diagnostic reporting
 │   ├── ast.c           # AST utilities
 │   ├── ast_builder.c   # AST builder implementation
-│   ├── json_writer.c   # JSON writer implementation
-│   ├── validator.c     # Semantic validation
-│   ├── main.c          # CLI entry point
+│   ├── json_writer.c       # JSON writer implementation
+│   ├── import_resolver.c   # Import resolution implementation
+│   ├── validator.c         # Semantic validation
+│   ├── main.c              # CLI entry point
 │   └── sysml_parser.c  # PackCC-generated parser
 ├── grammar/
 │   └── sysml.peg       # PEG grammar (source of truth)

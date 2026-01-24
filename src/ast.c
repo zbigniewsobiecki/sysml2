@@ -264,3 +264,132 @@ const char *sysml_kind_to_string(SysmlNodeKind kind) {
             return "Unknown";
     }
 }
+
+/*
+ * SysML/KerML keywords for pretty printing
+ *
+ * These return the actual textual keyword(s) used in SysML/KerML source.
+ */
+const char *sysml_kind_to_keyword(SysmlNodeKind kind) {
+    switch (kind) {
+        /* Imports */
+        case SYSML_KIND_IMPORT:           return "import";
+        case SYSML_KIND_IMPORT_ALL:       return "import";  /* + ::* suffix */
+        case SYSML_KIND_IMPORT_RECURSIVE: return "import";  /* + ::** suffix */
+
+        /* Packages */
+        case SYSML_KIND_PACKAGE:          return "package";
+        case SYSML_KIND_LIBRARY_PACKAGE:  return "library package";
+
+        /* Definitions */
+        case SYSML_KIND_ATTRIBUTE_DEF:    return "attribute def";
+        case SYSML_KIND_ENUMERATION_DEF:  return "enum def";
+        case SYSML_KIND_OCCURRENCE_DEF:   return "occurrence def";
+        case SYSML_KIND_ITEM_DEF:         return "item def";
+        case SYSML_KIND_PART_DEF:         return "part def";
+        case SYSML_KIND_CONNECTION_DEF:   return "connection def";
+        case SYSML_KIND_FLOW_DEF:         return "flow def";
+        case SYSML_KIND_INTERFACE_DEF:    return "interface def";
+        case SYSML_KIND_PORT_DEF:         return "port def";
+        case SYSML_KIND_ALLOCATION_DEF:   return "allocation def";
+        case SYSML_KIND_ACTION_DEF:       return "action def";
+        case SYSML_KIND_STATE_DEF:        return "state def";
+        case SYSML_KIND_CONSTRAINT_DEF:   return "constraint def";
+        case SYSML_KIND_REQUIREMENT_DEF:  return "requirement def";
+        case SYSML_KIND_CONCERN_DEF:      return "concern def";
+        case SYSML_KIND_CALC_DEF:         return "calc def";
+        case SYSML_KIND_CASE_DEF:         return "case def";
+        case SYSML_KIND_ANALYSIS_DEF:     return "analysis def";
+        case SYSML_KIND_VERIFICATION_DEF: return "verification def";
+        case SYSML_KIND_USE_CASE_DEF:     return "use case def";
+        case SYSML_KIND_VIEW_DEF:         return "view def";
+        case SYSML_KIND_VIEWPOINT_DEF:    return "viewpoint def";
+        case SYSML_KIND_RENDERING_DEF:    return "rendering def";
+        case SYSML_KIND_METADATA_DEF:     return "metadata def";
+        case SYSML_KIND_DATATYPE:         return "datatype";
+
+        /* KerML Definitions */
+        case SYSML_KIND_NAMESPACE:        return "namespace";
+        case SYSML_KIND_TYPE:             return "type";
+        case SYSML_KIND_CLASSIFIER:       return "classifier";
+        case SYSML_KIND_CLASS:            return "class";
+        case SYSML_KIND_STRUCTURE:        return "struct";
+        case SYSML_KIND_METACLASS:        return "metaclass";
+        case SYSML_KIND_ASSOCIATION:      return "assoc";
+        case SYSML_KIND_ASSOC_STRUCT:     return "assoc struct";
+        case SYSML_KIND_INTERACTION:      return "interaction";
+        case SYSML_KIND_BEHAVIOR:         return "behavior";
+        case SYSML_KIND_FUNCTION:         return "function";
+        case SYSML_KIND_PREDICATE:        return "predicate";
+        case SYSML_KIND_MULTIPLICITY_DEF: return "multiplicity";
+
+        /* Usages */
+        case SYSML_KIND_ATTRIBUTE_USAGE:  return "attribute";
+        case SYSML_KIND_ENUMERATION_USAGE: return "enum";
+        case SYSML_KIND_OCCURRENCE_USAGE: return "occurrence";
+        case SYSML_KIND_ITEM_USAGE:       return "item";
+        case SYSML_KIND_PART_USAGE:       return "part";
+        case SYSML_KIND_CONNECTION_USAGE: return "connection";
+        case SYSML_KIND_FLOW_USAGE:       return "flow";
+        case SYSML_KIND_INTERFACE_USAGE:  return "interface";
+        case SYSML_KIND_PORT_USAGE:       return "port";
+        case SYSML_KIND_ALLOCATION_USAGE: return "allocation";
+        case SYSML_KIND_ACTION_USAGE:     return "action";
+        case SYSML_KIND_STATE_USAGE:      return "state";
+        case SYSML_KIND_CONSTRAINT_USAGE: return "constraint";
+        case SYSML_KIND_REQUIREMENT_USAGE: return "requirement";
+        case SYSML_KIND_CONCERN_USAGE:    return "concern";
+        case SYSML_KIND_CALC_USAGE:       return "calc";
+        case SYSML_KIND_CASE_USAGE:       return "case";
+        case SYSML_KIND_ANALYSIS_USAGE:   return "analysis";
+        case SYSML_KIND_VERIFICATION_USAGE: return "verification";
+        case SYSML_KIND_USE_CASE_USAGE:   return "use case";
+        case SYSML_KIND_VIEW_USAGE:       return "view";
+        case SYSML_KIND_VIEWPOINT_USAGE:  return "viewpoint";
+        case SYSML_KIND_RENDERING_USAGE:  return "rendering";
+        case SYSML_KIND_REFERENCE_USAGE:  return "ref";
+        case SYSML_KIND_EVENT_USAGE:      return "event";
+        case SYSML_KIND_PORTION_USAGE:    return "portion";
+        case SYSML_KIND_SUBJECT_USAGE:    return "subject";
+        case SYSML_KIND_ACTOR_USAGE:      return "actor";
+        case SYSML_KIND_STAKEHOLDER_USAGE: return "stakeholder";
+        case SYSML_KIND_MESSAGE_USAGE:    return "message";
+
+        /* KerML Features */
+        case SYSML_KIND_FEATURE:          return "feature";
+        case SYSML_KIND_STEP:             return "step";
+        case SYSML_KIND_EXPRESSION:       return "expr";
+        case SYSML_KIND_BOOL_EXPRESSION:  return "bool";
+        case SYSML_KIND_INVARIANT:        return "inv";
+        case SYSML_KIND_CONNECTOR:        return "connector";
+        case SYSML_KIND_BINDING_CONNECTOR: return "binding";
+        case SYSML_KIND_SUCCESSION:       return "succession";
+        case SYSML_KIND_KERML_FLOW:       return "flow";
+        case SYSML_KIND_SUCCESSION_FLOW:  return "succession flow";
+
+        /* Relationships - these are not directly printed as keywords */
+        case SYSML_KIND_REL_CONNECTION:   return "connect";
+        case SYSML_KIND_REL_FLOW:         return "flow";
+        case SYSML_KIND_REL_ALLOCATION:   return "allocate";
+        case SYSML_KIND_REL_SATISFY:      return "satisfy";
+        case SYSML_KIND_REL_VERIFY:       return "verify";
+        case SYSML_KIND_REL_TRANSITION:   return "transition";
+        case SYSML_KIND_REL_SUCCESSION:   return "first";
+        case SYSML_KIND_REL_BIND:         return "bind";
+
+        /* KerML Relationships */
+        case SYSML_KIND_REL_SPECIALIZATION:    return ":>";
+        case SYSML_KIND_REL_CONJUGATION:       return "~";
+        case SYSML_KIND_REL_SUBCLASSIFICATION: return ":>";
+        case SYSML_KIND_REL_DISJOINING:        return "disjoint from";
+        case SYSML_KIND_REL_INVERTING:         return "inverse of";
+        case SYSML_KIND_REL_TYPING:            return ":";
+        case SYSML_KIND_REL_SUBSETTING:        return ":>";
+        case SYSML_KIND_REL_REDEFINITION:      return ":>>";
+        case SYSML_KIND_REL_FEATURING:         return "featured by";
+
+        case SYSML_KIND_UNKNOWN:
+        default:
+            return "/* unknown */";
+    }
+}

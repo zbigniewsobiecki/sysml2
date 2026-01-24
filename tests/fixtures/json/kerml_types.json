@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "version": "1.0"
+  },
+  "elements": [
+    {
+      "id": "KerMLTypes",
+      "name": "KerMLTypes",
+      "type": "Package",
+      "parent": null
+    },
+    {
+      "id": "KerMLTypes::Real",
+      "name": "Real",
+      "type": "DataType",
+      "parent": "KerMLTypes"
+    },
+    {
+      "id": "KerMLTypes::Base",
+      "name": "Base",
+      "type": "Type",
+      "parent": "KerMLTypes"
+    },
+    {
+      "id": "KerMLTypes::Derived",
+      "name": "Derived",
+      "type": "Type",
+      "parent": "KerMLTypes",
+      "typedBy": ["Base"]
+    },
+    {
+      "id": "KerMLTypes::MyClassifier",
+      "name": "MyClassifier",
+      "type": "Classifier",
+      "parent": "KerMLTypes"
+    },
+    {
+      "id": "KerMLTypes::MyClass",
+      "name": "MyClass",
+      "type": "Class",
+      "parent": "KerMLTypes",
+      "typedBy": ["MyClassifier"]
+    },
+    {
+      "id": "KerMLTypes::MyStruct",
+      "name": "MyStruct",
+      "type": "Structure",
+      "parent": "KerMLTypes"
+    },
+    {
+      "id": "KerMLTypes::MyAssoc",
+      "name": "MyAssoc",
+      "type": "Association",
+      "parent": "KerMLTypes"
+    }
+  ],
+  "relationships": [
+  ]
+}

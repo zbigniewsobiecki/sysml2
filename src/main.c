@@ -12,7 +12,9 @@
 #include "sysml2/lexer.h"
 #include "sysml2/ast_builder.h"
 #include "sysml2/json_writer.h"
+#include "sysml2/sysml_writer.h"
 #include "sysml2/validator.h"
+#include "sysml2/import_resolver.h"
 #include "sysml_parser.h"  /* packcc-generated parser */
 
 #include <stdio.h>
@@ -25,6 +27,7 @@
 static const struct option long_options[] = {
     {"output",      required_argument, 0, 'o'},
     {"format",      required_argument, 0, 'f'},
+    {"fix",         no_argument,       0, 'F'},
     {"color",       optional_argument, 0, 'c'},
     {"max-errors",  required_argument, 0, 'm'},
     {"dump-tokens", no_argument,       0, 'T'},
@@ -32,12 +35,13 @@ static const struct option long_options[] = {
     {"verbose",     no_argument,       0, 'v'},
     {"parse-only",  no_argument,       0, 'P'},
     {"no-validate", no_argument,       0, 'P'},  /* alias for --parse-only */
+    {"no-resolve",  no_argument,       0, 'R'},
     {"help",        no_argument,       0, 'h'},
     {"version",     no_argument,       0, 'V'},
     {0, 0, 0, 0}
 };
 
-static const char *short_options = "o:f:W:hVvTAP";
+static const char *short_options = "o:f:W:I:hVvTAPFR";
 
 /* Parse color mode from string */
 static Sysml2ColorMode parse_color_mode(const char *arg) {
@@ -57,6 +61,8 @@ static Sysml2OutputFormat parse_output_format(const char *arg) {
         return SYSML2_OUTPUT_JSON;
     } else if (strcmp(arg, "xml") == 0) {
         return SYSML2_OUTPUT_XML;
+    } else if (strcmp(arg, "sysml") == 0) {
+        return SYSML2_OUTPUT_SYSML;
     }
     return SYSML2_OUTPUT_NONE;
 }
@@ -111,6 +117,28 @@ Sysml2Result sysml2_cli_parse(Sysml2CliOptions *options, int argc, char **argv) 
                 options->parse_only = true;
                 break;
 
+            case 'F':
+                options->fix_in_place = true;
+                break;
+
+            case 'I':
+                /* Add library path */
+                if (options->library_path_count >= options->library_path_capacity) {
+                    size_t new_cap = options->library_path_capacity == 0 ? 8 : options->library_path_capacity * 2;
+                    const char **new_paths = realloc((void *)options->library_paths, new_cap * sizeof(char *));
+                    if (!new_paths) {
+                        return SYSML2_ERROR_OUT_OF_MEMORY;
+                    }
+                    options->library_paths = new_paths;
+                    options->library_path_capacity = new_cap;
+                }
+                options->library_paths[options->library_path_count++] = optarg;
+                break;
+
+            case 'R':
+                options->no_resolve = true;
+                break;
+
             case 'h':
                 options->show_help = true;
                 return SYSML2_OK;
@@ -136,8 +164,11 @@ Sysml2Result sysml2_cli_parse(Sysml2CliOptions *options, int argc, char **argv) 
 }
 
 void sysml2_cli_cleanup(Sysml2CliOptions *options) {
-    /* No dynamically allocated memory in current implementation */
-    (void)options;
+    /* Free dynamically allocated library paths array */
+    if (options->library_paths) {
+        free((void *)options->library_paths);
+        options->library_paths = NULL;
+    }
 }
 
 void sysml2_cli_print_help(FILE *output) {
@@ -150,9 +181,12 @@ void sysml2_cli_print_help(FILE *output) {
         "\n"
         "Options:\n"
         "  -o, --output <file>    Write output to file\n"
-        "  -f, --format <fmt>     Output format: json, xml (default: none)\n"
+        "  -f, --format <fmt>     Output format: json, xml, sysml (default: none)\n"
+        "  -I <path>              Add library search path for imports\n"
+        "      --fix              Format and rewrite files in place\n"
         "  -P, --parse-only       Parse only, skip semantic validation\n"
         "      --no-validate      Same as --parse-only\n"
+        "      --no-resolve       Disable automatic import resolution\n"
         "  --color[=when]         Colorize output (auto, always, never)\n"
         "  --max-errors <n>       Stop after n errors (default: 20)\n"
         "  -W<warning>            Enable warning (e.g., -Werror)\n"
@@ -162,11 +196,22 @@ void sysml2_cli_print_help(FILE *output) {
         "  -h, --help             Show help\n"
         "  --version              Show version\n"
         "\n"
+        "Environment:\n"
+        "  SYSML2_LIBRARY_PATH    Colon-separated list of library search paths\n"
+        "\n"
         "Examples:\n"
         "  sysml2 model.kerml              Validate a KerML file\n"
         "  sysml2 -f json model.sysml      Parse and output JSON AST\n"
+        "  sysml2 -f sysml model.sysml     Pretty print to stdout\n"
+        "  sysml2 --fix model.sysml        Format in place\n"
+        "  sysml2 -I /path/to/lib model.sysml  Validate with library imports\n"
         "  cat model.sysml | sysml2        Parse from stdin\n"
         "  echo 'package P;' | sysml2      Quick syntax check\n"
+        "\n"
+        "Exit codes:\n"
+        "  0  Success (no errors)\n"
+        "  1  Parse/syntax error\n"
+        "  2  Semantic/validation error\n"
         "\n"
     );
 }
@@ -408,6 +453,26 @@ static Sysml2Result process_input(
                         fclose(out);
                     }
                 }
+
+                /* SysML output (pretty printing) */
+                if (options->output_format == SYSML2_OUTPUT_SYSML) {
+                    FILE *out = stdout;
+                    if (options->output_file) {
+                        out = fopen(options->output_file, "w");
+                        if (!out) {
+                            fprintf(stderr, "error: cannot open output file '%s': %s\n",
+                                    options->output_file, strerror(errno));
+                            sysml_destroy(parser);
+                            return SYSML2_ERROR_FILE_READ;
+                        }
+                    }
+
+                    sysml_sysml_write(model, out);
+
+                    if (options->output_file && out != stdout) {
+                        fclose(out);
+                    }
+                }
             }
         }
     }
@@ -472,6 +537,14 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    /* --fix mode requires file arguments */
+    if (options.fix_in_place) {
+        if (options.input_file_count == 0) {
+            fprintf(stderr, "error: --fix requires file arguments (cannot read from stdin)\n");
+            return 1;
+        }
+    }
+
     /* Initialize memory arena and string interning */
     Sysml2Arena arena;
     sysml2_arena_init(&arena);
@@ -487,12 +560,100 @@ int main(int argc, char **argv) {
 
     Sysml2Result final_result = SYSML2_OK;
 
+    /* --fix mode: Parse all files first, then rewrite if all succeed */
+    if (options.fix_in_place) {
+        /* Allocate model array */
+        SysmlSemanticModel **models = malloc(options.input_file_count * sizeof(SysmlSemanticModel *));
+        if (!models) {
+            fprintf(stderr, "error: out of memory\n");
+            sysml2_intern_destroy(&intern);
+            sysml2_arena_destroy(&arena);
+            return 1;
+        }
+
+        bool has_errors = false;
+
+        /* Phase 1: Parse ALL files first */
+        for (size_t i = 0; i < options.input_file_count; i++) {
+            models[i] = NULL;
+            result = process_file(options.input_files[i], &options, &arena, &intern, &diag_ctx, &models[i]);
+            if (result != SYSML2_OK || models[i] == NULL) {
+                has_errors = true;
+            }
+        }
+
+        if (has_errors) {
+            /* Print diagnostics and abort */
+            Sysml2DiagOptions diag_options = {
+                .output = stderr,
+                .color_mode = options.color_mode,
+                .show_source_context = true,
+                .show_column_numbers = true,
+                .show_error_codes = true,
+            };
+            sysml2_diag_print_all(&diag_ctx, &diag_options);
+            sysml2_diag_print_summary(&diag_ctx, stderr);
+            fprintf(stderr, "error: --fix aborted due to parse errors (no files modified)\n");
+            free(models);
+            sysml2_intern_destroy(&intern);
+            sysml2_arena_destroy(&arena);
+            return 1;
+        }
+
+        /* Phase 2: All parsed successfully, now rewrite */
+        for (size_t i = 0; i < options.input_file_count; i++) {
+            if (models[i]) {
+                FILE *out = fopen(options.input_files[i], "w");
+                if (!out) {
+                    fprintf(stderr, "error: cannot open file '%s' for writing: %s\n",
+                            options.input_files[i], strerror(errno));
+                    has_errors = true;
+                    continue;
+                }
+
+                sysml_sysml_write(models[i], out);
+                fclose(out);
+
+                if (options.verbose) {
+                    fprintf(stderr, "Formatted: %s\n", options.input_files[i]);
+                }
+            }
+        }
+
+        free(models);
+
+        /* Cleanup and exit */
+        sysml2_intern_destroy(&intern);
+        sysml2_arena_destroy(&arena);
+        sysml2_cli_cleanup(&options);
+        return has_errors ? 1 : 0;
+    }
+
+    /* Create import resolver */
+    SysmlImportResolver *resolver = sysml_resolver_create(&arena, &intern);
+    if (!resolver) {
+        fprintf(stderr, "error: failed to create import resolver\n");
+        sysml2_intern_destroy(&intern);
+        sysml2_arena_destroy(&arena);
+        return 1;
+    }
+
+    resolver->verbose = options.verbose;
+    resolver->disabled = options.no_resolve;
+
+    /* Add library paths from environment and CLI */
+    sysml_resolver_add_paths_from_env(resolver);
+    for (size_t i = 0; i < options.library_path_count; i++) {
+        sysml_resolver_add_path(resolver, options.library_paths[i]);
+    }
+
     if (options.input_file_count == 0) {
-        /* Read from stdin - single file mode */
+        /* Read from stdin - single file mode (no import resolution for stdin) */
         size_t content_length;
         char *content = read_stdin(&content_length);
         if (!content) {
             fprintf(stderr, "error: failed to read from stdin\n");
+            sysml_resolver_destroy(resolver);
             sysml2_intern_destroy(&intern);
             sysml2_arena_destroy(&arena);
             return 1;
@@ -502,55 +663,111 @@ int main(int argc, char **argv) {
         if (result != SYSML2_OK) {
             final_result = result;
         }
-    } else if (options.input_file_count == 1) {
-        /* Single file - use inline validation */
-        result = process_file(options.input_files[0], &options, &arena, &intern, &diag_ctx, NULL);
-        if (result != SYSML2_OK) {
-            final_result = result;
-        }
     } else {
-        /* Multiple files - two-pass processing for cross-file imports */
-        SysmlSemanticModel **models = malloc(options.input_file_count * sizeof(SysmlSemanticModel *));
-        if (!models) {
+        /* Single or multiple files - with import resolution */
+        SysmlSemanticModel **input_models = malloc(options.input_file_count * sizeof(SysmlSemanticModel *));
+        if (!input_models) {
             fprintf(stderr, "error: out of memory\n");
+            sysml_resolver_destroy(resolver);
             sysml2_intern_destroy(&intern);
             sysml2_arena_destroy(&arena);
             return 1;
         }
 
-        size_t valid_model_count = 0;
         bool has_parse_errors = false;
 
-        /* Pass 1: Parse all files, collect models */
+        /* Pass 1: Parse all input files */
         for (size_t i = 0; i < options.input_file_count; i++) {
-            models[i] = NULL;
-            result = process_file(options.input_files[i], &options, &arena, &intern, &diag_ctx, &models[i]);
+            input_models[i] = NULL;
+            result = process_file(options.input_files[i], &options, &arena, &intern, &diag_ctx, &input_models[i]);
             if (result != SYSML2_OK) {
                 has_parse_errors = true;
             }
-            if (models[i]) {
-                valid_model_count++;
+            if (input_models[i]) {
+                /* Cache the model for import resolution */
+                sysml_resolver_cache_model(resolver, options.input_files[i], input_models[i]);
             }
             if (sysml2_diag_should_stop(&diag_ctx)) {
                 break;
             }
         }
 
-        /* Pass 2: Unified validation (unless --parse-only or parse errors) */
-        if (!options.parse_only && !has_parse_errors && valid_model_count > 0) {
-            SysmlValidationOptions val_opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
-            Sysml2Result val_result = sysml_validate_multi(
-                models, options.input_file_count, &diag_ctx, &arena, &intern, &val_opts
-            );
-            if (val_result != SYSML2_OK) {
-                final_result = SYSML2_ERROR_SEMANTIC;
+        /* Pass 2: Resolve imports (unless --no-resolve or parse errors) */
+        if (!options.no_resolve && !has_parse_errors) {
+            for (size_t i = 0; i < options.input_file_count; i++) {
+                if (input_models[i]) {
+                    result = sysml_resolver_resolve_imports(resolver, input_models[i], &diag_ctx);
+                    if (result != SYSML2_OK && final_result == SYSML2_OK) {
+                        /* Import resolution failure - not a hard error, validation will catch missing refs */
+                    }
+                }
+                if (sysml2_diag_should_stop(&diag_ctx)) {
+                    break;
+                }
+            }
+        }
+
+        /* Pass 3: Unified validation (unless --parse-only) */
+        if (!options.parse_only && !has_parse_errors) {
+            /* Get all cached models (input files + resolved imports) */
+            size_t all_model_count;
+            SysmlSemanticModel **all_models = sysml_resolver_get_all_models(resolver, &all_model_count);
+
+            if (all_models && all_model_count > 0) {
+                SysmlValidationOptions val_opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+                Sysml2Result val_result = sysml_validate_multi(
+                    all_models, all_model_count, &diag_ctx, &arena, &intern, &val_opts
+                );
+                if (val_result != SYSML2_OK) {
+                    final_result = SYSML2_ERROR_SEMANTIC;
+                }
+                free(all_models);
             }
         } else if (has_parse_errors) {
             final_result = SYSML2_ERROR_SYNTAX;
         }
 
-        free(models);
+        /* JSON output (only for first input file, for compatibility) */
+        if (options.output_format == SYSML2_OUTPUT_JSON && !has_parse_errors && input_models[0]) {
+            FILE *out = stdout;
+            if (options.output_file) {
+                out = fopen(options.output_file, "w");
+                if (!out) {
+                    fprintf(stderr, "error: cannot open output file '%s': %s\n",
+                            options.output_file, strerror(errno));
+                } else {
+                    SysmlJsonOptions json_opts = SYSML_JSON_OPTIONS_DEFAULT;
+                    sysml_json_write(input_models[0], out, &json_opts);
+                    fclose(out);
+                }
+            } else {
+                SysmlJsonOptions json_opts = SYSML_JSON_OPTIONS_DEFAULT;
+                sysml_json_write(input_models[0], out, &json_opts);
+            }
+        }
+
+        /* SysML output (pretty printing, only for first input file) */
+        if (options.output_format == SYSML2_OUTPUT_SYSML && !has_parse_errors && input_models[0]) {
+            FILE *out = stdout;
+            if (options.output_file) {
+                out = fopen(options.output_file, "w");
+                if (!out) {
+                    fprintf(stderr, "error: cannot open output file '%s': %s\n",
+                            options.output_file, strerror(errno));
+                } else {
+                    sysml_sysml_write(input_models[0], out);
+                    fclose(out);
+                }
+            } else {
+                sysml_sysml_write(input_models[0], out);
+            }
+        }
+
+        free(input_models);
     }
+
+    /* Destroy resolver */
+    sysml_resolver_destroy(resolver);
 
     /* Print diagnostics */
     Sysml2DiagOptions diag_options = {
@@ -568,5 +785,18 @@ int main(int argc, char **argv) {
     sysml2_arena_destroy(&arena);
     sysml2_cli_cleanup(&options);
 
-    return (final_result == SYSML2_OK && diag_ctx.error_count == 0) ? 0 : 1;
+    /* Exit codes:
+     * 0 - Success (no errors)
+     * 1 - Parse/syntax error
+     * 2 - Semantic/validation error
+     */
+    if (final_result == SYSML2_OK && diag_ctx.error_count == 0) {
+        return 0;
+    } else if (final_result == SYSML2_ERROR_SYNTAX) {
+        return 1;
+    } else if (final_result == SYSML2_ERROR_SEMANTIC || diag_ctx.error_count > 0) {
+        return 2;
+    } else {
+        return 1;  /* Other errors (file not found, etc.) */
+    }
 }
