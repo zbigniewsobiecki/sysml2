@@ -1535,7 +1535,7 @@ AllocationPart <- KW_ALLOCATE? (BinaryConnectorPart / NaryConnectorPart)
 ActionUsage <- UsagePrefix* KW_ACTION < ActionDeclaration > { sysml2_build_push(auxil, SYSML_KIND_ACTION_USAGE, $1, $1e - $1s); } ActionUsageBody { sysml2_pop(auxil); }
 ActionDeclaration <- Identification? ActionParameterList? UsageSpecializations? FeatureValue?
 ActionParameterList <- < LPAREN ActionParameter (COMMA ActionParameter)* RPAREN > { if (auxil->build_ctx) sysml2_capture_action_params(auxil->build_ctx, $1, $1e - $1s); }
-ActionParameter <- Direction? KW_REF? KW_ITEM? NAME (TypedBy / Subsets)? (EQ OwnedExpression)?
+ActionParameter <- Direction? KW_REF? KW_ITEM? NAME (SingleTypedBy / Subsets)? (EQ OwnedExpression)?
 ActionUsageBody <- KW_TERMINATE SEMICOLON / KW_SEND SendActionTail / KW_ACCEPT AcceptActionTail / ActionAssignBody / ActionWhileBody / ActionForBody / ActionBody
 ActionAssignBody <- KW_ASSIGN QualifiedName FeatureChain? COLONEQ OwnedExpression SEMICOLON
 AcceptActionTail <- QualifiedName (COLON QualifiedName)? (KW_VIA QualifiedName FeatureChain?)? (ActionBody / SEMICOLON)
@@ -1650,6 +1650,8 @@ UsageDeclaration <- Identification? UsageSpecializations? FeatureValue?
 UsageSpecializations <- UsageSpecialization+
 UsageSpecialization <- Multiplicity / TypedBy / Subsets / Redefines / References / Crosses
 TypedBy <- TYPED_BY TILDE? QualifiedName Multiplicity? (COMMA QualifiedName Multiplicity?)*
+# SingleTypedBy: like TypedBy but without comma continuation (for action parameters)
+SingleTypedBy <- TYPED_BY TILDE? QualifiedName Multiplicity?
 Subsets <- SUBSETS QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)*
 Redefines <- REDEFINES QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)*
 References <- REFERENCES QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)*
