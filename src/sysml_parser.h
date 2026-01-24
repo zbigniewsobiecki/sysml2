@@ -27,6 +27,10 @@ typedef struct {
     int failed_rule_count;
     const char *context_rule;       /* Enclosing rule for context */
 
+    /* Last keyword that matched (for context in errors) */
+    const char *last_keyword;
+    size_t last_keyword_pos;
+
     /* AST building context (optional, NULL if not building AST) */
     struct SysmlBuildContext *build_ctx;
 } SysmlParserContext;
@@ -57,6 +61,12 @@ static inline int sysml2_is_noise_rule(const char *rule) {
 /* Debug hook to track furthest failure position */
 static inline void sysml2_debug_hook(SysmlParserContext *ctx, int event,
                                      const char *rule, size_t pos) {
+    /* Track keyword matches for error context (event == 1 is MATCH) */
+    if (event == 1 && strncmp(rule, "KW_", 3) == 0) {
+        ctx->last_keyword = rule + 3;  /* Skip "KW_" prefix */
+        ctx->last_keyword_pos = pos;
+    }
+
     if (event != 2) return;  /* Only track NOMATCH (event == 2) */
     if (sysml2_is_noise_rule(rule)) return;
 
@@ -162,6 +172,23 @@ static const SysmlExpectation expectations[] = {
     /* Definitions and usages */
     {"DefinitionElement", "definition", NULL},
     {"UsageElement", "usage", NULL},
+    {"OccurrenceUsageElement", "usage element", NULL},
+
+    /* Annotating elements */
+    {"AnnotatingElement", "comment, doc, or metadata", NULL},
+    {"Documentation", "doc comment", "use: doc /* comment text */"},
+    {"Comment", "comment annotation", NULL},
+    {"RegularComment", "'/* ... */' comment block", "doc comments use /* not /**"},
+    {"DocOrRegularComment", "'/* ... */' comment block", "doc comments use /* not /**"},
+
+    /* More keywords for context */
+    {"KW_DOC", "'doc'", NULL},
+    {"KW_COMMENT", "'comment'", NULL},
+    {"KW_REP", "'rep'", NULL},
+    {"KW_ABOUT", "'about'", NULL},
+    {"KW_METADATA", "'metadata'", NULL},
+    {"KW_LANGUAGE", "'language'", NULL},
+    {"KW_LOCALE", "'locale'", NULL},
 
     {NULL, NULL, NULL}
 };
@@ -172,6 +199,21 @@ static const SysmlExpectation *sysml2_lookup_expectation(const char *rule) {
             return &expectations[i];
         }
     }
+    return NULL;
+}
+
+/* Keyword-specific help messages */
+static const char *sysml2_keyword_help(const char *keyword) {
+    if (strcmp(keyword, "DOC") == 0)
+        return "syntax: doc [name] /* comment text */";
+    if (strcmp(keyword, "COMMENT") == 0)
+        return "syntax: comment [name] [about X] /* text */";
+    if (strcmp(keyword, "REP") == 0)
+        return "syntax: rep language \"lang\" /* text */";
+    if (strcmp(keyword, "IMPORT") == 0)
+        return "syntax: import QualifiedName::*;";
+    if (strcmp(keyword, "LANGUAGE") == 0)
+        return "syntax: language \"lang-name\"";
     return NULL;
 }
 
@@ -253,6 +295,20 @@ static inline void sysml2_error(SysmlParserContext *ctx) {
         fprintf(stderr, "%c", (c == '\t') ? '\t' : ' ');
     }
     fprintf(stderr, "^" ANSI_RESET "\n");
+
+    /* Add context about which keyword was being parsed */
+    if (ctx->last_keyword && ctx->last_keyword_pos > 0 &&
+        ctx->last_keyword_pos <= ctx->furthest_pos &&
+        ctx->furthest_pos - ctx->last_keyword_pos < 50) {
+
+        fprintf(stderr, "       = " ANSI_CYAN "note: " ANSI_RESET
+                "parsing failed after '%s' keyword\n", ctx->last_keyword);
+
+        /* Try keyword-specific help if we don't have help yet */
+        if (!help) {
+            help = sysml2_keyword_help(ctx->last_keyword);
+        }
+    }
 
     /* Print help text if available */
     if (help) {

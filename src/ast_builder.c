@@ -755,6 +755,8 @@ void sysml2_capture_line_comment(struct Sysml2ParserContext *pctx, size_t start_
         const char *failed_rules[16];
         int failed_rule_count;
         const char *context_rule;
+        const char *last_keyword;
+        size_t last_keyword_pos;
         SysmlBuildContext *build_ctx;
     } ParserCtx;
 
@@ -806,6 +808,8 @@ void sysml2_capture_block_comment(struct Sysml2ParserContext *pctx, size_t start
         const char *failed_rules[16];
         int failed_rule_count;
         const char *context_rule;
+        const char *last_keyword;
+        size_t last_keyword_pos;
         SysmlBuildContext *build_ctx;
     } ParserCtx;
 
@@ -851,6 +855,8 @@ void sysml2_capture_blank_lines(struct Sysml2ParserContext *pctx, size_t start_o
         const char *failed_rules[16];
         int failed_rule_count;
         const char *context_rule;
+        const char *last_keyword;
+        size_t last_keyword_pos;
         SysmlBuildContext *build_ctx;
     } ParserCtx;
 

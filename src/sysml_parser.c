@@ -4461,6 +4461,7 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_DocBlockCommentCapture(pcc_context_t
 static pcc_thunk_chunk_t *pcc_evaluate_rule_BlankLineCapture(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_WS(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_RegularComment(pcc_context_t *ctx);
+static pcc_thunk_chunk_t *pcc_evaluate_rule_DocOrRegularComment(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_EOF(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_NAME(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_BasicName(pcc_context_t *ctx);
@@ -5537,6 +5538,80 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_RegularComment(pcc_context_t *ctx) {
 L0000:;
     ctx->level--;
     PCC_DEBUG(ctx->auxil, PCC_DBG_NOMATCH, "RegularComment", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
+    pcc_thunk_chunk__destroy(ctx, chunk);
+    return NULL;
+}
+
+static pcc_thunk_chunk_t *pcc_evaluate_rule_DocOrRegularComment(pcc_context_t *ctx) {
+    pcc_thunk_chunk_t *const chunk = pcc_thunk_chunk__create(ctx);
+    chunk->pos = ctx->cur;
+    PCC_DEBUG(ctx->auxil, PCC_DBG_EVALUATE, "DocOrRegularComment", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->buffer.len - chunk->pos));
+    ctx->level++;
+    {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (
+            pcc_refill_buffer(ctx, 1) < 1 || (ctx->buffer.buf + ctx->cur)[0] != '/' ||
+            pcc_refill_buffer(ctx, 2) < 2 || (ctx->buffer.buf + ctx->cur)[1] != '*' ||
+            pcc_refill_buffer(ctx, 3) < 3 || (ctx->buffer.buf + ctx->cur)[2] != '*'
+        ) goto L0002;
+        ctx->cur += 3;
+        {
+            for (;;) {
+                const size_t p = ctx->cur;
+                const size_t n = chunk->thunks.len;
+                {
+                    const size_t p = ctx->cur;
+                    if (
+                        pcc_refill_buffer(ctx, 1) < 1 || (ctx->buffer.buf + ctx->cur)[0] != '*' ||
+                        pcc_refill_buffer(ctx, 2) < 2 || (ctx->buffer.buf + ctx->cur)[1] != '/'
+                    ) goto L0004;
+                    ctx->cur += 2;
+                    ctx->cur = p;
+                    goto L0003;
+                L0004:;
+                    ctx->cur = p;
+                }
+                {
+                    int u;
+                    const size_t n = pcc_get_char_as_utf32(ctx, &u);
+                    if (n == 0) goto L0003;
+                    ctx->cur += n;
+                }
+                if (ctx->cur == p) break;
+                continue;
+            L0003:;
+                ctx->cur = p;
+                pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+                break;
+            }
+        }
+        if (
+            pcc_refill_buffer(ctx, 1) < 1 || (ctx->buffer.buf + ctx->cur)[0] != '*' ||
+            pcc_refill_buffer(ctx, 2) < 2 || (ctx->buffer.buf + ctx->cur)[1] != '/'
+        ) goto L0002;
+        ctx->cur += 2;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule__, &chunk->thunks, NULL)) goto L0002;
+        goto L0001;
+    L0002:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RegularComment, &chunk->thunks, NULL)) goto L0005;
+        goto L0001;
+    L0005:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        goto L0000;
+    L0001:;
+    }
+    ctx->level--;
+    PCC_DEBUG(ctx->auxil, PCC_DBG_MATCH, "DocOrRegularComment", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
+    return chunk;
+L0000:;
+    ctx->level--;
+    PCC_DEBUG(ctx->auxil, PCC_DBG_NOMATCH, "DocOrRegularComment", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
     pcc_thunk_chunk__destroy(ctx, chunk);
     return NULL;
 }
@@ -19087,7 +19162,7 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_Comment(pcc_context_t *ctx) {
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
     L0007:;
     }
-    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RegularComment, &chunk->thunks, NULL)) goto L0000;
+    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_DocOrRegularComment, &chunk->thunks, NULL)) goto L0000;
     ctx->level--;
     PCC_DEBUG(ctx->auxil, PCC_DBG_MATCH, "Comment", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
     return chunk;
@@ -19104,21 +19179,32 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_Documentation(pcc_context_t *ctx) {
     PCC_DEBUG(ctx->auxil, PCC_DBG_EVALUATE, "Documentation", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->buffer.len - chunk->pos));
     ctx->level++;
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_DOC, &chunk->thunks, NULL)) goto L0000;
-    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_Identification, &chunk->thunks, NULL)) goto L0000;
     {
         MARK_VAR_AS_USED
         const size_t p = ctx->cur;
         MARK_VAR_AS_USED
         const size_t n = chunk->thunks.len;
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_LOCALE, &chunk->thunks, NULL)) goto L0001;
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_STRING_VALUE, &chunk->thunks, NULL)) goto L0001;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_Identification, &chunk->thunks, NULL)) goto L0001;
         goto L0002;
     L0001:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
     L0002:;
     }
-    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RegularComment, &chunk->thunks, NULL)) goto L0000;
+    {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_LOCALE, &chunk->thunks, NULL)) goto L0003;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_STRING_VALUE, &chunk->thunks, NULL)) goto L0003;
+        goto L0004;
+    L0003:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+    L0004:;
+    }
+    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_DocOrRegularComment, &chunk->thunks, NULL)) goto L0000;
     ctx->level--;
     PCC_DEBUG(ctx->auxil, PCC_DBG_MATCH, "Documentation", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
     return chunk;
@@ -19149,7 +19235,7 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_TextualRepresentation(pcc_context_t 
     }
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_LANGUAGE, &chunk->thunks, NULL)) goto L0000;
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_STRING_VALUE, &chunk->thunks, NULL)) goto L0000;
-    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RegularComment, &chunk->thunks, NULL)) goto L0000;
+    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_DocOrRegularComment, &chunk->thunks, NULL)) goto L0000;
     ctx->level--;
     PCC_DEBUG(ctx->auxil, PCC_DBG_MATCH, "TextualRepresentation", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
     return chunk;
