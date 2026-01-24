@@ -330,6 +330,15 @@ void sysml2_capture_block_comment(SysmlParserContext *ctx, size_t start_offset, 
 void sysml2_capture_blank_lines(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
 void sysml2_capture_documentation(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
 
+/* Forward declarations for new capture functions (from ast_builder.h) */
+void sysml2_capture_multiplicity(SysmlBuildContext *ctx, const char *text, size_t len);
+void sysml2_capture_default_value(SysmlBuildContext *ctx, const char *text, size_t len, bool has_default_keyword);
+void sysml2_capture_abstract(SysmlBuildContext *ctx);
+void sysml2_capture_variation(SysmlBuildContext *ctx);
+void sysml2_capture_direction(SysmlBuildContext *ctx, SysmlDirection dir);
+void sysml2_capture_import_visibility(SysmlBuildContext *ctx, bool is_private);
+void sysml2_build_alias(SysmlBuildContext *ctx, const char *name, size_t name_len, const char *target, size_t target_len);
+
 /* Helper: check if character is a type/specialization marker */
 static int sysml2_is_marker(char c, char next) {
     if (c == '[' || c == '=' || c == '{' || c == ';') return 1;
@@ -583,6 +592,26 @@ static void sysml2_build_import(SysmlParserContext *ctx, const char *text, size_
     if (target) {
         sysml2_build_add_import(ctx->build_ctx, kind, target);
     }
+}
+
+/* Capture visibility indicator (called from MemberPrefix) */
+static void sysml2_capture_visibility_private(SysmlParserContext *ctx) {
+    if (!ctx->build_ctx) return;
+    /* Set pending import private for imports, pending_visibility for nodes */
+    ctx->build_ctx->pending_import_private = true;
+    ctx->build_ctx->pending_visibility = SYSML_VIS_PRIVATE;
+}
+
+static void sysml2_capture_visibility_public(SysmlParserContext *ctx) {
+    if (!ctx->build_ctx) return;
+    ctx->build_ctx->pending_import_private = false;
+    ctx->build_ctx->pending_visibility = SYSML_VIS_PUBLIC;
+}
+
+static void sysml2_capture_visibility_protected(SysmlParserContext *ctx) {
+    if (!ctx->build_ctx) return;
+    ctx->build_ctx->pending_import_private = false;
+    ctx->build_ctx->pending_visibility = SYSML_VIS_PROTECTED;
 }
 
 /* Capture prefix metadata (#MetadataName) */
@@ -941,7 +970,9 @@ SpecializationKeyword <- ('redefines' / 'subsets' / 'references' / 'specializes'
 ShortName <- LANGLE (NAME / STRING_VALUE) RANGLE
 
 # Visibility
-VisibilityIndicator <- KW_PUBLIC / KW_PRIVATE / KW_PROTECTED
+VisibilityIndicator <- KW_PUBLIC { sysml2_capture_visibility_public(auxil); }
+                     / KW_PRIVATE { sysml2_capture_visibility_private(auxil); }
+                     / KW_PROTECTED { sysml2_capture_visibility_protected(auxil); }
 MemberPrefix <- PrefixMetadata* VisibilityIndicator?
 
 # Relationship Body
@@ -957,6 +988,7 @@ LibraryPackage <- KW_STANDARD? KW_LIBRARY PrefixMetadata* KW_PACKAGE < Identific
 PackageBody <- SEMICOLON / LBRACE PackageBodyElement* RBRACE
 
 # Imports
+# Note: visibility (private/public) is captured by MemberPrefix before Import is matched
 Import <- KW_IMPORT KW_ALL? < ImportDeclaration > { sysml2_build_import(auxil, $1, $1e - $1s); } ImportFilter? RelationshipBody
 ImportDeclaration <- NamespaceImport / MembershipImport
 MembershipImport <- QualifiedName (COLONCOLON STARSTAR)?
@@ -964,7 +996,7 @@ NamespaceImport <- QualifiedName (COLONCOLON_STAR COLONCOLON_STARSTAR? / COLONCO
 ImportFilter <- LBRACKET OwnedExpression RBRACKET
 
 # Alias
-Alias <- KW_ALIAS (ShortName NAME / ShortName / NAME) KW_FOR QualifiedName RelationshipBody
+Alias <- KW_ALIAS < (ShortName NAME / ShortName / NAME) > KW_FOR < QualifiedName > { if (auxil->build_ctx) sysml2_build_alias(auxil->build_ctx, $1, $1e - $1s, $2, $2e - $2s); } RelationshipBody
 
 # Dependency
 Dependency <- PrefixMetadata* KW_DEPENDENCY (Identification KW_FROM)? QualifiedName (COMMA QualifiedName)* KW_TO QualifiedName (COMMA QualifiedName)* RelationshipBody
@@ -983,7 +1015,7 @@ KerMLDefinitionElement <- NamespaceDefinition / TypeDefinition / ClassifierDefin
                         / TypeFeaturingRelationship
 
 # KerML Type Prefix (abstract, etc)
-KerMLTypePrefix <- KW_ABSTRACT? PrefixMetadata*
+KerMLTypePrefix <- AbstractModifier? PrefixMetadata*
 
 # Namespace: namespace Name { ... }
 NamespaceDefinition <- KerMLTypePrefix KW_NAMESPACE < Identification >
@@ -1068,7 +1100,7 @@ ReturnFeatureMember <- KW_RETURN (FeatureDefinition / KerMLParameterMember / Ret
 ReturnNamedPart <- Identification KerMLFeatureSpecializationPart? FeatureValue? UsageBody
 ReturnTypePart <- TypedBy FeatureValue? UsageBody
 # Parameter-style features: in/out/inout [abstract] [feature] name : Type;
-KerMLParameterMember <- Direction KW_ABSTRACT? KW_FEATURE? < Identification? UsageSpecializations? > FeatureValue? UsageBody
+KerMLParameterMember <- Direction AbstractModifier? KW_FEATURE? < Identification? UsageSpecializations? > FeatureValue? UsageBody
 
 # Predicate: [abstract] predicate Name :> Super { ... }
 PredicateDefinition <- KerMLTypePrefix KW_PREDICATE < Identification ClassifierDeclarationPart? >
@@ -1138,7 +1170,7 @@ EndCrossFeature <- NAME Multiplicity? KerMLFeatureSpecializationPart? / Multipli
 
 # KerML Feature Prefix (supports derived, var, abstract, composite/portion, readonly/constant, end)
 # Official order: direction → derived → abstract → composite|portion → var|readonly|constant → end
-KerMLFeaturePrefix <- Direction? KW_DERIVED? KW_ABSTRACT? (KW_COMPOSITE / KW_PORTION)?
+KerMLFeaturePrefix <- Direction? KW_DERIVED? AbstractModifier? (KW_COMPOSITE / KW_PORTION)?
                  (KW_VAR / KW_READONLY / KW_CONSTANT)? KW_END? PrefixMetadata*
 
 # Feature: [direction] [abstract] [member] feature [all] Name : Type [mult] = value { ... }
@@ -1233,10 +1265,12 @@ TextualRepresentation <- (KW_REP Identification)? KW_LANGUAGE STRING_VALUE DocOr
 DefinitionElement <- KerMLDefinitionElement / DatatypeDefinition / AttributeDefinition / EnumerationDefinition / ItemDefinition / PartDefinition / ConnectionDefinition / FlowDefinition / InterfaceDefinition / PortDefinition / AllocationDefinition / ActionDefinition / StateDefinition / ConstraintDefinition / RequirementDefinition / ConcernDefinition / CalcDefinition / CaseDefinition / AnalysisDefinition / VerificationDefinition / UseCaseDefinition / ViewDefinition / ViewpointDefinition / RenderingDefinition / MetadataDefinition / OccurrenceDefinition / Package / LibraryPackage / Dependency
 
 # Definition Prefixes
-DefinitionPrefix <- PrefixMetadata / KW_ABSTRACT / KW_VARIATION / BasicDefinitionPrefix
+DefinitionPrefix <- PrefixMetadata / AbstractModifier / VariationModifier / BasicDefinitionPrefix
+AbstractModifier <- KW_ABSTRACT { if (auxil->build_ctx) sysml2_capture_abstract(auxil->build_ctx); }
+VariationModifier <- KW_VARIATION { if (auxil->build_ctx) sysml2_capture_variation(auxil->build_ctx); }
 BasicDefinitionPrefix <- KW_INDIVIDUAL / LifeclassPrefix
 LifeclassPrefix <- KW_SNAPSHOT / KW_TIMESLICE
-UsagePrefix <- PrefixMetadata / KW_ABSTRACT / KW_VARIATION / KW_VARIANT / BasicUsagePrefix
+UsagePrefix <- PrefixMetadata / AbstractModifier / VariationModifier / KW_VARIANT / BasicUsagePrefix
 BasicUsagePrefix <- Direction? RefPrefix? KW_INDIVIDUAL? / KW_INDIVIDUAL
 RefPrefix <- KW_REF / KW_READONLY / KW_DERIVED / KW_CONSTANT / KW_END
 
@@ -1427,7 +1461,9 @@ ParameterKind <- KW_ATTRIBUTE / KW_ITEM / KW_PART / KW_REQUIREMENT / KW_OCCURREN
                / KW_EVENT KW_OCCURRENCE / KW_ACTION / KW_STATE / KW_CASE
                / KW_MESSAGE / KW_CONSTRAINT / KW_CALC
 ParameterUsage <- Direction? UsagePrefix* ParameterKind? UsageDeclaration UsageBody
-Direction <- KW_IN / KW_OUT / KW_INOUT
+Direction <- KW_INOUT { if (auxil->build_ctx) sysml2_capture_direction(auxil->build_ctx, SYSML_DIR_INOUT); }
+           / KW_OUT { if (auxil->build_ctx) sysml2_capture_direction(auxil->build_ctx, SYSML_DIR_OUT); }
+           / KW_IN { if (auxil->build_ctx) sysml2_capture_direction(auxil->build_ctx, SYSML_DIR_IN); }
 SubjectUsage <- KW_SUBJECT (UsageDeclaration UsageBody / FeatureValue SEMICOLON)
 ActorUsage <- KW_ACTOR (UsageDeclaration UsageBody / FeatureValue SEMICOLON)
 StakeholderUsage <- KW_STAKEHOLDER (UsageDeclaration UsageBody / FeatureValue SEMICOLON)
@@ -1506,10 +1542,12 @@ Crosses <- KW_CROSSES QualifiedName FeatureChain? (COMMA QualifiedName FeatureCh
 FeatureSpecialization <- Multiplicity / TypedBy / Subsets / Redefines / References / Crosses
 
 # Feature Value
-FeatureValue <- (EQ / COLONEQ / KW_DEFAULT (EQ / COLONEQ)?) OwnedExpression
+FeatureValue <- FeatureValueWithDefault / FeatureValueSimple
+FeatureValueWithDefault <- KW_DEFAULT (EQ / COLONEQ)? < OwnedExpression > { if (auxil->build_ctx) sysml2_capture_default_value(auxil->build_ctx, $1, $1e - $1s, true); }
+FeatureValueSimple <- (EQ / COLONEQ) < OwnedExpression > { if (auxil->build_ctx) sysml2_capture_default_value(auxil->build_ctx, $1, $1e - $1s, false); }
 
 # Multiplicity
-Multiplicity <- LBRACKET MultiplicityBounds? RBRACKET OrderedNonunique?
+Multiplicity <- LBRACKET < MultiplicityBounds? > { if (auxil->build_ctx) sysml2_capture_multiplicity(auxil->build_ctx, $1, $1e - $1s); } RBRACKET OrderedNonunique?
 MultiplicityBounds <- OwnedExpression (DOTDOT (OwnedExpression / STAR))? / STAR
 OrderedNonunique <- (KW_ORDERED KW_NONUNIQUE?) / (KW_NONUNIQUE KW_ORDERED?)
 

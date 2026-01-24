@@ -196,6 +196,25 @@ typedef struct SysmlMetadataUsage {
 } SysmlMetadataUsage;
 
 /*
+ * Direction enumeration for parameters
+ */
+typedef enum {
+    SYSML_DIR_NONE = 0,
+    SYSML_DIR_IN,
+    SYSML_DIR_OUT,
+    SYSML_DIR_INOUT
+} SysmlDirection;
+
+/*
+ * Visibility enumeration for members and imports
+ */
+typedef enum {
+    SYSML_VIS_PUBLIC = 0,
+    SYSML_VIS_PRIVATE,
+    SYSML_VIS_PROTECTED
+} SysmlVisibility;
+
+/*
  * AST Node - represents an element in the semantic graph
  *
  * Uses interned strings for memory efficiency.
@@ -218,6 +237,26 @@ typedef struct SysmlNode {
 
     const char **references;     /* ::> Type (referencing) */
     size_t references_count;
+
+    /* Multiplicity bounds (e.g., [0..1], [1..*], [4]) */
+    const char *multiplicity_lower;  /* "0", "1", "*", etc. */
+    const char *multiplicity_upper;  /* "1", "*", etc. (NULL if same as lower) */
+
+    /* Default/initial value */
+    const char *default_value;       /* Expression text */
+    bool has_default_keyword;        /* true if "default =" vs just "=" */
+
+    /* Modifiers */
+    bool is_abstract;
+    bool is_variation;
+    bool is_readonly;
+    bool is_derived;
+
+    /* Direction (for parameters) */
+    SysmlDirection direction;
+
+    /* Visibility */
+    SysmlVisibility visibility;
 
     /* Source location for debugging */
     Sysml2SourceLoc loc;
@@ -264,9 +303,25 @@ typedef struct SysmlImport {
     const char *target;       /* Imported qualified name */
     const char *owner_scope;  /* Scope where import appears */
 
+    /* Visibility for the import (private import X::*;) */
+    bool is_private;
+
     /* Source location for debugging */
     Sysml2SourceLoc loc;
 } SysmlImport;
+
+/*
+ * Alias - represents an alias declaration (alias X for Y;)
+ */
+typedef struct SysmlAlias {
+    const char *id;           /* Unique alias ID */
+    const char *name;         /* Alias name */
+    const char *target;       /* What it aliases (qualified name) */
+    const char *owner_scope;  /* Containing scope */
+
+    /* Source location for debugging */
+    Sysml2SourceLoc loc;
+} SysmlAlias;
 
 /*
  * Semantic Model - the complete parsed model
@@ -285,6 +340,10 @@ typedef struct {
     SysmlImport **imports;    /* Array of all imports */
     size_t import_count;
     size_t import_capacity;
+
+    SysmlAlias **aliases;     /* Array of all aliases */
+    size_t alias_count;
+    size_t alias_capacity;
 } SysmlSemanticModel;
 
 /* Get the JSON type string for a node kind */

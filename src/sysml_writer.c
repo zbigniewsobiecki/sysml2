@@ -242,6 +242,12 @@ static void write_applied_metadata(Sysml2Writer *w, const SysmlNode *node);
  */
 static void write_import(Sysml2Writer *w, const SysmlImport *imp) {
     write_indent(w);
+
+    /* Write visibility if private */
+    if (imp->is_private) {
+        fputs("private ", w->out);
+    }
+
     fputs("import ", w->out);
 
     if (imp->target) {
@@ -265,6 +271,67 @@ static void write_import(Sysml2Writer *w, const SysmlImport *imp) {
 }
 
 /*
+ * Write an alias declaration
+ */
+static void write_alias(Sysml2Writer *w, const SysmlAlias *alias) {
+    write_indent(w);
+    fputs("alias ", w->out);
+
+    if (alias->name) {
+        write_name(w, alias->name);
+    }
+
+    fputs(" for ", w->out);
+
+    if (alias->target) {
+        fputs(alias->target, w->out);
+    }
+
+    fputc(';', w->out);
+    write_newline(w);
+}
+
+/*
+ * Get aliases for a scope
+ */
+static size_t get_aliases(const SysmlSemanticModel *model, const char *scope_id,
+                          const SysmlAlias ***out_aliases) {
+    size_t count = 0;
+    for (size_t i = 0; i < model->alias_count; i++) {
+        const SysmlAlias *alias = model->aliases[i];
+        if (scope_id == NULL && alias->owner_scope == NULL) {
+            count++;
+        } else if (scope_id && alias->owner_scope && strcmp(scope_id, alias->owner_scope) == 0) {
+            count++;
+        }
+    }
+
+    if (count == 0) {
+        *out_aliases = NULL;
+        return 0;
+    }
+
+    const SysmlAlias **aliases = malloc(count * sizeof(SysmlAlias *));
+    if (!aliases) {
+        *out_aliases = NULL;
+        return 0;
+    }
+
+    size_t idx = 0;
+    for (size_t i = 0; i < model->alias_count; i++) {
+        const SysmlAlias *alias = model->aliases[i];
+        if (scope_id == NULL && alias->owner_scope == NULL) {
+            aliases[idx++] = alias;
+        } else if (scope_id && alias->owner_scope && strcmp(scope_id, alias->owner_scope) == 0) {
+            aliases[idx++] = alias;
+        }
+    }
+
+    *out_aliases = aliases;
+    return count;
+}
+
+/*
  * Write a body with children
  */
 static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemanticModel *model) {
@@ -272,13 +339,17 @@ static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
     const SysmlImport **imports = NULL;
     size_t import_count = get_imports(model, node->id, &imports);
 
+    /* Get aliases for this scope */
+    const SysmlAlias **aliases = NULL;
+    size_t alias_count = get_aliases(model, node->id, &aliases);
+
     /* Get children */
     const SysmlNode **children = NULL;
     size_t child_count = get_children(model, node->id, &children);
 
     bool has_doc = (node->documentation != NULL);
 
-    if (import_count == 0 && child_count == 0 && node->metadata_count == 0 && !has_doc) {
+    if (import_count == 0 && alias_count == 0 && child_count == 0 && node->metadata_count == 0 && !has_doc) {
         /* Empty body: use semicolon */
         fputc(';', w->out);
         if (node->trailing_trivia) {
@@ -301,7 +372,7 @@ static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
             fputs("doc ", w->out);
             fputs(node->documentation, w->out);
             write_newline(w);
-            if (node->metadata_count > 0 || import_count > 0 || child_count > 0) {
+            if (node->metadata_count > 0 || import_count > 0 || alias_count > 0 || child_count > 0) {
                 write_newline(w);
             }
         }
@@ -309,7 +380,7 @@ static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
         /* Write applied metadata (inside the body) */
         if (node->metadata_count > 0) {
             write_applied_metadata(w, node);
-            if (import_count > 0 || child_count > 0) {
+            if (import_count > 0 || alias_count > 0 || child_count > 0) {
                 write_newline(w);
             }
         }
@@ -319,8 +390,13 @@ static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
             write_import(w, imports[i]);
         }
 
-        /* Add blank line between imports and members if both present */
-        if (import_count > 0 && child_count > 0) {
+        /* Write aliases */
+        for (size_t i = 0; i < alias_count; i++) {
+            write_alias(w, aliases[i]);
+        }
+
+        /* Add blank line between imports/aliases and members if both present */
+        if ((import_count > 0 || alias_count > 0) && child_count > 0) {
             write_newline(w);
         }
 
@@ -337,6 +413,7 @@ static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
     }
 
     free((void *)imports);
+    free((void *)aliases);
     free((void *)children);
 }
 
@@ -432,6 +509,31 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
         fputc(' ', w->out);
     }
 
+    /* Write direction for parameters (in/out/inout) */
+    switch (node->direction) {
+        case SYSML_DIR_IN:
+            fputs("in ", w->out);
+            break;
+        case SYSML_DIR_OUT:
+            fputs("out ", w->out);
+            break;
+        case SYSML_DIR_INOUT:
+            fputs("inout ", w->out);
+            break;
+        default:
+            break;
+    }
+
+    /* Write abstract modifier */
+    if (node->is_abstract) {
+        fputs("abstract ", w->out);
+    }
+
+    /* Write variation modifier */
+    if (node->is_variation) {
+        fputs("variation ", w->out);
+    }
+
     /* Write keyword */
     const char *keyword = sysml2_kind_to_keyword(node->kind);
     fputs(keyword, w->out);
@@ -473,6 +575,26 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
         first_rel = false;
     }
 
+    /* Write multiplicity */
+    if (node->multiplicity_lower) {
+        fputc('[', w->out);
+        fputs(node->multiplicity_lower, w->out);
+        if (node->multiplicity_upper) {
+            fputs("..", w->out);
+            fputs(node->multiplicity_upper, w->out);
+        }
+        fputc(']', w->out);
+    }
+
+    /* Write default value */
+    if (node->default_value) {
+        if (node->has_default_keyword) {
+            fputs(" default", w->out);
+        }
+        fputs(" = ", w->out);
+        fputs(node->default_value, w->out);
+    }
+
     /* Write body for container elements */
     if (SYSML_KIND_IS_PACKAGE(node->kind) ||
         SYSML_KIND_IS_DEFINITION(node->kind) ||
@@ -509,6 +631,10 @@ Sysml2Result sysml2_sysml_write(
     const SysmlImport **imports = NULL;
     size_t import_count = get_imports(model, NULL, &imports);
 
+    /* Get top-level aliases (scope = NULL) */
+    const SysmlAlias **aliases = NULL;
+    size_t alias_count = get_aliases(model, NULL, &aliases);
+
     /* Get top-level elements (parent = NULL) */
     const SysmlNode **children = NULL;
     size_t child_count = get_children(model, NULL, &children);
@@ -518,8 +644,13 @@ Sysml2Result sysml2_sysml_write(
         write_import(&w, imports[i]);
     }
 
-    /* Add blank line between imports and elements if both present */
-    if (import_count > 0 && child_count > 0) {
+    /* Write top-level aliases */
+    for (size_t i = 0; i < alias_count; i++) {
+        write_alias(&w, aliases[i]);
+    }
+
+    /* Add blank line between imports/aliases and elements if both present */
+    if ((import_count > 0 || alias_count > 0) && child_count > 0) {
         write_newline(&w);
     }
 
@@ -534,6 +665,7 @@ Sysml2Result sysml2_sysml_write(
     }
 
     free((void *)imports);
+    free((void *)aliases);
     free((void *)children);
 
     return SYSML2_OK;

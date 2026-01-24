@@ -49,9 +49,33 @@ SysmlBuildContext *sysml2_build_context_create(
     ctx->imports = SYSML2_ARENA_NEW_ARRAY(arena, SysmlImport *, ctx->import_capacity);
     ctx->import_count = 0;
 
+    /* Initialize alias array */
+    ctx->alias_capacity = SYSML_BUILD_DEFAULT_ALIAS_CAPACITY;
+    ctx->aliases = SYSML2_ARENA_NEW_ARRAY(arena, SysmlAlias *, ctx->alias_capacity);
+    ctx->alias_count = 0;
+
     /* Initialize trivia list */
     ctx->pending_trivia_head = NULL;
     ctx->pending_trivia_tail = NULL;
+
+    /* Initialize pending modifiers */
+    ctx->pending_abstract = false;
+    ctx->pending_variation = false;
+    ctx->pending_readonly = false;
+    ctx->pending_derived = false;
+    ctx->pending_direction = SYSML_DIR_NONE;
+    ctx->pending_visibility = SYSML_VIS_PUBLIC;
+
+    /* Initialize pending multiplicity */
+    ctx->pending_multiplicity_lower = NULL;
+    ctx->pending_multiplicity_upper = NULL;
+
+    /* Initialize pending default value */
+    ctx->pending_default_value = NULL;
+    ctx->pending_has_default_keyword = false;
+
+    /* Initialize pending import visibility */
+    ctx->pending_import_private = false;
 
     /* Initialize pending prefix metadata */
     ctx->pending_prefix_metadata_capacity = 8;
@@ -198,6 +222,37 @@ SysmlNode *sysml2_build_node(
     node->redefines_count = 0;
     node->references = NULL;
     node->references_count = 0;
+
+    /* Apply pending multiplicity */
+    node->multiplicity_lower = ctx->pending_multiplicity_lower;
+    node->multiplicity_upper = ctx->pending_multiplicity_upper;
+    ctx->pending_multiplicity_lower = NULL;
+    ctx->pending_multiplicity_upper = NULL;
+
+    /* Apply pending default value */
+    node->default_value = ctx->pending_default_value;
+    node->has_default_keyword = ctx->pending_has_default_keyword;
+    ctx->pending_default_value = NULL;
+    ctx->pending_has_default_keyword = false;
+
+    /* Apply pending modifiers */
+    node->is_abstract = ctx->pending_abstract;
+    node->is_variation = ctx->pending_variation;
+    node->is_readonly = ctx->pending_readonly;
+    node->is_derived = ctx->pending_derived;
+    ctx->pending_abstract = false;
+    ctx->pending_variation = false;
+    ctx->pending_readonly = false;
+    ctx->pending_derived = false;
+
+    /* Apply pending direction */
+    node->direction = ctx->pending_direction;
+    ctx->pending_direction = SYSML_DIR_NONE;
+
+    /* Apply pending visibility */
+    node->visibility = ctx->pending_visibility;
+    ctx->pending_visibility = SYSML_VIS_PUBLIC;
+
     node->loc = SYSML2_LOC_INVALID;
     node->documentation = NULL;
     node->metadata = NULL;
@@ -454,7 +509,11 @@ void sysml2_build_add_import(
     imp->kind = kind;
     imp->target = sysml2_intern(ctx->intern, target);
     imp->owner_scope = sysml2_build_current_scope(ctx);
+    imp->is_private = ctx->pending_import_private;
     imp->loc = SYSML2_LOC_INVALID;
+
+    /* Reset pending import visibility */
+    ctx->pending_import_private = false;
 
     ctx->imports[ctx->import_count++] = imp;
 }
@@ -481,6 +540,10 @@ SysmlSemanticModel *sysml2_build_finalize(SysmlBuildContext *ctx) {
     model->imports = ctx->imports;
     model->import_count = ctx->import_count;
     model->import_capacity = ctx->import_capacity;
+
+    model->aliases = ctx->aliases;
+    model->alias_count = ctx->alias_count;
+    model->alias_capacity = ctx->alias_capacity;
 
     return model;
 }
@@ -969,4 +1032,163 @@ void sysml2_capture_documentation(struct Sysml2ParserContext *pctx, size_t start
             }
         }
     }
+}
+
+/*
+ * Grow the aliases array if needed
+ */
+static void ensure_alias_capacity(SysmlBuildContext *ctx) {
+    SYSML2_ARRAY_GROW(ctx->arena, ctx->aliases, ctx->alias_count,
+                      ctx->alias_capacity, SysmlAlias *);
+}
+
+/*
+ * Build an alias
+ */
+void sysml2_build_alias(
+    SysmlBuildContext *ctx,
+    const char *name,
+    size_t name_len,
+    const char *target,
+    size_t target_len
+) {
+    if (!ctx || !name || !target) return;
+
+    ensure_alias_capacity(ctx);
+
+    SysmlAlias *alias = SYSML2_ARENA_NEW(ctx->arena, SysmlAlias);
+    if (!alias) return;
+
+    /* Trim leading/trailing whitespace from name */
+    while (name_len > 0 && (*name == ' ' || *name == '\t' || *name == '\n' || *name == '\r')) { name++; name_len--; }
+    while (name_len > 0 && (name[name_len-1] == ' ' || name[name_len-1] == '\t' || name[name_len-1] == '\n' || name[name_len-1] == '\r')) name_len--;
+
+    /* Trim leading/trailing whitespace from target */
+    while (target_len > 0 && (*target == ' ' || *target == '\t' || *target == '\n' || *target == '\r')) { target++; target_len--; }
+    while (target_len > 0 && (target[target_len-1] == ' ' || target[target_len-1] == '\t' || target[target_len-1] == '\n' || target[target_len-1] == '\r')) target_len--;
+
+    if (name_len == 0 || target_len == 0) return;
+
+    /* Generate a unique ID for the alias */
+    char id_buf[256];
+    snprintf(id_buf, sizeof(id_buf), "_alias_%zu", ctx->alias_count);
+    alias->id = sysml2_intern(ctx->intern, id_buf);
+    alias->name = sysml2_intern_n(ctx->intern, name, name_len);
+    alias->target = sysml2_intern_n(ctx->intern, target, target_len);
+    alias->owner_scope = sysml2_build_current_scope(ctx);
+    alias->loc = SYSML2_LOC_INVALID;
+
+    ctx->aliases[ctx->alias_count++] = alias;
+}
+
+/*
+ * Capture multiplicity bounds
+ */
+void sysml2_capture_multiplicity(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx || !text || len == 0) return;
+
+    /* Skip leading/trailing whitespace */
+    while (len > 0 && (*text == ' ' || *text == '\t')) { text++; len--; }
+    while (len > 0 && (text[len-1] == ' ' || text[len-1] == '\t')) len--;
+    if (len == 0) return;
+
+    /* Look for ".." to split lower..upper */
+    const char *dotdot = NULL;
+    for (size_t i = 0; i + 1 < len; i++) {
+        if (text[i] == '.' && text[i + 1] == '.') {
+            dotdot = text + i;
+            break;
+        }
+    }
+
+    if (dotdot) {
+        /* Has range: lower..upper */
+        size_t lower_len = dotdot - text;
+        size_t upper_len = len - lower_len - 2;
+
+        /* Trim whitespace around bounds */
+        const char *lower = text;
+        while (lower_len > 0 && (lower[lower_len-1] == ' ' || lower[lower_len-1] == '\t')) lower_len--;
+
+        const char *upper = dotdot + 2;
+        while (upper_len > 0 && (*upper == ' ' || *upper == '\t')) { upper++; upper_len--; }
+        while (upper_len > 0 && (upper[upper_len-1] == ' ' || upper[upper_len-1] == '\t')) upper_len--;
+
+        if (lower_len > 0) {
+            ctx->pending_multiplicity_lower = sysml2_intern_n(ctx->intern, lower, lower_len);
+        }
+        if (upper_len > 0) {
+            ctx->pending_multiplicity_upper = sysml2_intern_n(ctx->intern, upper, upper_len);
+        }
+    } else {
+        /* Single value: just lower */
+        ctx->pending_multiplicity_lower = sysml2_intern_n(ctx->intern, text, len);
+        ctx->pending_multiplicity_upper = NULL;
+    }
+}
+
+/*
+ * Capture a default value
+ */
+void sysml2_capture_default_value(SysmlBuildContext *ctx, const char *text, size_t len, bool has_default_keyword) {
+    if (!ctx || !text || len == 0) return;
+
+    /* Skip leading/trailing whitespace */
+    while (len > 0 && (*text == ' ' || *text == '\t' || *text == '\n' || *text == '\r')) { text++; len--; }
+    while (len > 0 && (text[len-1] == ' ' || text[len-1] == '\t' || text[len-1] == '\n' || text[len-1] == '\r')) len--;
+
+    if (len > 0) {
+        ctx->pending_default_value = sysml2_intern_n(ctx->intern, text, len);
+        ctx->pending_has_default_keyword = has_default_keyword;
+    }
+}
+
+/*
+ * Capture the abstract modifier
+ */
+void sysml2_capture_abstract(SysmlBuildContext *ctx) {
+    if (!ctx) return;
+    ctx->pending_abstract = true;
+}
+
+/*
+ * Capture the variation modifier
+ */
+void sysml2_capture_variation(SysmlBuildContext *ctx) {
+    if (!ctx) return;
+    ctx->pending_variation = true;
+}
+
+/*
+ * Capture direction (in/out/inout)
+ */
+void sysml2_capture_direction(SysmlBuildContext *ctx, SysmlDirection dir) {
+    if (!ctx) return;
+    ctx->pending_direction = dir;
+}
+
+/*
+ * Capture import visibility (private/public)
+ */
+void sysml2_capture_import_visibility(SysmlBuildContext *ctx, bool is_private) {
+    if (!ctx) return;
+    ctx->pending_import_private = is_private;
+}
+
+/*
+ * Clear all pending modifiers
+ */
+void sysml2_build_clear_pending_modifiers(SysmlBuildContext *ctx) {
+    if (!ctx) return;
+
+    ctx->pending_abstract = false;
+    ctx->pending_variation = false;
+    ctx->pending_readonly = false;
+    ctx->pending_derived = false;
+    ctx->pending_direction = SYSML_DIR_NONE;
+    ctx->pending_visibility = SYSML_VIS_PUBLIC;
+    ctx->pending_multiplicity_lower = NULL;
+    ctx->pending_multiplicity_upper = NULL;
+    ctx->pending_default_value = NULL;
+    ctx->pending_has_default_keyword = false;
 }

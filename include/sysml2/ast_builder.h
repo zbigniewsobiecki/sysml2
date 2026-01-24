@@ -20,6 +20,7 @@
 #define SYSML_BUILD_DEFAULT_ELEMENT_CAPACITY 256
 #define SYSML_BUILD_DEFAULT_REL_CAPACITY 64
 #define SYSML_BUILD_DEFAULT_IMPORT_CAPACITY 32
+#define SYSML_BUILD_DEFAULT_ALIAS_CAPACITY 16
 
 /*
  * Build Context - manages AST construction during parsing
@@ -55,9 +56,33 @@ typedef struct SysmlBuildContext {
     size_t import_count;
     size_t import_capacity;
 
+    /* Collected aliases */
+    SysmlAlias **aliases;
+    size_t alias_count;
+    size_t alias_capacity;
+
     /* Pending trivia for attachment to next node */
     SysmlTrivia *pending_trivia_head;
     SysmlTrivia *pending_trivia_tail;
+
+    /* Pending modifiers for attachment to next node */
+    bool pending_abstract;
+    bool pending_variation;
+    bool pending_readonly;
+    bool pending_derived;
+    SysmlDirection pending_direction;
+    SysmlVisibility pending_visibility;
+
+    /* Pending multiplicity for attachment to next node */
+    const char *pending_multiplicity_lower;
+    const char *pending_multiplicity_upper;
+
+    /* Pending default value for attachment to next node */
+    const char *pending_default_value;
+    bool pending_has_default_keyword;
+
+    /* Pending import visibility for next import */
+    bool pending_import_private;
 
     /* Pending prefix metadata for attachment to next node */
     const char **pending_prefix_metadata;
@@ -406,5 +431,92 @@ void sysml2_build_current_metadata_add_feature(
     const char *name,
     const char *value
 );
+
+/*
+ * Capture an alias declaration
+ *
+ * @param ctx Build context
+ * @param name Alias name
+ * @param name_len Length of name
+ * @param target Target qualified name
+ * @param target_len Length of target
+ */
+void sysml2_build_alias(
+    SysmlBuildContext *ctx,
+    const char *name,
+    size_t name_len,
+    const char *target,
+    size_t target_len
+);
+
+/*
+ * Capture multiplicity bounds
+ *
+ * Captured multiplicity will be applied to the next created node.
+ *
+ * @param ctx Build context
+ * @param text Multiplicity text (e.g., "0..1", "1..*", "4")
+ * @param len Length of text
+ */
+void sysml2_capture_multiplicity(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture a default value
+ *
+ * Captured default value will be applied to the next created node.
+ *
+ * @param ctx Build context
+ * @param text Default value expression text
+ * @param len Length of text
+ * @param has_default_keyword True if "default =" was used, false for just "="
+ */
+void sysml2_capture_default_value(SysmlBuildContext *ctx, const char *text, size_t len, bool has_default_keyword);
+
+/*
+ * Capture the abstract modifier
+ *
+ * Will be applied to the next created node.
+ *
+ * @param ctx Build context
+ */
+void sysml2_capture_abstract(SysmlBuildContext *ctx);
+
+/*
+ * Capture the variation modifier
+ *
+ * Will be applied to the next created node.
+ *
+ * @param ctx Build context
+ */
+void sysml2_capture_variation(SysmlBuildContext *ctx);
+
+/*
+ * Capture direction (in/out/inout)
+ *
+ * Will be applied to the next created node.
+ *
+ * @param ctx Build context
+ * @param dir Direction value
+ */
+void sysml2_capture_direction(SysmlBuildContext *ctx, SysmlDirection dir);
+
+/*
+ * Capture import visibility (private/public)
+ *
+ * Will be applied to the next import.
+ *
+ * @param ctx Build context
+ * @param is_private True for private import
+ */
+void sysml2_capture_import_visibility(SysmlBuildContext *ctx, bool is_private);
+
+/*
+ * Clear all pending modifiers
+ *
+ * Called after applying to a node to reset state.
+ *
+ * @param ctx Build context
+ */
+void sysml2_build_clear_pending_modifiers(SysmlBuildContext *ctx);
 
 #endif /* SYSML2_AST_BUILDER_H */
