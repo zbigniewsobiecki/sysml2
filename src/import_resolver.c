@@ -179,6 +179,7 @@ SysmlImportResolver *sysml_resolver_create(
     resolver->cache = NULL;
     resolver->verbose = false;
     resolver->disabled = false;
+    resolver->strict_imports = false;
 
     return resolver;
 }
@@ -520,10 +521,20 @@ static Sysml2Result resolve_single_import(
     /* Find the file for this import */
     char *found_path = sysml_resolver_find_file(resolver, import_target);
     if (!found_path) {
-        /* Import file not found - this may be acceptable if it's a built-in
-         * or if the import is from another file we're already processing.
-         * For now, we'll emit a warning and continue.
-         */
+        /* Import file not found */
+        if (resolver->strict_imports) {
+            /* In strict mode (--fix), emit E3010 error */
+            Sysml2SourceRange range = {loc, loc};
+            char msg[512];
+            snprintf(msg, sizeof(msg), "import '%s' not found in library paths (from %s)",
+                     import_target, requesting_file ? requesting_file : "<unknown>");
+            sysml2_diag_emit(diag, sysml2_diag_create(
+                diag, SYSML2_DIAG_E3010_IMPORT_NOT_FOUND, SYSML2_SEVERITY_ERROR,
+                NULL, range, sysml2_arena_strdup(resolver->arena, msg)
+            ));
+            return SYSML2_ERROR_SEMANTIC;
+        }
+        /* Non-strict mode: just print verbose note and continue */
         if (resolver->verbose) {
             fprintf(stderr, "note: import '%s' not found in library paths\n", import_target);
         }

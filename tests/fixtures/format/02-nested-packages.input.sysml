@@ -1,0 +1,1 @@
+package Outer{package Inner{}}

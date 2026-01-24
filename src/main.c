@@ -560,7 +560,7 @@ int main(int argc, char **argv) {
 
     Sysml2Result final_result = SYSML2_OK;
 
-    /* --fix mode: Parse all files first, then rewrite if all succeed */
+    /* --fix mode: Parse all files, resolve imports, validate, then rewrite if all succeed */
     if (options.fix_in_place) {
         /* Allocate model array */
         SysmlSemanticModel **models = malloc(options.input_file_count * sizeof(SysmlSemanticModel *));
@@ -571,14 +571,55 @@ int main(int argc, char **argv) {
             return 1;
         }
 
-        bool has_errors = false;
+        /* Create import resolver (like normal mode) */
+        SysmlImportResolver *resolver = sysml_resolver_create(&arena, &intern);
+        if (!resolver) {
+            fprintf(stderr, "error: failed to create import resolver\n");
+            free(models);
+            sysml2_intern_destroy(&intern);
+            sysml2_arena_destroy(&arena);
+            return 1;
+        }
 
-        /* Phase 1: Parse ALL files first */
+        resolver->verbose = options.verbose;
+        resolver->disabled = options.no_resolve;
+        resolver->strict_imports = true;  /* Fail on missing imports in --fix mode */
+
+        /* Add library paths from environment and CLI */
+        sysml_resolver_add_paths_from_env(resolver);
+        for (size_t i = 0; i < options.library_path_count; i++) {
+            sysml_resolver_add_path(resolver, options.library_paths[i]);
+        }
+
+        /* Add directories containing input files to search paths */
+        for (size_t i = 0; i < options.input_file_count; i++) {
+            const char *file_path = options.input_files[i];
+            char *path_copy = strdup(file_path);
+            if (path_copy) {
+                char *last_slash = strrchr(path_copy, '/');
+                if (last_slash) {
+                    *last_slash = '\0';
+                    sysml_resolver_add_path(resolver, path_copy);
+                } else {
+                    sysml_resolver_add_path(resolver, ".");
+                }
+                free(path_copy);
+            }
+        }
+
+        bool has_errors = false;
+        size_t error_count_before = diag_ctx.error_count;
+
+        /* Pass 1: Parse ALL input files */
         for (size_t i = 0; i < options.input_file_count; i++) {
             models[i] = NULL;
             result = process_file(options.input_files[i], &options, &arena, &intern, &diag_ctx, &models[i]);
             if (result != SYSML2_OK || models[i] == NULL) {
                 has_errors = true;
+            }
+            if (models[i]) {
+                /* Cache the model for import resolution */
+                sysml_resolver_cache_model(resolver, options.input_files[i], models[i]);
             }
         }
 
@@ -594,13 +635,78 @@ int main(int argc, char **argv) {
             sysml2_diag_print_all(&diag_ctx, &diag_options);
             sysml2_diag_print_summary(&diag_ctx, stderr);
             fprintf(stderr, "error: --fix aborted due to parse errors (no files modified)\n");
+            sysml_resolver_destroy(resolver);
             free(models);
             sysml2_intern_destroy(&intern);
             sysml2_arena_destroy(&arena);
             return 1;
         }
 
-        /* Phase 2: All parsed successfully, now rewrite */
+        /* Pass 2: Resolve imports (unless --no-resolve) */
+        if (!options.no_resolve) {
+            for (size_t i = 0; i < options.input_file_count; i++) {
+                if (models[i]) {
+                    result = sysml_resolver_resolve_imports(resolver, models[i], &diag_ctx);
+                    /* With strict_imports, missing imports will emit E3010 errors */
+                }
+                if (sysml2_diag_should_stop(&diag_ctx)) {
+                    break;
+                }
+            }
+
+            /* Check if import resolution produced errors */
+            if (diag_ctx.error_count > error_count_before) {
+                Sysml2DiagOptions diag_options = {
+                    .output = stderr,
+                    .color_mode = options.color_mode,
+                    .show_source_context = true,
+                    .show_column_numbers = true,
+                    .show_error_codes = true,
+                };
+                sysml2_diag_print_all(&diag_ctx, &diag_options);
+                sysml2_diag_print_summary(&diag_ctx, stderr);
+                fprintf(stderr, "error: --fix aborted due to import errors (no files modified)\n");
+                sysml_resolver_destroy(resolver);
+                free(models);
+                sysml2_intern_destroy(&intern);
+                sysml2_arena_destroy(&arena);
+                return 1;
+            }
+        }
+
+        /* Pass 3: Unified validation (unless --parse-only) */
+        if (!options.parse_only) {
+            size_t all_model_count;
+            SysmlSemanticModel **all_models = sysml_resolver_get_all_models(resolver, &all_model_count);
+
+            if (all_models && all_model_count > 0) {
+                SysmlValidationOptions val_opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+                Sysml2Result val_result = sysml_validate_multi(
+                    all_models, all_model_count, &diag_ctx, &arena, &intern, &val_opts
+                );
+                free(all_models);
+
+                if (val_result != SYSML2_OK || diag_ctx.error_count > error_count_before) {
+                    Sysml2DiagOptions diag_options = {
+                        .output = stderr,
+                        .color_mode = options.color_mode,
+                        .show_source_context = true,
+                        .show_column_numbers = true,
+                        .show_error_codes = true,
+                    };
+                    sysml2_diag_print_all(&diag_ctx, &diag_options);
+                    sysml2_diag_print_summary(&diag_ctx, stderr);
+                    fprintf(stderr, "error: --fix aborted due to validation errors (no files modified)\n");
+                    sysml_resolver_destroy(resolver);
+                    free(models);
+                    sysml2_intern_destroy(&intern);
+                    sysml2_arena_destroy(&arena);
+                    return 1;
+                }
+            }
+        }
+
+        /* Pass 4: All checks passed, now rewrite input files only */
         for (size_t i = 0; i < options.input_file_count; i++) {
             if (models[i]) {
                 FILE *out = fopen(options.input_files[i], "w");
@@ -620,6 +726,7 @@ int main(int argc, char **argv) {
             }
         }
 
+        sysml_resolver_destroy(resolver);
         free(models);
 
         /* Cleanup and exit */
@@ -645,6 +752,25 @@ int main(int argc, char **argv) {
     sysml_resolver_add_paths_from_env(resolver);
     for (size_t i = 0; i < options.library_path_count; i++) {
         sysml_resolver_add_path(resolver, options.library_paths[i]);
+    }
+
+    /* Add directories containing input files to search paths
+     * This allows imports within a project to resolve each other */
+    for (size_t i = 0; i < options.input_file_count; i++) {
+        const char *file_path = options.input_files[i];
+        char *path_copy = strdup(file_path);
+        if (path_copy) {
+            /* Find last slash to get directory */
+            char *last_slash = strrchr(path_copy, '/');
+            if (last_slash) {
+                *last_slash = '\0';
+                sysml_resolver_add_path(resolver, path_copy);
+            } else {
+                /* File is in current directory */
+                sysml_resolver_add_path(resolver, ".");
+            }
+            free(path_copy);
+        }
     }
 
     if (options.input_file_count == 0) {

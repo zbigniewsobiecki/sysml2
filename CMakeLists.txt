@@ -168,6 +168,26 @@ foreach(fixture ${VALIDATION_FIXTURES})
     endif()
 endforeach()
 
+# Pretty printing (SysML output) fixture tests
+file(GLOB FORMAT_FIXTURES
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/format/*.input.sysml)
+foreach(fixture ${FORMAT_FIXTURES})
+    get_filename_component(fixture_name ${fixture} NAME_WE)
+    # Remove .input suffix for cleaner test name
+    string(REPLACE ".input" "" clean_name ${fixture_name})
+    add_test(NAME format_${clean_name}
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_sysml_output.sh
+            $<TARGET_FILE:sysml2> ${fixture}
+    )
+endforeach()
+
+# Cross-file --fix mode test
+add_test(NAME format_cross_file
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_sysml_fix.sh
+        $<TARGET_FILE:sysml2>
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/format/10-cross-file
+)
+
 # Custom target for running tests
 add_custom_target(check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure

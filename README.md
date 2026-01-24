@@ -149,6 +149,8 @@ The resolver searches library paths for files matching the package name:
 - For `import Foo::*;`, searches for `Foo.sysml` or `Foo.kerml`
 - Searches recursively in subdirectories (up to 5 levels deep)
 - Caches parsed files to avoid re-parsing
+- Automatically adds directories of input files to search paths (for cross-file imports within a project)
+- Detects and handles circular imports
 
 Use `--no-resolve` to disable automatic resolution:
 ```bash

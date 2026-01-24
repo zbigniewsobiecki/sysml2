@@ -201,6 +201,8 @@ const char *sysml2_diag_code_to_string(Sysml2DiagCode code) {
         case SYSML2_DIAG_E3006_TYPE_MISMATCH: return "E3006";
         case SYSML2_DIAG_E3007_MULTIPLICITY_ERROR: return "E3007";
         case SYSML2_DIAG_E3008_REDEFINITION_ERROR: return "E3008";
+        case SYSML2_DIAG_E3009_CIRCULAR_IMPORT: return "E3009";
+        case SYSML2_DIAG_E3010_IMPORT_NOT_FOUND: return "E3010";
         case SYSML2_DIAG_W1001_UNUSED_IMPORT: return "W1001";
         case SYSML2_DIAG_W1002_SHADOWED_NAME: return "W1002";
         case SYSML2_DIAG_W1003_DEPRECATED: return "W1003";
