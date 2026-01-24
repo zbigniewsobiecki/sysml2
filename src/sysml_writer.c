@@ -15,12 +15,12 @@ typedef struct {
     FILE *out;
     int indent_level;
     bool at_line_start;
-} SysmlWriter;
+} Sysml2Writer;
 
 /*
  * Write indentation at the current level
  */
-static void write_indent(SysmlWriter *w) {
+static void write_indent(Sysml2Writer *w) {
     if (!w->at_line_start) return;
     for (int i = 0; i < w->indent_level * SYSML_WRITER_INDENT_SIZE; i++) {
         fputc(' ', w->out);
@@ -31,7 +31,7 @@ static void write_indent(SysmlWriter *w) {
 /*
  * Write a newline
  */
-static void write_newline(SysmlWriter *w) {
+static void write_newline(Sysml2Writer *w) {
     fputc('\n', w->out);
     w->at_line_start = true;
 }
@@ -39,7 +39,7 @@ static void write_newline(SysmlWriter *w) {
 /*
  * Write trivia (comments and blank lines)
  */
-static void write_trivia(SysmlWriter *w, SysmlTrivia *trivia) {
+static void write_trivia(Sysml2Writer *w, SysmlTrivia *trivia) {
     while (trivia) {
         switch (trivia->kind) {
             case SYSML_TRIVIA_LINE_COMMENT:
@@ -72,7 +72,7 @@ static void write_trivia(SysmlWriter *w, SysmlTrivia *trivia) {
 /*
  * Write trailing trivia (on same line)
  */
-static void write_trailing_trivia(SysmlWriter *w, SysmlTrivia *trivia) {
+static void write_trailing_trivia(Sysml2Writer *w, SysmlTrivia *trivia) {
     while (trivia) {
         switch (trivia->kind) {
             case SYSML_TRIVIA_LINE_COMMENT:
@@ -125,7 +125,7 @@ static bool needs_quoting(const char *name) {
 /*
  * Write a name, quoting if necessary
  */
-static void write_name(SysmlWriter *w, const char *name) {
+static void write_name(Sysml2Writer *w, const char *name) {
     if (!name) return;
 
     if (needs_quoting(name)) {
@@ -146,7 +146,7 @@ static void write_name(SysmlWriter *w, const char *name) {
 /*
  * Forward declarations
  */
-static void write_node(SysmlWriter *w, const SysmlNode *node, const SysmlSemanticModel *model);
+static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemanticModel *model);
 
 /*
  * Get child nodes for a parent
@@ -233,7 +233,7 @@ static size_t get_imports(const SysmlSemanticModel *model, const char *scope_id,
 /*
  * Write an import declaration
  */
-static void write_import(SysmlWriter *w, const SysmlImport *imp) {
+static void write_import(Sysml2Writer *w, const SysmlImport *imp) {
     write_indent(w);
     fputs("import ", w->out);
 
@@ -260,7 +260,7 @@ static void write_import(SysmlWriter *w, const SysmlImport *imp) {
 /*
  * Write a body with children
  */
-static void write_body(SysmlWriter *w, const SysmlNode *node, const SysmlSemanticModel *model) {
+static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemanticModel *model) {
     /* Get imports for this scope */
     const SysmlImport **imports = NULL;
     size_t import_count = get_imports(model, node->id, &imports);
@@ -315,7 +315,7 @@ static void write_body(SysmlWriter *w, const SysmlNode *node, const SysmlSemanti
 /*
  * Write a definition or usage node
  */
-static void write_node(SysmlWriter *w, const SysmlNode *node, const SysmlSemanticModel *model) {
+static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemanticModel *model) {
     if (!node) return;
 
     /* Write leading trivia */
@@ -326,7 +326,7 @@ static void write_node(SysmlWriter *w, const SysmlNode *node, const SysmlSemanti
     write_indent(w);
 
     /* Write keyword */
-    const char *keyword = sysml_kind_to_keyword(node->kind);
+    const char *keyword = sysml2_kind_to_keyword(node->kind);
     fputs(keyword, w->out);
 
     /* Write name if present */
@@ -364,7 +364,7 @@ static void write_node(SysmlWriter *w, const SysmlNode *node, const SysmlSemanti
 /*
  * Write the semantic model as formatted SysML/KerML source to a file
  */
-Sysml2Result sysml_sysml_write(
+Sysml2Result sysml2_sysml_write(
     const SysmlSemanticModel *model,
     FILE *out
 ) {
@@ -372,7 +372,7 @@ Sysml2Result sysml_sysml_write(
         return SYSML2_ERROR_SYNTAX;
     }
 
-    SysmlWriter w = {
+    Sysml2Writer w = {
         .out = out,
         .indent_level = 0,
         .at_line_start = true
@@ -415,7 +415,7 @@ Sysml2Result sysml_sysml_write(
 /*
  * Write the semantic model as formatted SysML/KerML source to a string
  */
-Sysml2Result sysml_sysml_write_string(
+Sysml2Result sysml2_sysml_write_string(
     const SysmlSemanticModel *model,
     char **out_str
 ) {
@@ -431,7 +431,7 @@ Sysml2Result sysml_sysml_write_string(
         return SYSML2_ERROR_OUT_OF_MEMORY;
     }
 
-    Sysml2Result result = sysml_sysml_write(model, memstream);
+    Sysml2Result result = sysml2_sysml_write(model, memstream);
     fclose(memstream);
 
     if (result == SYSML2_OK) {

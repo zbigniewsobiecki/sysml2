@@ -228,15 +228,15 @@ const char *sysml2_result_to_string(Sysml2Result result) {
 }
 
 /* Add directory containing a file to resolver's search paths */
-static void add_file_directory_to_resolver(SysmlImportResolver *resolver, const char *file_path) {
+static void add_file_directory_to_resolver(Sysml2ImportResolver *resolver, const char *file_path) {
     char *path_copy = strdup(file_path);
     if (path_copy) {
         char *last_slash = strrchr(path_copy, '/');
         if (last_slash) {
             *last_slash = '\0';
-            sysml_resolver_add_path(resolver, path_copy);
+            sysml2_resolver_add_path(resolver, path_copy);
         } else {
-            sysml_resolver_add_path(resolver, ".");
+            sysml2_resolver_add_path(resolver, ".");
         }
         free(path_copy);
     }
@@ -244,11 +244,11 @@ static void add_file_directory_to_resolver(SysmlImportResolver *resolver, const 
 
 /* Run --fix mode: parse, resolve, validate, then rewrite files */
 static int run_fix_mode(
-    SysmlPipelineContext *ctx,
+    Sysml2PipelineContext *ctx,
     const Sysml2CliOptions *options
 ) {
-    SysmlImportResolver *resolver = sysml_pipeline_get_resolver(ctx);
-    Sysml2DiagContext *diag = sysml_pipeline_get_diag(ctx);
+    Sysml2ImportResolver *resolver = sysml2_pipeline_get_resolver(ctx);
+    Sysml2DiagContext *diag = sysml2_pipeline_get_diag(ctx);
     resolver->strict_imports = true;  /* Fail on missing imports in --fix mode */
 
     /* Add directories containing input files to search paths */
@@ -269,17 +269,17 @@ static int run_fix_mode(
     /* Pass 1: Parse ALL input files */
     for (size_t i = 0; i < options->input_file_count; i++) {
         models[i] = NULL;
-        Sysml2Result result = sysml_pipeline_process_file(ctx, options->input_files[i], &models[i]);
+        Sysml2Result result = sysml2_pipeline_process_file(ctx, options->input_files[i], &models[i]);
         if (result != SYSML2_OK || models[i] == NULL) {
             has_errors = true;
         }
         if (models[i]) {
-            sysml_resolver_cache_model(resolver, options->input_files[i], models[i]);
+            sysml2_resolver_cache_model(resolver, options->input_files[i], models[i]);
         }
     }
 
     if (has_errors) {
-        sysml_pipeline_print_diagnostics(ctx, stderr);
+        sysml2_pipeline_print_diagnostics(ctx, stderr);
         fprintf(stderr, "error: --fix aborted due to parse errors (no files modified)\n");
         free(models);
         return 1;
@@ -289,7 +289,7 @@ static int run_fix_mode(
     if (!options->no_resolve) {
         for (size_t i = 0; i < options->input_file_count; i++) {
             if (models[i]) {
-                sysml_resolver_resolve_imports(resolver, models[i], diag);
+                sysml2_resolver_resolve_imports(resolver, models[i], diag);
             }
             if (sysml2_diag_should_stop(diag)) {
                 break;
@@ -297,7 +297,7 @@ static int run_fix_mode(
         }
 
         if (diag->error_count > error_count_before) {
-            sysml_pipeline_print_diagnostics(ctx, stderr);
+            sysml2_pipeline_print_diagnostics(ctx, stderr);
             fprintf(stderr, "error: --fix aborted due to import errors (no files modified)\n");
             free(models);
             return 1;
@@ -306,9 +306,9 @@ static int run_fix_mode(
 
     /* Pass 3: Unified validation (unless --parse-only) */
     if (!options->parse_only) {
-        Sysml2Result val_result = sysml_pipeline_validate_all(ctx);
+        Sysml2Result val_result = sysml2_pipeline_validate_all(ctx);
         if (val_result != SYSML2_OK || diag->error_count > error_count_before) {
-            sysml_pipeline_print_diagnostics(ctx, stderr);
+            sysml2_pipeline_print_diagnostics(ctx, stderr);
             fprintf(stderr, "error: --fix aborted due to validation errors (no files modified)\n");
             free(models);
             return 1;
@@ -326,7 +326,7 @@ static int run_fix_mode(
                 continue;
             }
 
-            sysml_sysml_write(models[i], out);
+            sysml2_sysml_write(models[i], out);
             fclose(out);
 
             if (options->verbose) {
@@ -341,11 +341,11 @@ static int run_fix_mode(
 
 /* Run normal mode: parse, resolve, validate, output */
 static int run_normal_mode(
-    SysmlPipelineContext *ctx,
+    Sysml2PipelineContext *ctx,
     const Sysml2CliOptions *options
 ) {
-    SysmlImportResolver *resolver = sysml_pipeline_get_resolver(ctx);
-    Sysml2DiagContext *diag = sysml_pipeline_get_diag(ctx);
+    Sysml2ImportResolver *resolver = sysml2_pipeline_get_resolver(ctx);
+    Sysml2DiagContext *diag = sysml2_pipeline_get_diag(ctx);
 
     /* Add directories containing input files to search paths */
     for (size_t i = 0; i < options->input_file_count; i++) {
@@ -357,15 +357,15 @@ static int run_normal_mode(
     if (options->input_file_count == 0) {
         /* Read from stdin - single file mode (no import resolution for stdin) */
         SysmlSemanticModel *model = NULL;
-        Sysml2Result result = sysml_pipeline_process_stdin(ctx, &model);
+        Sysml2Result result = sysml2_pipeline_process_stdin(ctx, &model);
         if (result != SYSML2_OK) {
             final_result = result;
         }
 
         /* Validation for single stdin input */
         if (model && !options->parse_only) {
-            sysml_resolver_cache_model(resolver, "<stdin>", model);
-            Sysml2Result val_result = sysml_pipeline_validate_all(ctx);
+            sysml2_resolver_cache_model(resolver, "<stdin>", model);
+            Sysml2Result val_result = sysml2_pipeline_validate_all(ctx);
             if (val_result != SYSML2_OK) {
                 final_result = SYSML2_ERROR_SEMANTIC;
             }
@@ -376,13 +376,13 @@ static int run_normal_mode(
             if (options->output_format == SYSML2_OUTPUT_JSON) {
                 FILE *out = options->output_file ? fopen(options->output_file, "w") : stdout;
                 if (out) {
-                    sysml_pipeline_write_json(ctx, model, out);
+                    sysml2_pipeline_write_json(ctx, model, out);
                     if (options->output_file) fclose(out);
                 }
             } else if (options->output_format == SYSML2_OUTPUT_SYSML) {
                 FILE *out = options->output_file ? fopen(options->output_file, "w") : stdout;
                 if (out) {
-                    sysml_pipeline_write_sysml(ctx, model, out);
+                    sysml2_pipeline_write_sysml(ctx, model, out);
                     if (options->output_file) fclose(out);
                 }
             }
@@ -400,12 +400,12 @@ static int run_normal_mode(
         /* Pass 1: Parse all input files */
         for (size_t i = 0; i < options->input_file_count; i++) {
             input_models[i] = NULL;
-            Sysml2Result result = sysml_pipeline_process_file(ctx, options->input_files[i], &input_models[i]);
+            Sysml2Result result = sysml2_pipeline_process_file(ctx, options->input_files[i], &input_models[i]);
             if (result != SYSML2_OK) {
                 has_parse_errors = true;
             }
             if (input_models[i]) {
-                sysml_resolver_cache_model(resolver, options->input_files[i], input_models[i]);
+                sysml2_resolver_cache_model(resolver, options->input_files[i], input_models[i]);
             }
             if (sysml2_diag_should_stop(diag)) {
                 break;
@@ -416,7 +416,7 @@ static int run_normal_mode(
         if (!options->no_resolve && !has_parse_errors) {
             for (size_t i = 0; i < options->input_file_count; i++) {
                 if (input_models[i]) {
-                    sysml_resolver_resolve_imports(resolver, input_models[i], diag);
+                    sysml2_resolver_resolve_imports(resolver, input_models[i], diag);
                 }
                 if (sysml2_diag_should_stop(diag)) {
                     break;
@@ -426,7 +426,7 @@ static int run_normal_mode(
 
         /* Pass 3: Unified validation */
         if (!options->parse_only && !has_parse_errors) {
-            Sysml2Result val_result = sysml_pipeline_validate_all(ctx);
+            Sysml2Result val_result = sysml2_pipeline_validate_all(ctx);
             if (val_result != SYSML2_OK) {
                 final_result = SYSML2_ERROR_SEMANTIC;
             }
@@ -439,13 +439,13 @@ static int run_normal_mode(
             if (options->output_format == SYSML2_OUTPUT_JSON) {
                 FILE *out = options->output_file ? fopen(options->output_file, "w") : stdout;
                 if (out) {
-                    sysml_pipeline_write_json(ctx, input_models[0], out);
+                    sysml2_pipeline_write_json(ctx, input_models[0], out);
                     if (options->output_file) fclose(out);
                 }
             } else if (options->output_format == SYSML2_OUTPUT_SYSML) {
                 FILE *out = options->output_file ? fopen(options->output_file, "w") : stdout;
                 if (out) {
-                    sysml_pipeline_write_sysml(ctx, input_models[0], out);
+                    sysml2_pipeline_write_sysml(ctx, input_models[0], out);
                     if (options->output_file) fclose(out);
                 }
             }
@@ -455,10 +455,10 @@ static int run_normal_mode(
     }
 
     /* Print diagnostics */
-    sysml_pipeline_print_diagnostics(ctx, stderr);
+    sysml2_pipeline_print_diagnostics(ctx, stderr);
 
     /* Exit codes */
-    if (final_result == SYSML2_OK && !sysml_pipeline_has_errors(ctx)) {
+    if (final_result == SYSML2_OK && !sysml2_pipeline_has_errors(ctx)) {
         return 0;
     } else if (final_result == SYSML2_ERROR_SYNTAX) {
         return 1;
@@ -500,7 +500,7 @@ int main(int argc, char **argv) {
     sysml2_intern_init(&intern, &arena);
 
     /* Create pipeline context */
-    SysmlPipelineContext *ctx = sysml_pipeline_create(&arena, &intern, &options);
+    Sysml2PipelineContext *ctx = sysml2_pipeline_create(&arena, &intern, &options);
     if (!ctx) {
         fprintf(stderr, "error: failed to create pipeline context\n");
         sysml2_intern_destroy(&intern);
@@ -517,7 +517,7 @@ int main(int argc, char **argv) {
     }
 
     /* Cleanup */
-    sysml_pipeline_destroy(ctx);
+    sysml2_pipeline_destroy(ctx);
     sysml2_intern_destroy(&intern);
     sysml2_arena_destroy(&arena);
     sysml2_cli_cleanup(&options);

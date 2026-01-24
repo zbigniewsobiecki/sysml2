@@ -27,10 +27,10 @@ typedef struct {
     bool check_type_compatibility; /* E3006 - default: true */
     bool suggest_corrections;      /* "did you mean?" hints */
     size_t max_suggestions;        /* default: 3 */
-} SysmlValidationOptions;
+} Sysml2ValidationOptions;
 
 /* Default validation options (all checks enabled) */
-#define SYSML_VALIDATION_OPTIONS_DEFAULT ((SysmlValidationOptions){ \
+#define SYSML_VALIDATION_OPTIONS_DEFAULT ((Sysml2ValidationOptions){ \
     .check_undefined_types = true, \
     .check_duplicate_names = true, \
     .check_circular_specs = true, \
@@ -46,7 +46,7 @@ typedef struct {
  * @param def_kind Kind of the definition being referenced
  * @return true if compatible
  */
-bool sysml_is_type_compatible(SysmlNodeKind usage_kind, SysmlNodeKind def_kind);
+bool sysml2_is_type_compatible(SysmlNodeKind usage_kind, SysmlNodeKind def_kind);
 
 /*
  * Run semantic validation on a parsed model
@@ -65,13 +65,13 @@ bool sysml_is_type_compatible(SysmlNodeKind usage_kind, SysmlNodeKind def_kind);
  * @param options Validation options (NULL for defaults)
  * @return SYSML2_OK if valid, SYSML2_ERROR_SEMANTIC if errors found
  */
-Sysml2Result sysml_validate(
+Sysml2Result sysml2_validate(
     const SysmlSemanticModel *model,
     Sysml2DiagContext *diag_ctx,
     const Sysml2SourceFile *source_file,
     Sysml2Arena *arena,
     Sysml2Intern *intern,
-    const SysmlValidationOptions *options
+    const Sysml2ValidationOptions *options
 );
 
 /*
@@ -88,13 +88,13 @@ Sysml2Result sysml_validate(
  * @param options Validation options (NULL for defaults)
  * @return SYSML2_OK if valid, SYSML2_ERROR_SEMANTIC if errors found
  */
-Sysml2Result sysml_validate_multi(
+Sysml2Result sysml2_validate_multi(
     SysmlSemanticModel **models,
     size_t model_count,
     Sysml2DiagContext *diag_ctx,
     Sysml2Arena *arena,
     Sysml2Intern *intern,
-    const SysmlValidationOptions *options
+    const Sysml2ValidationOptions *options
 );
 
 #endif /* SYSML2_VALIDATOR_H */

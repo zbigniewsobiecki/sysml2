@@ -80,11 +80,11 @@ static char *search_directory_recursive(const char *dir, const char *filename, i
     return result;
 }
 
-SysmlImportResolver *sysml_resolver_create(
+Sysml2ImportResolver *sysml2_resolver_create(
     Sysml2Arena *arena,
     Sysml2Intern *intern
 ) {
-    SysmlImportResolver *resolver = calloc(1, sizeof(SysmlImportResolver));
+    Sysml2ImportResolver *resolver = calloc(1, sizeof(Sysml2ImportResolver));
     if (!resolver) return NULL;
 
     resolver->arena = arena;
@@ -113,7 +113,7 @@ SysmlImportResolver *sysml_resolver_create(
     return resolver;
 }
 
-void sysml_resolver_destroy(SysmlImportResolver *resolver) {
+void sysml2_resolver_destroy(Sysml2ImportResolver *resolver) {
     if (!resolver) return;
 
     /* Free library paths */
@@ -129,9 +129,9 @@ void sysml_resolver_destroy(SysmlImportResolver *resolver) {
     free(resolver->resolution_stack);
 
     /* Free file cache (models are owned by arena) */
-    SysmlFileCache *cache = resolver->cache;
+    Sysml2FileCache *cache = resolver->cache;
     while (cache) {
-        SysmlFileCache *next = cache->next;
+        Sysml2FileCache *next = cache->next;
         free(cache->path);
         free(cache);
         cache = next;
@@ -140,7 +140,7 @@ void sysml_resolver_destroy(SysmlImportResolver *resolver) {
     free(resolver);
 }
 
-void sysml_resolver_add_path(SysmlImportResolver *resolver, const char *path) {
+void sysml2_resolver_add_path(Sysml2ImportResolver *resolver, const char *path) {
     if (!resolver || !path) return;
 
     /* Convert to absolute path if possible */
@@ -179,7 +179,7 @@ void sysml_resolver_add_path(SysmlImportResolver *resolver, const char *path) {
     }
 }
 
-void sysml_resolver_add_paths_from_env(SysmlImportResolver *resolver) {
+void sysml2_resolver_add_paths_from_env(Sysml2ImportResolver *resolver) {
     if (!resolver) return;
 
     const char *env = getenv(SYSML2_LIBRARY_PATH_ENV);
@@ -194,7 +194,7 @@ void sysml_resolver_add_paths_from_env(SysmlImportResolver *resolver) {
     while (token) {
         /* Skip empty tokens */
         if (*token) {
-            sysml_resolver_add_path(resolver, token);
+            sysml2_resolver_add_path(resolver, token);
         }
         token = strtok_r(NULL, ":", &saveptr);
     }
@@ -202,8 +202,8 @@ void sysml_resolver_add_paths_from_env(SysmlImportResolver *resolver) {
     free(env_copy);
 }
 
-void sysml_resolver_cache_model(
-    SysmlImportResolver *resolver,
+void sysml2_resolver_cache_model(
+    Sysml2ImportResolver *resolver,
     const char *path,
     SysmlSemanticModel *model
 ) {
@@ -217,7 +217,7 @@ void sysml_resolver_cache_model(
     }
 
     /* Check if already cached */
-    SysmlFileCache *cache = resolver->cache;
+    Sysml2FileCache *cache = resolver->cache;
     while (cache) {
         if (strcmp(cache->path, abs_path) == 0) {
             /* Already cached - update model */
@@ -229,7 +229,7 @@ void sysml_resolver_cache_model(
     }
 
     /* Create new cache entry */
-    SysmlFileCache *entry = malloc(sizeof(SysmlFileCache));
+    Sysml2FileCache *entry = malloc(sizeof(Sysml2FileCache));
     if (!entry) {
         free(abs_path);
         return;
@@ -241,8 +241,8 @@ void sysml_resolver_cache_model(
     resolver->cache = entry;
 }
 
-SysmlSemanticModel *sysml_resolver_get_cached(
-    SysmlImportResolver *resolver,
+SysmlSemanticModel *sysml2_resolver_get_cached(
+    Sysml2ImportResolver *resolver,
     const char *path
 ) {
     if (!resolver || !path) return NULL;
@@ -254,7 +254,7 @@ SysmlSemanticModel *sysml_resolver_get_cached(
         if (!abs_path) return NULL;
     }
 
-    SysmlFileCache *cache = resolver->cache;
+    Sysml2FileCache *cache = resolver->cache;
     while (cache) {
         if (strcmp(cache->path, abs_path) == 0) {
             free(abs_path);
@@ -267,8 +267,8 @@ SysmlSemanticModel *sysml_resolver_get_cached(
     return NULL;
 }
 
-char *sysml_resolver_find_file(
-    SysmlImportResolver *resolver,
+char *sysml2_resolver_find_file(
+    Sysml2ImportResolver *resolver,
     const char *import_target
 ) {
     if (!resolver || !import_target) return NULL;
@@ -324,7 +324,7 @@ char *sysml_resolver_find_file(
 }
 
 /* Check if a file is in the resolution stack (cycle detection) */
-static bool is_in_resolution_stack(SysmlImportResolver *resolver, const char *path) {
+static bool is_in_resolution_stack(Sysml2ImportResolver *resolver, const char *path) {
     for (size_t i = 0; i < resolver->stack_depth; i++) {
         if (strcmp(resolver->resolution_stack[i], path) == 0) {
             return true;
@@ -334,7 +334,7 @@ static bool is_in_resolution_stack(SysmlImportResolver *resolver, const char *pa
 }
 
 /* Push a file onto the resolution stack */
-static bool push_resolution_stack(SysmlImportResolver *resolver, const char *path) {
+static bool push_resolution_stack(Sysml2ImportResolver *resolver, const char *path) {
     if (resolver->stack_depth >= resolver->stack_capacity) {
         size_t new_capacity = resolver->stack_capacity * 2;
         char **new_stack = realloc(resolver->resolution_stack,
@@ -352,7 +352,7 @@ static bool push_resolution_stack(SysmlImportResolver *resolver, const char *pat
 }
 
 /* Pop a file from the resolution stack */
-static void pop_resolution_stack(SysmlImportResolver *resolver) {
+static void pop_resolution_stack(Sysml2ImportResolver *resolver) {
     if (resolver->stack_depth > 0) {
         resolver->stack_depth--;
         free(resolver->resolution_stack[resolver->stack_depth]);
@@ -362,7 +362,7 @@ static void pop_resolution_stack(SysmlImportResolver *resolver) {
 
 /* Parse a single file and return its model */
 static SysmlSemanticModel *parse_file(
-    SysmlImportResolver *resolver,
+    Sysml2ImportResolver *resolver,
     const char *path,
     Sysml2DiagContext *diag
 ) {
@@ -382,7 +382,7 @@ static SysmlSemanticModel *parse_file(
     }
 
     /* Create build context */
-    SysmlBuildContext *build_ctx = sysml_build_context_create(
+    SysmlBuildContext *build_ctx = sysml2_build_context_create(
         resolver->arena, resolver->intern, path
     );
     if (!build_ctx) {
@@ -408,14 +408,14 @@ static SysmlSemanticModel *parse_file(
     };
 
     /* Parse */
-    sysml_context_t *parser = sysml_create(&ctx);
+    sysml2_context_t *parser = sysml2_create(&ctx);
     if (!parser) {
         free(content);
         return NULL;
     }
 
     void *result = NULL;
-    int parse_ok = sysml_parse(parser, &result);
+    int parse_ok = sysml2_parse(parser, &result);
 
     if (ctx.error_count > 0) {
         diag->error_count += ctx.error_count;
@@ -423,10 +423,10 @@ static SysmlSemanticModel *parse_file(
 
     SysmlSemanticModel *model = NULL;
     if (parse_ok && ctx.error_count == 0) {
-        model = sysml_build_finalize(build_ctx);
+        model = sysml2_build_finalize(build_ctx);
     }
 
-    sysml_destroy(parser);
+    sysml2_destroy(parser);
     free(content);
 
     return model;
@@ -434,21 +434,21 @@ static SysmlSemanticModel *parse_file(
 
 /* Resolve imports for a single file (recursive) */
 static Sysml2Result resolve_file_imports(
-    SysmlImportResolver *resolver,
+    Sysml2ImportResolver *resolver,
     const char *file_path,
     Sysml2DiagContext *diag
 );
 
 /* Resolve a single import target */
 static Sysml2Result resolve_single_import(
-    SysmlImportResolver *resolver,
+    Sysml2ImportResolver *resolver,
     const char *import_target,
     const char *requesting_file,
     Sysml2SourceLoc loc,
     Sysml2DiagContext *diag
 ) {
     /* Find the file for this import */
-    char *found_path = sysml_resolver_find_file(resolver, import_target);
+    char *found_path = sysml2_resolver_find_file(resolver, import_target);
     if (!found_path) {
         /* Import file not found */
         if (resolver->strict_imports) {
@@ -479,7 +479,7 @@ static Sysml2Result resolve_single_import(
     }
 
     /* Check if already cached */
-    if (sysml_resolver_get_cached(resolver, abs_path)) {
+    if (sysml2_resolver_get_cached(resolver, abs_path)) {
         free(abs_path);
         return SYSML2_OK;
     }
@@ -517,7 +517,7 @@ static Sysml2Result resolve_single_import(
     }
 
     /* Cache the model */
-    sysml_resolver_cache_model(resolver, abs_path, model);
+    sysml2_resolver_cache_model(resolver, abs_path, model);
 
     /* Recursively resolve its imports */
     Sysml2Result result = resolve_file_imports(resolver, abs_path, diag);
@@ -530,12 +530,12 @@ static Sysml2Result resolve_single_import(
 
 /* Resolve imports for a model */
 static Sysml2Result resolve_file_imports(
-    SysmlImportResolver *resolver,
+    Sysml2ImportResolver *resolver,
     const char *file_path,
     Sysml2DiagContext *diag
 ) {
     /* Get the model from cache */
-    SysmlSemanticModel *model = sysml_resolver_get_cached(resolver, file_path);
+    SysmlSemanticModel *model = sysml2_resolver_get_cached(resolver, file_path);
     if (!model) {
         return SYSML2_OK;  /* Nothing to do */
     }
@@ -561,8 +561,8 @@ static Sysml2Result resolve_file_imports(
     return overall_result;
 }
 
-Sysml2Result sysml_resolver_resolve_imports(
-    SysmlImportResolver *resolver,
+Sysml2Result sysml2_resolver_resolve_imports(
+    Sysml2ImportResolver *resolver,
     SysmlSemanticModel *model,
     Sysml2DiagContext *diag
 ) {
@@ -572,7 +572,7 @@ Sysml2Result sysml_resolver_resolve_imports(
 
     /* Make sure the model's source is in the cache */
     if (model->source_name) {
-        sysml_resolver_cache_model(resolver, model->source_name, model);
+        sysml2_resolver_cache_model(resolver, model->source_name, model);
     }
 
     /* Push the source file onto the resolution stack */
@@ -613,8 +613,8 @@ Sysml2Result sysml_resolver_resolve_imports(
     return overall_result;
 }
 
-SysmlSemanticModel **sysml_resolver_get_all_models(
-    SysmlImportResolver *resolver,
+SysmlSemanticModel **sysml2_resolver_get_all_models(
+    Sysml2ImportResolver *resolver,
     size_t *count
 ) {
     if (!resolver || !count) {
@@ -624,7 +624,7 @@ SysmlSemanticModel **sysml_resolver_get_all_models(
 
     /* Count cached models */
     size_t n = 0;
-    SysmlFileCache *cache = resolver->cache;
+    Sysml2FileCache *cache = resolver->cache;
     while (cache) {
         n++;
         cache = cache->next;

@@ -68,7 +68,7 @@ typedef struct SysmlBuildContext {
  * @param source_name Name of the source file
  * @return New build context, or NULL on failure
  */
-SysmlBuildContext *sysml_build_context_create(
+SysmlBuildContext *sysml2_build_context_create(
     Sysml2Arena *arena,
     Sysml2Intern *intern,
     const char *source_name
@@ -79,7 +79,7 @@ SysmlBuildContext *sysml_build_context_create(
  *
  * Note: Elements allocated via the arena are not freed here.
  */
-void sysml_build_context_destroy(SysmlBuildContext *ctx);
+void sysml2_build_context_destroy(SysmlBuildContext *ctx);
 
 /*
  * Push a new scope onto the scope stack
@@ -87,14 +87,14 @@ void sysml_build_context_destroy(SysmlBuildContext *ctx);
  * @param ctx Build context
  * @param scope_id ID of the new scope (interned)
  */
-void sysml_build_push_scope(SysmlBuildContext *ctx, const char *scope_id);
+void sysml2_build_push_scope(SysmlBuildContext *ctx, const char *scope_id);
 
 /*
  * Pop the current scope from the stack
  *
  * @param ctx Build context
  */
-void sysml_build_pop_scope(SysmlBuildContext *ctx);
+void sysml2_build_pop_scope(SysmlBuildContext *ctx);
 
 /*
  * Get the current scope ID
@@ -102,7 +102,7 @@ void sysml_build_pop_scope(SysmlBuildContext *ctx);
  * @param ctx Build context
  * @return Current scope ID, or NULL if at root
  */
-const char *sysml_build_current_scope(SysmlBuildContext *ctx);
+const char *sysml2_build_current_scope(SysmlBuildContext *ctx);
 
 /*
  * Generate a path-based ID for an element
@@ -113,7 +113,7 @@ const char *sysml_build_current_scope(SysmlBuildContext *ctx);
  * @param name Local name (can be NULL for anonymous)
  * @return Interned path ID
  */
-const char *sysml_build_make_id(SysmlBuildContext *ctx, const char *name);
+const char *sysml2_build_make_id(SysmlBuildContext *ctx, const char *name);
 
 /*
  * Generate a unique relationship ID
@@ -122,7 +122,7 @@ const char *sysml_build_make_id(SysmlBuildContext *ctx, const char *name);
  * @param kind Type hint for the ID prefix (e.g., "conn", "flow")
  * @return Interned relationship ID
  */
-const char *sysml_build_make_rel_id(SysmlBuildContext *ctx, const char *kind);
+const char *sysml2_build_make_rel_id(SysmlBuildContext *ctx, const char *kind);
 
 /*
  * Create a new AST node
@@ -134,7 +134,7 @@ const char *sysml_build_make_rel_id(SysmlBuildContext *ctx, const char *kind);
  * @param name Local name (can be NULL)
  * @return New node, or NULL on failure
  */
-SysmlNode *sysml_build_node(
+SysmlNode *sysml2_build_node(
     SysmlBuildContext *ctx,
     SysmlNodeKind kind,
     const char *name
@@ -146,7 +146,7 @@ SysmlNode *sysml_build_node(
  * @param ctx Build context
  * @param node Node to add
  */
-void sysml_build_add_element(SysmlBuildContext *ctx, SysmlNode *node);
+void sysml2_build_add_element(SysmlBuildContext *ctx, SysmlNode *node);
 
 /*
  * Create a new relationship
@@ -157,7 +157,7 @@ void sysml_build_add_element(SysmlBuildContext *ctx, SysmlNode *node);
  * @param target Target element/feature path
  * @return New relationship, or NULL on failure
  */
-SysmlRelationship *sysml_build_relationship(
+SysmlRelationship *sysml2_build_relationship(
     SysmlBuildContext *ctx,
     SysmlNodeKind kind,
     const char *source,
@@ -170,7 +170,7 @@ SysmlRelationship *sysml_build_relationship(
  * @param ctx Build context
  * @param rel Relationship to add
  */
-void sysml_build_add_relationship(SysmlBuildContext *ctx, SysmlRelationship *rel);
+void sysml2_build_add_relationship(SysmlBuildContext *ctx, SysmlRelationship *rel);
 
 /*
  * Add a type specialization to a node
@@ -179,7 +179,7 @@ void sysml_build_add_relationship(SysmlBuildContext *ctx, SysmlRelationship *rel
  * @param node Node to modify
  * @param type_ref Type reference (qualified name)
  */
-void sysml_build_add_typed_by(
+void sysml2_build_add_typed_by(
     SysmlBuildContext *ctx,
     SysmlNode *node,
     const char *type_ref
@@ -192,7 +192,7 @@ void sysml_build_add_typed_by(
  * @param kind Import kind (IMPORT, IMPORT_ALL, IMPORT_RECURSIVE)
  * @param target Target qualified name (what is being imported)
  */
-void sysml_build_add_import(
+void sysml2_build_add_import(
     SysmlBuildContext *ctx,
     SysmlNodeKind kind,
     const char *target
@@ -206,7 +206,7 @@ void sysml_build_add_import(
  * @param ctx Build context
  * @return Semantic model
  */
-SysmlSemanticModel *sysml_build_finalize(SysmlBuildContext *ctx);
+SysmlSemanticModel *sysml2_build_finalize(SysmlBuildContext *ctx);
 
 /*
  * Add a trivia node to the pending list
@@ -217,7 +217,7 @@ SysmlSemanticModel *sysml_build_finalize(SysmlBuildContext *ctx);
  * @param ctx Build context
  * @param trivia Trivia to add
  */
-void sysml_build_add_pending_trivia(SysmlBuildContext *ctx, SysmlTrivia *trivia);
+void sysml2_build_add_pending_trivia(SysmlBuildContext *ctx, SysmlTrivia *trivia);
 
 /*
  * Attach pending trivia to a node
@@ -228,7 +228,7 @@ void sysml_build_add_pending_trivia(SysmlBuildContext *ctx, SysmlTrivia *trivia)
  * @param ctx Build context
  * @param node Node to attach trivia to
  */
-void sysml_build_attach_pending_trivia(SysmlBuildContext *ctx, SysmlNode *node);
+void sysml2_build_attach_pending_trivia(SysmlBuildContext *ctx, SysmlNode *node);
 
 /*
  * Create a trivia node
@@ -239,7 +239,7 @@ void sysml_build_attach_pending_trivia(SysmlBuildContext *ctx, SysmlNode *node);
  * @param loc Source location
  * @return New trivia node
  */
-SysmlTrivia *sysml_build_trivia(
+SysmlTrivia *sysml2_build_trivia(
     SysmlBuildContext *ctx,
     SysmlTriviaKind kind,
     const char *text,

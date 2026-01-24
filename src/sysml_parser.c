@@ -15,19 +15,19 @@
 #include "sysml2/ast_builder.h"
 
 /* Forward declarations for trivia capture functions (use size_t offsets) */
-void sysml_capture_line_comment(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
-void sysml_capture_block_comment(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
-void sysml_capture_blank_lines(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
+void sysml2_capture_line_comment(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
+void sysml2_capture_block_comment(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
+void sysml2_capture_blank_lines(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
 
 /* Helper: check if character is a type/specialization marker */
-static int sysml_is_marker(char c, char next) {
+static int sysml2_is_marker(char c, char next) {
     if (c == '[' || c == '=' || c == '{' || c == ';') return 1;
     if (c == ':' && next != ':') return 1;  /* : but not :: */
     return 0;
 }
 
 /* Helper: extract just the name portion from captured text (stops at type markers) */
-static const char *sysml_extract_name(SysmlParserContext *ctx, const char *text, size_t len) {
+static const char *sysml2_extract_name(SysmlParserContext *ctx, const char *text, size_t len) {
     if (!ctx->build_ctx || !text || len == 0) return NULL;
     /* Skip leading whitespace */
     while (len > 0 && (*text == ' ' || *text == '\t' || *text == '\n' || *text == '\r')) { text++; len--; }
@@ -38,7 +38,7 @@ static const char *sysml_extract_name(SysmlParserContext *ctx, const char *text,
     int in_quote = 0;
     for (size_t i = 0; i < len; i++) {
         if (text[i] == '\'') in_quote = !in_quote;
-        if (!in_quote && sysml_is_marker(text[i], (i + 1 < len) ? text[i + 1] : 0)) {
+        if (!in_quote && sysml2_is_marker(text[i], (i + 1 < len) ? text[i + 1] : 0)) {
             break;
         }
         name_end = i + 1;
@@ -85,7 +85,7 @@ static const char *sysml_extract_name(SysmlParserContext *ctx, const char *text,
 }
 
 /* Helper: extract type reference from captured text (finds : TypeName) */
-static const char *sysml_extract_type(SysmlParserContext *ctx, const char *text, size_t len) {
+static const char *sysml2_extract_type(SysmlParserContext *ctx, const char *text, size_t len) {
     if (!ctx->build_ctx || !text || len == 0) return NULL;
 
     /* Find : that's not :: or :> or :>> (typed-by marker) */
@@ -155,7 +155,7 @@ static const char *sysml_extract_type(SysmlParserContext *ctx, const char *text,
 }
 
 /* Helper: extract specialization reference from captured text (finds :> TypeName or :>> TypeName) */
-static const char *sysml_extract_specialization(SysmlParserContext *ctx, const char *text, size_t len) {
+static const char *sysml2_extract_specialization(SysmlParserContext *ctx, const char *text, size_t len) {
     if (!ctx->build_ctx || !text || len == 0) return NULL;
 
     /* Find :> or :>> that's not :: */
@@ -216,33 +216,33 @@ static const char *sysml_extract_specialization(SysmlParserContext *ctx, const c
 }
 
 /* Build node, add to model, push scope */
-static void sysml_build_push(SysmlParserContext *ctx, SysmlNodeKind kind, const char *text, size_t len) {
+static void sysml2_build_push(SysmlParserContext *ctx, SysmlNodeKind kind, const char *text, size_t len) {
     if (!ctx->build_ctx) return;
-    const char *name = sysml_extract_name(ctx, text, len);
-    SysmlNode *node = sysml_build_node(ctx->build_ctx, kind, name);
+    const char *name = sysml2_extract_name(ctx, text, len);
+    SysmlNode *node = sysml2_build_node(ctx->build_ctx, kind, name);
     if (node) {
         /* Extract type information for usages */
-        const char *type_ref = sysml_extract_type(ctx, text, len);
+        const char *type_ref = sysml2_extract_type(ctx, text, len);
         if (type_ref) {
-            sysml_build_add_typed_by(ctx->build_ctx, node, type_ref);
+            sysml2_build_add_typed_by(ctx->build_ctx, node, type_ref);
         }
         /* Extract specialization reference (for :> and :>>) */
-        const char *spec_ref = sysml_extract_specialization(ctx, text, len);
+        const char *spec_ref = sysml2_extract_specialization(ctx, text, len);
         if (spec_ref) {
-            sysml_build_add_typed_by(ctx->build_ctx, node, spec_ref);
+            sysml2_build_add_typed_by(ctx->build_ctx, node, spec_ref);
         }
-        sysml_build_add_element(ctx->build_ctx, node);
-        sysml_build_push_scope(ctx->build_ctx, node->id);
+        sysml2_build_add_element(ctx->build_ctx, node);
+        sysml2_build_push_scope(ctx->build_ctx, node->id);
     }
 }
 
 /* Pop scope */
-static void sysml_pop(SysmlParserContext *ctx) {
-    if (ctx->build_ctx) sysml_build_pop_scope(ctx->build_ctx);
+static void sysml2_pop(SysmlParserContext *ctx) {
+    if (ctx->build_ctx) sysml2_build_pop_scope(ctx->build_ctx);
 }
 
 /* Build import and add to model */
-static void sysml_build_import(SysmlParserContext *ctx, const char *text, size_t len) {
+static void sysml2_build_import(SysmlParserContext *ctx, const char *text, size_t len) {
     if (!ctx->build_ctx || !text || len == 0) return;
 
     /* Skip leading whitespace */
@@ -275,7 +275,7 @@ static void sysml_build_import(SysmlParserContext *ctx, const char *text, size_t
     /* Intern the target */
     const char *target = sysml2_intern_n(ctx->build_ctx->intern, text, target_len);
     if (target) {
-        sysml_build_add_import(ctx->build_ctx, kind, target);
+        sysml2_build_add_import(ctx->build_ctx, kind, target);
     }
 }
 
@@ -333,7 +333,7 @@ typedef void *pcc_value_t;
 
 typedef SysmlParserContext *pcc_auxil_t;
 
-typedef sysml_context_t pcc_context_t;
+typedef sysml2_context_t pcc_context_t;
 
 typedef struct pcc_value_table_tag {
     pcc_value_t *buf;
@@ -504,7 +504,7 @@ typedef struct pcc_memory_recycler_tag {
     size_t element_size;
 } pcc_memory_recycler_t;
 
-struct sysml_context_tag {
+struct sysml2_context_tag {
     size_t pos; /* the position in the input of the first character currently buffered */
     size_t cur; /* the current parsing position in the character buffer */
     size_t level;
@@ -1381,7 +1381,7 @@ static void pcc_do_action(pcc_context_t *ctx, const pcc_thunk_array_t *thunks, p
     }
 }
 
-static void pcc_action_LineCommentCapture_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_LineCommentCapture_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1390,7 +1390,7 @@ static void pcc_action_LineCommentCapture_0(sysml_context_t *__pcc_ctx, pcc_thun
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_capture_line_comment(auxil, _0s, _0e);
+    sysml2_capture_line_comment(auxil, _0s, _0e);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1401,7 +1401,7 @@ static void pcc_action_LineCommentCapture_0(sysml_context_t *__pcc_ctx, pcc_thun
 #undef auxil
 }
 
-static void pcc_action_DocBlockCommentCapture_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_DocBlockCommentCapture_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1410,7 +1410,7 @@ static void pcc_action_DocBlockCommentCapture_0(sysml_context_t *__pcc_ctx, pcc_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_capture_block_comment(auxil, _0s, _0e);
+    sysml2_capture_block_comment(auxil, _0s, _0e);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1421,7 +1421,7 @@ static void pcc_action_DocBlockCommentCapture_0(sysml_context_t *__pcc_ctx, pcc_
 #undef auxil
 }
 
-static void pcc_action_BlankLineCapture_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_BlankLineCapture_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1430,7 +1430,7 @@ static void pcc_action_BlankLineCapture_0(sysml_context_t *__pcc_ctx, pcc_thunk_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_capture_blank_lines(auxil, _0s, _0e);
+    sysml2_capture_blank_lines(auxil, _0s, _0e);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1441,7 +1441,7 @@ static void pcc_action_BlankLineCapture_0(sysml_context_t *__pcc_ctx, pcc_thunk_
 #undef auxil
 }
 
-static void pcc_action_Package_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_Package_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1450,7 +1450,7 @@ static void pcc_action_Package_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_PACKAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_PACKAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1461,7 +1461,7 @@ static void pcc_action_Package_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_
 #undef auxil
 }
 
-static void pcc_action_Package_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_Package_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1470,7 +1470,7 @@ static void pcc_action_Package_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1481,7 +1481,7 @@ static void pcc_action_Package_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_
 #undef auxil
 }
 
-static void pcc_action_LibraryPackage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_LibraryPackage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1490,7 +1490,7 @@ static void pcc_action_LibraryPackage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_LIBRARY_PACKAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_LIBRARY_PACKAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1501,7 +1501,7 @@ static void pcc_action_LibraryPackage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_LibraryPackage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_LibraryPackage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1510,7 +1510,7 @@ static void pcc_action_LibraryPackage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1521,7 +1521,7 @@ static void pcc_action_LibraryPackage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_Import_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_Import_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1530,7 +1530,7 @@ static void pcc_action_Import_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_i
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_import(auxil, _1, _1e - _1s);
+    sysml2_build_import(auxil, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1541,7 +1541,7 @@ static void pcc_action_Import_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_i
 #undef auxil
 }
 
-static void pcc_action_NamespaceDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_NamespaceDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1550,7 +1550,7 @@ static void pcc_action_NamespaceDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_NAMESPACE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_NAMESPACE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1561,7 +1561,7 @@ static void pcc_action_NamespaceDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_NamespaceDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_NamespaceDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1570,7 +1570,7 @@ static void pcc_action_NamespaceDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1581,7 +1581,7 @@ static void pcc_action_NamespaceDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_TypeDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_TypeDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1590,7 +1590,7 @@ static void pcc_action_TypeDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_TYPE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_TYPE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1601,7 +1601,7 @@ static void pcc_action_TypeDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_TypeDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_TypeDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1610,7 +1610,7 @@ static void pcc_action_TypeDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1621,7 +1621,7 @@ static void pcc_action_TypeDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_ClassifierDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ClassifierDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1630,7 +1630,7 @@ static void pcc_action_ClassifierDefinition_0(sysml_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_CLASSIFIER, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CLASSIFIER, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1641,7 +1641,7 @@ static void pcc_action_ClassifierDefinition_0(sysml_context_t *__pcc_ctx, pcc_th
 #undef auxil
 }
 
-static void pcc_action_ClassifierDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ClassifierDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1650,7 +1650,7 @@ static void pcc_action_ClassifierDefinition_1(sysml_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1661,7 +1661,7 @@ static void pcc_action_ClassifierDefinition_1(sysml_context_t *__pcc_ctx, pcc_th
 #undef auxil
 }
 
-static void pcc_action_ClassDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ClassDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1670,7 +1670,7 @@ static void pcc_action_ClassDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_CLASS, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CLASS, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1681,7 +1681,7 @@ static void pcc_action_ClassDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #undef auxil
 }
 
-static void pcc_action_ClassDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ClassDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1690,7 +1690,7 @@ static void pcc_action_ClassDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1701,7 +1701,7 @@ static void pcc_action_ClassDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #undef auxil
 }
 
-static void pcc_action_StructureDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_StructureDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1710,7 +1710,7 @@ static void pcc_action_StructureDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_STRUCTURE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_STRUCTURE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1721,7 +1721,7 @@ static void pcc_action_StructureDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_StructureDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_StructureDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1730,7 +1730,7 @@ static void pcc_action_StructureDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1741,7 +1741,7 @@ static void pcc_action_StructureDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_MetaclassDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_MetaclassDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1750,7 +1750,7 @@ static void pcc_action_MetaclassDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_METACLASS, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_METACLASS, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1761,7 +1761,7 @@ static void pcc_action_MetaclassDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_MetaclassDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_MetaclassDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1770,7 +1770,7 @@ static void pcc_action_MetaclassDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1781,7 +1781,7 @@ static void pcc_action_MetaclassDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_AssociationDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_AssociationDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1790,7 +1790,7 @@ static void pcc_action_AssociationDefinition_0(sysml_context_t *__pcc_ctx, pcc_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_ASSOCIATION, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ASSOCIATION, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1801,7 +1801,7 @@ static void pcc_action_AssociationDefinition_0(sysml_context_t *__pcc_ctx, pcc_t
 #undef auxil
 }
 
-static void pcc_action_AssociationDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_AssociationDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1810,7 +1810,7 @@ static void pcc_action_AssociationDefinition_1(sysml_context_t *__pcc_ctx, pcc_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1821,7 +1821,7 @@ static void pcc_action_AssociationDefinition_1(sysml_context_t *__pcc_ctx, pcc_t
 #undef auxil
 }
 
-static void pcc_action_AssociationStructureDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_AssociationStructureDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1830,7 +1830,7 @@ static void pcc_action_AssociationStructureDefinition_0(sysml_context_t *__pcc_c
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_ASSOC_STRUCT, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ASSOC_STRUCT, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1841,7 +1841,7 @@ static void pcc_action_AssociationStructureDefinition_0(sysml_context_t *__pcc_c
 #undef auxil
 }
 
-static void pcc_action_AssociationStructureDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_AssociationStructureDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1850,7 +1850,7 @@ static void pcc_action_AssociationStructureDefinition_1(sysml_context_t *__pcc_c
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1861,7 +1861,7 @@ static void pcc_action_AssociationStructureDefinition_1(sysml_context_t *__pcc_c
 #undef auxil
 }
 
-static void pcc_action_InteractionDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_InteractionDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1870,7 +1870,7 @@ static void pcc_action_InteractionDefinition_0(sysml_context_t *__pcc_ctx, pcc_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_INTERACTION, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_INTERACTION, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1881,7 +1881,7 @@ static void pcc_action_InteractionDefinition_0(sysml_context_t *__pcc_ctx, pcc_t
 #undef auxil
 }
 
-static void pcc_action_InteractionDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_InteractionDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1890,7 +1890,7 @@ static void pcc_action_InteractionDefinition_1(sysml_context_t *__pcc_ctx, pcc_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1901,7 +1901,7 @@ static void pcc_action_InteractionDefinition_1(sysml_context_t *__pcc_ctx, pcc_t
 #undef auxil
 }
 
-static void pcc_action_BehaviorDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_BehaviorDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1910,7 +1910,7 @@ static void pcc_action_BehaviorDefinition_0(sysml_context_t *__pcc_ctx, pcc_thun
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_BEHAVIOR, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_BEHAVIOR, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1921,7 +1921,7 @@ static void pcc_action_BehaviorDefinition_0(sysml_context_t *__pcc_ctx, pcc_thun
 #undef auxil
 }
 
-static void pcc_action_BehaviorDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_BehaviorDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1930,7 +1930,7 @@ static void pcc_action_BehaviorDefinition_1(sysml_context_t *__pcc_ctx, pcc_thun
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1941,7 +1941,7 @@ static void pcc_action_BehaviorDefinition_1(sysml_context_t *__pcc_ctx, pcc_thun
 #undef auxil
 }
 
-static void pcc_action_FunctionDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_FunctionDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1950,7 +1950,7 @@ static void pcc_action_FunctionDefinition_0(sysml_context_t *__pcc_ctx, pcc_thun
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_FUNCTION, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_FUNCTION, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1961,7 +1961,7 @@ static void pcc_action_FunctionDefinition_0(sysml_context_t *__pcc_ctx, pcc_thun
 #undef auxil
 }
 
-static void pcc_action_FunctionDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_FunctionDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1970,7 +1970,7 @@ static void pcc_action_FunctionDefinition_1(sysml_context_t *__pcc_ctx, pcc_thun
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -1981,7 +1981,7 @@ static void pcc_action_FunctionDefinition_1(sysml_context_t *__pcc_ctx, pcc_thun
 #undef auxil
 }
 
-static void pcc_action_PredicateDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_PredicateDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -1990,7 +1990,7 @@ static void pcc_action_PredicateDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_PREDICATE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_PREDICATE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2001,7 +2001,7 @@ static void pcc_action_PredicateDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_PredicateDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_PredicateDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2010,7 +2010,7 @@ static void pcc_action_PredicateDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2021,7 +2021,7 @@ static void pcc_action_PredicateDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_MultiplicityDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_MultiplicityDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2030,7 +2030,7 @@ static void pcc_action_MultiplicityDefinition_0(sysml_context_t *__pcc_ctx, pcc_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_MULTIPLICITY_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_MULTIPLICITY_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2041,7 +2041,7 @@ static void pcc_action_MultiplicityDefinition_0(sysml_context_t *__pcc_ctx, pcc_
 #undef auxil
 }
 
-static void pcc_action_MultiplicityDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_MultiplicityDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2050,7 +2050,7 @@ static void pcc_action_MultiplicityDefinition_1(sysml_context_t *__pcc_ctx, pcc_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2061,7 +2061,7 @@ static void pcc_action_MultiplicityDefinition_1(sysml_context_t *__pcc_ctx, pcc_
 #undef auxil
 }
 
-static void pcc_action_ImplicitFeatureDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ImplicitFeatureDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2070,7 +2070,7 @@ static void pcc_action_ImplicitFeatureDefinition_0(sysml_context_t *__pcc_ctx, p
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_FEATURE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_FEATURE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2081,7 +2081,7 @@ static void pcc_action_ImplicitFeatureDefinition_0(sysml_context_t *__pcc_ctx, p
 #undef auxil
 }
 
-static void pcc_action_ImplicitFeatureDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ImplicitFeatureDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2090,7 +2090,7 @@ static void pcc_action_ImplicitFeatureDefinition_1(sysml_context_t *__pcc_ctx, p
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2101,7 +2101,7 @@ static void pcc_action_ImplicitFeatureDefinition_1(sysml_context_t *__pcc_ctx, p
 #undef auxil
 }
 
-static void pcc_action_KerMLEndFeature_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_KerMLEndFeature_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2110,7 +2110,7 @@ static void pcc_action_KerMLEndFeature_0(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_FEATURE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_FEATURE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2121,7 +2121,7 @@ static void pcc_action_KerMLEndFeature_0(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #undef auxil
 }
 
-static void pcc_action_KerMLEndFeature_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_KerMLEndFeature_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2130,7 +2130,7 @@ static void pcc_action_KerMLEndFeature_1(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2141,7 +2141,7 @@ static void pcc_action_KerMLEndFeature_1(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #undef auxil
 }
 
-static void pcc_action_FeatureDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_FeatureDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2150,7 +2150,7 @@ static void pcc_action_FeatureDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_FEATURE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_FEATURE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2161,7 +2161,7 @@ static void pcc_action_FeatureDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk
 #undef auxil
 }
 
-static void pcc_action_FeatureDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_FeatureDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2170,7 +2170,7 @@ static void pcc_action_FeatureDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2181,7 +2181,7 @@ static void pcc_action_FeatureDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk
 #undef auxil
 }
 
-static void pcc_action_StepDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_StepDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2190,7 +2190,7 @@ static void pcc_action_StepDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_STEP, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_STEP, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2201,7 +2201,7 @@ static void pcc_action_StepDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_StepDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_StepDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2210,7 +2210,7 @@ static void pcc_action_StepDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2221,7 +2221,7 @@ static void pcc_action_StepDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_ExpressionDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ExpressionDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2230,7 +2230,7 @@ static void pcc_action_ExpressionDefinition_0(sysml_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_EXPRESSION, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_EXPRESSION, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2241,7 +2241,7 @@ static void pcc_action_ExpressionDefinition_0(sysml_context_t *__pcc_ctx, pcc_th
 #undef auxil
 }
 
-static void pcc_action_ExpressionDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ExpressionDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2250,7 +2250,7 @@ static void pcc_action_ExpressionDefinition_1(sysml_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2261,7 +2261,7 @@ static void pcc_action_ExpressionDefinition_1(sysml_context_t *__pcc_ctx, pcc_th
 #undef auxil
 }
 
-static void pcc_action_BooleanExpressionDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_BooleanExpressionDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2270,7 +2270,7 @@ static void pcc_action_BooleanExpressionDefinition_0(sysml_context_t *__pcc_ctx,
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_BOOL_EXPRESSION, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_BOOL_EXPRESSION, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2281,7 +2281,7 @@ static void pcc_action_BooleanExpressionDefinition_0(sysml_context_t *__pcc_ctx,
 #undef auxil
 }
 
-static void pcc_action_BooleanExpressionDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_BooleanExpressionDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2290,7 +2290,7 @@ static void pcc_action_BooleanExpressionDefinition_1(sysml_context_t *__pcc_ctx,
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2301,7 +2301,7 @@ static void pcc_action_BooleanExpressionDefinition_1(sysml_context_t *__pcc_ctx,
 #undef auxil
 }
 
-static void pcc_action_InvariantDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_InvariantDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2310,7 +2310,7 @@ static void pcc_action_InvariantDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_INVARIANT, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_INVARIANT, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2321,7 +2321,7 @@ static void pcc_action_InvariantDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_InvariantDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_InvariantDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2330,7 +2330,7 @@ static void pcc_action_InvariantDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2341,7 +2341,7 @@ static void pcc_action_InvariantDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_ConnectorDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ConnectorDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2350,7 +2350,7 @@ static void pcc_action_ConnectorDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_CONNECTOR, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CONNECTOR, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2361,7 +2361,7 @@ static void pcc_action_ConnectorDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_ConnectorDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ConnectorDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2370,7 +2370,7 @@ static void pcc_action_ConnectorDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2381,7 +2381,7 @@ static void pcc_action_ConnectorDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_BindingConnectorDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_BindingConnectorDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2390,7 +2390,7 @@ static void pcc_action_BindingConnectorDefinition_0(sysml_context_t *__pcc_ctx, 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_BINDING_CONNECTOR, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_BINDING_CONNECTOR, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2401,7 +2401,7 @@ static void pcc_action_BindingConnectorDefinition_0(sysml_context_t *__pcc_ctx, 
 #undef auxil
 }
 
-static void pcc_action_BindingConnectorDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_BindingConnectorDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2410,7 +2410,7 @@ static void pcc_action_BindingConnectorDefinition_1(sysml_context_t *__pcc_ctx, 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2421,7 +2421,7 @@ static void pcc_action_BindingConnectorDefinition_1(sysml_context_t *__pcc_ctx, 
 #undef auxil
 }
 
-static void pcc_action_SuccessionFeatureDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_SuccessionFeatureDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2430,7 +2430,7 @@ static void pcc_action_SuccessionFeatureDefinition_0(sysml_context_t *__pcc_ctx,
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_SUCCESSION, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_SUCCESSION, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2441,7 +2441,7 @@ static void pcc_action_SuccessionFeatureDefinition_0(sysml_context_t *__pcc_ctx,
 #undef auxil
 }
 
-static void pcc_action_SuccessionFeatureDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_SuccessionFeatureDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2450,7 +2450,7 @@ static void pcc_action_SuccessionFeatureDefinition_1(sysml_context_t *__pcc_ctx,
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2461,7 +2461,7 @@ static void pcc_action_SuccessionFeatureDefinition_1(sysml_context_t *__pcc_ctx,
 #undef auxil
 }
 
-static void pcc_action_KerMLFlowDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_KerMLFlowDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2470,7 +2470,7 @@ static void pcc_action_KerMLFlowDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_KERML_FLOW, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_KERML_FLOW, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2481,7 +2481,7 @@ static void pcc_action_KerMLFlowDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_KerMLFlowDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_KerMLFlowDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2490,7 +2490,7 @@ static void pcc_action_KerMLFlowDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2501,7 +2501,7 @@ static void pcc_action_KerMLFlowDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_SuccessionFlowDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_SuccessionFlowDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2510,7 +2510,7 @@ static void pcc_action_SuccessionFlowDefinition_0(sysml_context_t *__pcc_ctx, pc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_SUCCESSION_FLOW, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_SUCCESSION_FLOW, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2521,7 +2521,7 @@ static void pcc_action_SuccessionFlowDefinition_0(sysml_context_t *__pcc_ctx, pc
 #undef auxil
 }
 
-static void pcc_action_SuccessionFlowDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_SuccessionFlowDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2530,7 +2530,7 @@ static void pcc_action_SuccessionFlowDefinition_1(sysml_context_t *__pcc_ctx, pc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2541,7 +2541,7 @@ static void pcc_action_SuccessionFlowDefinition_1(sysml_context_t *__pcc_ctx, pc
 #undef auxil
 }
 
-static void pcc_action_AttributeDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_AttributeDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2550,7 +2550,7 @@ static void pcc_action_AttributeDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_ATTRIBUTE_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ATTRIBUTE_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2561,7 +2561,7 @@ static void pcc_action_AttributeDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_AttributeDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_AttributeDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2570,7 +2570,7 @@ static void pcc_action_AttributeDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2581,7 +2581,7 @@ static void pcc_action_AttributeDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_EnumerationDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_EnumerationDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2590,7 +2590,7 @@ static void pcc_action_EnumerationDefinition_0(sysml_context_t *__pcc_ctx, pcc_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_ENUMERATION_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ENUMERATION_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2601,7 +2601,7 @@ static void pcc_action_EnumerationDefinition_0(sysml_context_t *__pcc_ctx, pcc_t
 #undef auxil
 }
 
-static void pcc_action_EnumerationDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_EnumerationDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2610,7 +2610,7 @@ static void pcc_action_EnumerationDefinition_1(sysml_context_t *__pcc_ctx, pcc_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2621,7 +2621,7 @@ static void pcc_action_EnumerationDefinition_1(sysml_context_t *__pcc_ctx, pcc_t
 #undef auxil
 }
 
-static void pcc_action_DatatypeDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_DatatypeDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2630,7 +2630,7 @@ static void pcc_action_DatatypeDefinition_0(sysml_context_t *__pcc_ctx, pcc_thun
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_DATATYPE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_DATATYPE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2641,7 +2641,7 @@ static void pcc_action_DatatypeDefinition_0(sysml_context_t *__pcc_ctx, pcc_thun
 #undef auxil
 }
 
-static void pcc_action_DatatypeDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_DatatypeDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2650,7 +2650,7 @@ static void pcc_action_DatatypeDefinition_1(sysml_context_t *__pcc_ctx, pcc_thun
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2661,7 +2661,7 @@ static void pcc_action_DatatypeDefinition_1(sysml_context_t *__pcc_ctx, pcc_thun
 #undef auxil
 }
 
-static void pcc_action_OccurrenceDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_OccurrenceDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2670,7 +2670,7 @@ static void pcc_action_OccurrenceDefinition_0(sysml_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_OCCURRENCE_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_OCCURRENCE_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2681,7 +2681,7 @@ static void pcc_action_OccurrenceDefinition_0(sysml_context_t *__pcc_ctx, pcc_th
 #undef auxil
 }
 
-static void pcc_action_OccurrenceDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_OccurrenceDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2690,7 +2690,7 @@ static void pcc_action_OccurrenceDefinition_1(sysml_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2701,7 +2701,7 @@ static void pcc_action_OccurrenceDefinition_1(sysml_context_t *__pcc_ctx, pcc_th
 #undef auxil
 }
 
-static void pcc_action_ItemDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ItemDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2710,7 +2710,7 @@ static void pcc_action_ItemDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_ITEM_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ITEM_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2721,7 +2721,7 @@ static void pcc_action_ItemDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_ItemDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ItemDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2730,7 +2730,7 @@ static void pcc_action_ItemDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2741,7 +2741,7 @@ static void pcc_action_ItemDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_PartDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_PartDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2750,7 +2750,7 @@ static void pcc_action_PartDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_PART_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_PART_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2761,7 +2761,7 @@ static void pcc_action_PartDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_PartDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_PartDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2770,7 +2770,7 @@ static void pcc_action_PartDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2781,7 +2781,7 @@ static void pcc_action_PartDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_ConnectionDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ConnectionDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2790,7 +2790,7 @@ static void pcc_action_ConnectionDefinition_0(sysml_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_CONNECTION_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CONNECTION_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2801,7 +2801,7 @@ static void pcc_action_ConnectionDefinition_0(sysml_context_t *__pcc_ctx, pcc_th
 #undef auxil
 }
 
-static void pcc_action_ConnectionDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ConnectionDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2810,7 +2810,7 @@ static void pcc_action_ConnectionDefinition_1(sysml_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2821,7 +2821,7 @@ static void pcc_action_ConnectionDefinition_1(sysml_context_t *__pcc_ctx, pcc_th
 #undef auxil
 }
 
-static void pcc_action_FlowDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_FlowDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2830,7 +2830,7 @@ static void pcc_action_FlowDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_FLOW_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_FLOW_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2841,7 +2841,7 @@ static void pcc_action_FlowDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_FlowDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_FlowDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2850,7 +2850,7 @@ static void pcc_action_FlowDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2861,7 +2861,7 @@ static void pcc_action_FlowDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_InterfaceDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_InterfaceDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2870,7 +2870,7 @@ static void pcc_action_InterfaceDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_INTERFACE_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_INTERFACE_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2881,7 +2881,7 @@ static void pcc_action_InterfaceDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_InterfaceDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_InterfaceDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2890,7 +2890,7 @@ static void pcc_action_InterfaceDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2901,7 +2901,7 @@ static void pcc_action_InterfaceDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_PortDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_PortDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2910,7 +2910,7 @@ static void pcc_action_PortDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_PORT_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_PORT_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2921,7 +2921,7 @@ static void pcc_action_PortDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_PortDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_PortDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2930,7 +2930,7 @@ static void pcc_action_PortDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2941,7 +2941,7 @@ static void pcc_action_PortDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_AllocationDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_AllocationDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2950,7 +2950,7 @@ static void pcc_action_AllocationDefinition_0(sysml_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_ALLOCATION_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ALLOCATION_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2961,7 +2961,7 @@ static void pcc_action_AllocationDefinition_0(sysml_context_t *__pcc_ctx, pcc_th
 #undef auxil
 }
 
-static void pcc_action_AllocationDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_AllocationDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2970,7 +2970,7 @@ static void pcc_action_AllocationDefinition_1(sysml_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2981,7 +2981,7 @@ static void pcc_action_AllocationDefinition_1(sysml_context_t *__pcc_ctx, pcc_th
 #undef auxil
 }
 
-static void pcc_action_ActionDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ActionDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -2990,7 +2990,7 @@ static void pcc_action_ActionDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_ACTION_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ACTION_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3001,7 +3001,7 @@ static void pcc_action_ActionDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_
 #undef auxil
 }
 
-static void pcc_action_ActionDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ActionDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3010,7 +3010,7 @@ static void pcc_action_ActionDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3021,7 +3021,7 @@ static void pcc_action_ActionDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_
 #undef auxil
 }
 
-static void pcc_action_StateDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_StateDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3030,7 +3030,7 @@ static void pcc_action_StateDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_STATE_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_STATE_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3041,7 +3041,7 @@ static void pcc_action_StateDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #undef auxil
 }
 
-static void pcc_action_StateDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_StateDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3050,7 +3050,7 @@ static void pcc_action_StateDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3061,7 +3061,7 @@ static void pcc_action_StateDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #undef auxil
 }
 
-static void pcc_action_ConstraintDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ConstraintDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3070,7 +3070,7 @@ static void pcc_action_ConstraintDefinition_0(sysml_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_CONSTRAINT_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3081,7 +3081,7 @@ static void pcc_action_ConstraintDefinition_0(sysml_context_t *__pcc_ctx, pcc_th
 #undef auxil
 }
 
-static void pcc_action_ConstraintDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ConstraintDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3090,7 +3090,7 @@ static void pcc_action_ConstraintDefinition_1(sysml_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3101,7 +3101,7 @@ static void pcc_action_ConstraintDefinition_1(sysml_context_t *__pcc_ctx, pcc_th
 #undef auxil
 }
 
-static void pcc_action_RequirementDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_RequirementDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3110,7 +3110,7 @@ static void pcc_action_RequirementDefinition_0(sysml_context_t *__pcc_ctx, pcc_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_REQUIREMENT_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_REQUIREMENT_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3121,7 +3121,7 @@ static void pcc_action_RequirementDefinition_0(sysml_context_t *__pcc_ctx, pcc_t
 #undef auxil
 }
 
-static void pcc_action_RequirementDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_RequirementDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3130,7 +3130,7 @@ static void pcc_action_RequirementDefinition_1(sysml_context_t *__pcc_ctx, pcc_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3141,7 +3141,7 @@ static void pcc_action_RequirementDefinition_1(sysml_context_t *__pcc_ctx, pcc_t
 #undef auxil
 }
 
-static void pcc_action_ConcernDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ConcernDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3150,7 +3150,7 @@ static void pcc_action_ConcernDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_CONCERN_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CONCERN_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3161,7 +3161,7 @@ static void pcc_action_ConcernDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk
 #undef auxil
 }
 
-static void pcc_action_ConcernDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ConcernDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3170,7 +3170,7 @@ static void pcc_action_ConcernDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3181,7 +3181,7 @@ static void pcc_action_ConcernDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk
 #undef auxil
 }
 
-static void pcc_action_CalcDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_CalcDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3190,7 +3190,7 @@ static void pcc_action_CalcDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_CALC_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CALC_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3201,7 +3201,7 @@ static void pcc_action_CalcDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_CalcDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_CalcDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3210,7 +3210,7 @@ static void pcc_action_CalcDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3221,7 +3221,7 @@ static void pcc_action_CalcDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_CaseDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_CaseDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3230,7 +3230,7 @@ static void pcc_action_CaseDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_CASE_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CASE_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3241,7 +3241,7 @@ static void pcc_action_CaseDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_CaseDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_CaseDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3250,7 +3250,7 @@ static void pcc_action_CaseDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3261,7 +3261,7 @@ static void pcc_action_CaseDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_AnalysisDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_AnalysisDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3270,7 +3270,7 @@ static void pcc_action_AnalysisDefinition_0(sysml_context_t *__pcc_ctx, pcc_thun
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_ANALYSIS_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ANALYSIS_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3281,7 +3281,7 @@ static void pcc_action_AnalysisDefinition_0(sysml_context_t *__pcc_ctx, pcc_thun
 #undef auxil
 }
 
-static void pcc_action_AnalysisDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_AnalysisDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3290,7 +3290,7 @@ static void pcc_action_AnalysisDefinition_1(sysml_context_t *__pcc_ctx, pcc_thun
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3301,7 +3301,7 @@ static void pcc_action_AnalysisDefinition_1(sysml_context_t *__pcc_ctx, pcc_thun
 #undef auxil
 }
 
-static void pcc_action_VerificationDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_VerificationDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3310,7 +3310,7 @@ static void pcc_action_VerificationDefinition_0(sysml_context_t *__pcc_ctx, pcc_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_VERIFICATION_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_VERIFICATION_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3321,7 +3321,7 @@ static void pcc_action_VerificationDefinition_0(sysml_context_t *__pcc_ctx, pcc_
 #undef auxil
 }
 
-static void pcc_action_VerificationDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_VerificationDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3330,7 +3330,7 @@ static void pcc_action_VerificationDefinition_1(sysml_context_t *__pcc_ctx, pcc_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3341,7 +3341,7 @@ static void pcc_action_VerificationDefinition_1(sysml_context_t *__pcc_ctx, pcc_
 #undef auxil
 }
 
-static void pcc_action_UseCaseDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_UseCaseDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3350,7 +3350,7 @@ static void pcc_action_UseCaseDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_USE_CASE_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_USE_CASE_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3361,7 +3361,7 @@ static void pcc_action_UseCaseDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk
 #undef auxil
 }
 
-static void pcc_action_UseCaseDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_UseCaseDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3370,7 +3370,7 @@ static void pcc_action_UseCaseDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3381,7 +3381,7 @@ static void pcc_action_UseCaseDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk
 #undef auxil
 }
 
-static void pcc_action_ViewDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ViewDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3390,7 +3390,7 @@ static void pcc_action_ViewDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_VIEW_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_VIEW_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3401,7 +3401,7 @@ static void pcc_action_ViewDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_ViewDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ViewDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3410,7 +3410,7 @@ static void pcc_action_ViewDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3421,7 +3421,7 @@ static void pcc_action_ViewDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_ViewpointDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ViewpointDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3430,7 +3430,7 @@ static void pcc_action_ViewpointDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_VIEWPOINT_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_VIEWPOINT_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3441,7 +3441,7 @@ static void pcc_action_ViewpointDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_ViewpointDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ViewpointDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3450,7 +3450,7 @@ static void pcc_action_ViewpointDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3461,7 +3461,7 @@ static void pcc_action_ViewpointDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_RenderingDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_RenderingDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3470,7 +3470,7 @@ static void pcc_action_RenderingDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_RENDERING_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_RENDERING_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3481,7 +3481,7 @@ static void pcc_action_RenderingDefinition_0(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_RenderingDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_RenderingDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3490,7 +3490,7 @@ static void pcc_action_RenderingDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3501,7 +3501,7 @@ static void pcc_action_RenderingDefinition_1(sysml_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
-static void pcc_action_MetadataDefinition_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_MetadataDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3510,7 +3510,7 @@ static void pcc_action_MetadataDefinition_0(sysml_context_t *__pcc_ctx, pcc_thun
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_METADATA_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_METADATA_DEF, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3521,7 +3521,7 @@ static void pcc_action_MetadataDefinition_0(sysml_context_t *__pcc_ctx, pcc_thun
 #undef auxil
 }
 
-static void pcc_action_MetadataDefinition_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_MetadataDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3530,7 +3530,7 @@ static void pcc_action_MetadataDefinition_1(sysml_context_t *__pcc_ctx, pcc_thun
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3541,7 +3541,7 @@ static void pcc_action_MetadataDefinition_1(sysml_context_t *__pcc_ctx, pcc_thun
 #undef auxil
 }
 
-static void pcc_action_AttributeUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_AttributeUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3550,7 +3550,7 @@ static void pcc_action_AttributeUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_ATTRIBUTE_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ATTRIBUTE_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3561,7 +3561,7 @@ static void pcc_action_AttributeUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_AttributeUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_AttributeUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3570,7 +3570,7 @@ static void pcc_action_AttributeUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3581,7 +3581,7 @@ static void pcc_action_AttributeUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_EnumerationUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_EnumerationUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3590,7 +3590,7 @@ static void pcc_action_EnumerationUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_ENUMERATION_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ENUMERATION_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3601,7 +3601,7 @@ static void pcc_action_EnumerationUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_
 #undef auxil
 }
 
-static void pcc_action_EnumerationUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_EnumerationUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3610,7 +3610,7 @@ static void pcc_action_EnumerationUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3621,7 +3621,7 @@ static void pcc_action_EnumerationUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_
 #undef auxil
 }
 
-static void pcc_action_OccurrenceUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_OccurrenceUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3630,7 +3630,7 @@ static void pcc_action_OccurrenceUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_OCCURRENCE_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_OCCURRENCE_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3641,7 +3641,7 @@ static void pcc_action_OccurrenceUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #undef auxil
 }
 
-static void pcc_action_OccurrenceUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_OccurrenceUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3650,7 +3650,7 @@ static void pcc_action_OccurrenceUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3661,7 +3661,7 @@ static void pcc_action_OccurrenceUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #undef auxil
 }
 
-static void pcc_action_ItemUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ItemUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3670,7 +3670,7 @@ static void pcc_action_ItemUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_ITEM_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ITEM_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3681,7 +3681,7 @@ static void pcc_action_ItemUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #undef auxil
 }
 
-static void pcc_action_ItemUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ItemUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3690,7 +3690,7 @@ static void pcc_action_ItemUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3701,7 +3701,7 @@ static void pcc_action_ItemUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #undef auxil
 }
 
-static void pcc_action_PartUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_PartUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3710,7 +3710,7 @@ static void pcc_action_PartUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_PART_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_PART_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3721,7 +3721,7 @@ static void pcc_action_PartUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #undef auxil
 }
 
-static void pcc_action_PartUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_PartUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3730,7 +3730,7 @@ static void pcc_action_PartUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3741,7 +3741,7 @@ static void pcc_action_PartUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #undef auxil
 }
 
-static void pcc_action_PortUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_PortUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3750,7 +3750,7 @@ static void pcc_action_PortUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_PORT_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_PORT_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3761,7 +3761,7 @@ static void pcc_action_PortUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #undef auxil
 }
 
-static void pcc_action_PortUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_PortUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3770,7 +3770,7 @@ static void pcc_action_PortUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3781,7 +3781,7 @@ static void pcc_action_PortUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #undef auxil
 }
 
-static void pcc_action_ActionUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ActionUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3790,7 +3790,7 @@ static void pcc_action_ActionUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_ACTION_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ACTION_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3801,7 +3801,7 @@ static void pcc_action_ActionUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__
 #undef auxil
 }
 
-static void pcc_action_ActionUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ActionUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3810,7 +3810,7 @@ static void pcc_action_ActionUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3821,7 +3821,7 @@ static void pcc_action_ActionUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__
 #undef auxil
 }
 
-static void pcc_action_StateUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_StateUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3830,7 +3830,7 @@ static void pcc_action_StateUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__p
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_STATE_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_STATE_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3841,7 +3841,7 @@ static void pcc_action_StateUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__p
 #undef auxil
 }
 
-static void pcc_action_StateUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_StateUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3850,7 +3850,7 @@ static void pcc_action_StateUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__p
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3861,7 +3861,7 @@ static void pcc_action_StateUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__p
 #undef auxil
 }
 
-static void pcc_action_ConstraintUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ConstraintUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3870,7 +3870,7 @@ static void pcc_action_ConstraintUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_CONSTRAINT_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3881,7 +3881,7 @@ static void pcc_action_ConstraintUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #undef auxil
 }
 
-static void pcc_action_ConstraintUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ConstraintUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3890,7 +3890,7 @@ static void pcc_action_ConstraintUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3901,7 +3901,7 @@ static void pcc_action_ConstraintUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t
 #undef auxil
 }
 
-static void pcc_action_RequirementUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_RequirementUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3910,7 +3910,7 @@ static void pcc_action_RequirementUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_REQUIREMENT_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_REQUIREMENT_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3921,7 +3921,7 @@ static void pcc_action_RequirementUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_
 #undef auxil
 }
 
-static void pcc_action_RequirementUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_RequirementUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3930,7 +3930,7 @@ static void pcc_action_RequirementUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3941,7 +3941,7 @@ static void pcc_action_RequirementUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_
 #undef auxil
 }
 
-static void pcc_action_ConcernUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ConcernUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3950,7 +3950,7 @@ static void pcc_action_ConcernUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_CONCERN_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CONCERN_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3961,7 +3961,7 @@ static void pcc_action_ConcernUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *_
 #undef auxil
 }
 
-static void pcc_action_ConcernUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ConcernUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3970,7 +3970,7 @@ static void pcc_action_ConcernUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3981,7 +3981,7 @@ static void pcc_action_ConcernUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *_
 #undef auxil
 }
 
-static void pcc_action_CalcUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_CalcUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -3990,7 +3990,7 @@ static void pcc_action_CalcUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_CALC_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CALC_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4001,7 +4001,7 @@ static void pcc_action_CalcUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #undef auxil
 }
 
-static void pcc_action_CalcUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_CalcUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -4010,7 +4010,7 @@ static void pcc_action_CalcUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4021,7 +4021,7 @@ static void pcc_action_CalcUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #undef auxil
 }
 
-static void pcc_action_CaseUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_CaseUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -4030,7 +4030,7 @@ static void pcc_action_CaseUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_CASE_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CASE_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4041,7 +4041,7 @@ static void pcc_action_CaseUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #undef auxil
 }
 
-static void pcc_action_CaseUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_CaseUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -4050,7 +4050,7 @@ static void pcc_action_CaseUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4061,7 +4061,7 @@ static void pcc_action_CaseUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #undef auxil
 }
 
-static void pcc_action_AnalysisUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_AnalysisUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -4070,7 +4070,7 @@ static void pcc_action_AnalysisUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_ANALYSIS_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ANALYSIS_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4081,7 +4081,7 @@ static void pcc_action_AnalysisUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *
 #undef auxil
 }
 
-static void pcc_action_AnalysisUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_AnalysisUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -4090,7 +4090,7 @@ static void pcc_action_AnalysisUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4101,7 +4101,7 @@ static void pcc_action_AnalysisUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *
 #undef auxil
 }
 
-static void pcc_action_VerificationUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_VerificationUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -4110,7 +4110,7 @@ static void pcc_action_VerificationUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_VERIFICATION_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_VERIFICATION_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4121,7 +4121,7 @@ static void pcc_action_VerificationUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk
 #undef auxil
 }
 
-static void pcc_action_VerificationUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_VerificationUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -4130,7 +4130,7 @@ static void pcc_action_VerificationUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4141,7 +4141,7 @@ static void pcc_action_VerificationUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk
 #undef auxil
 }
 
-static void pcc_action_UseCaseUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_UseCaseUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -4150,7 +4150,7 @@ static void pcc_action_UseCaseUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_USE_CASE_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_USE_CASE_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4161,7 +4161,7 @@ static void pcc_action_UseCaseUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *_
 #undef auxil
 }
 
-static void pcc_action_UseCaseUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_UseCaseUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -4170,7 +4170,7 @@ static void pcc_action_UseCaseUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4181,7 +4181,7 @@ static void pcc_action_UseCaseUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *_
 #undef auxil
 }
 
-static void pcc_action_ViewUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ViewUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -4190,7 +4190,7 @@ static void pcc_action_ViewUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_VIEW_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_VIEW_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4201,7 +4201,7 @@ static void pcc_action_ViewUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #undef auxil
 }
 
-static void pcc_action_ViewUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ViewUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -4210,7 +4210,7 @@ static void pcc_action_ViewUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4221,7 +4221,7 @@ static void pcc_action_ViewUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #undef auxil
 }
 
-static void pcc_action_ViewpointUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ViewpointUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -4230,7 +4230,7 @@ static void pcc_action_ViewpointUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_VIEWPOINT_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_VIEWPOINT_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4241,7 +4241,7 @@ static void pcc_action_ViewpointUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_ViewpointUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_ViewpointUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -4250,7 +4250,7 @@ static void pcc_action_ViewpointUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4261,7 +4261,7 @@ static void pcc_action_ViewpointUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_RenderingUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_RenderingUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -4270,7 +4270,7 @@ static void pcc_action_RenderingUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_build_push(auxil, SYSML_KIND_RENDERING_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_RENDERING_USAGE, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4281,7 +4281,7 @@ static void pcc_action_RenderingUsage_0(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #undef auxil
 }
 
-static void pcc_action_RenderingUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_RenderingUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -4290,7 +4290,7 @@ static void pcc_action_RenderingUsage_1(sysml_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml_pop(auxil);
+    sysml2_pop(auxil);
 #undef _1e
 #undef _1s
 #undef _1
@@ -34830,11 +34830,11 @@ L0000:;
     return NULL;
 }
 
-sysml_context_t *sysml_create(SysmlParserContext *auxil) {
+sysml2_context_t *sysml2_create(SysmlParserContext *auxil) {
     return pcc_context__create(auxil);
 }
 
-int sysml_parse(sysml_context_t *ctx, void **ret) {
+int sysml2_parse(sysml2_context_t *ctx, void **ret) {
     if (pcc_refill_buffer(ctx, 1) < 1) return 0;
     if (pcc_apply_rule(ctx, pcc_evaluate_rule_File, &ctx->thunks, ret))
         pcc_do_action(ctx, &ctx->thunks, ret);
@@ -34845,7 +34845,7 @@ int sysml_parse(sysml_context_t *ctx, void **ret) {
     return 1;
 }
 
-void sysml_destroy(sysml_context_t *ctx) {
+void sysml2_destroy(sysml2_context_t *ctx) {
     pcc_context__destroy(ctx);
 }
 

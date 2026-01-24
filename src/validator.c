@@ -14,7 +14,7 @@
 
 /* ========== Type Compatibility ========== */
 
-bool sysml_is_type_compatible(SysmlNodeKind usage_kind, SysmlNodeKind def_kind) {
+bool sysml2_is_type_compatible(SysmlNodeKind usage_kind, SysmlNodeKind def_kind) {
     /* Package types can contain anything */
     if (SYSML_KIND_IS_PACKAGE(def_kind)) return true;
 
@@ -101,10 +101,10 @@ bool sysml_is_type_compatible(SysmlNodeKind usage_kind, SysmlNodeKind def_kind) 
 
 /* Context for validation passes */
 typedef struct {
-    SysmlSymbolTable *symtab;
+    Sysml2SymbolTable *symtab;
     Sysml2DiagContext *diag_ctx;
     const Sysml2SourceFile *source_file;
-    const SysmlValidationOptions *options;
+    const Sysml2ValidationOptions *options;
     bool has_errors;
 } ValidationContext;
 
@@ -118,11 +118,11 @@ static void pass1_build_symtab(
         if (!node->name) continue; /* Skip anonymous elements */
 
         /* Get or create scope from parent_id */
-        SysmlScope *scope = sysml_symtab_get_or_create_scope(
+        Sysml2Scope *scope = sysml2_symtab_get_or_create_scope(
             vctx->symtab, node->parent_id);
 
         /* Try to add symbol */
-        SysmlSymbol *existing = sysml_symtab_lookup(scope, node->name);
+        Sysml2Symbol *existing = sysml2_symtab_lookup(scope, node->name);
         if (existing) {
             /* Duplicate! */
             if (vctx->options->check_duplicate_names) {
@@ -165,23 +165,23 @@ static void pass1_build_symtab(
             }
         } else {
             /* Add new symbol */
-            sysml_symtab_add(vctx->symtab, scope, node->name, node->id, node);
+            sysml2_symtab_add(vctx->symtab, scope, node->name, node->id, node);
         }
 
         /* Also create scope for this element if it can contain children */
         if (SYSML_KIND_IS_PACKAGE(node->kind) || SYSML_KIND_IS_DEFINITION(node->kind)) {
-            sysml_symtab_get_or_create_scope(vctx->symtab, node->id);
+            sysml2_symtab_get_or_create_scope(vctx->symtab, node->id);
         }
     }
 
     /* Process imports and add them to their owner scopes */
     for (size_t i = 0; i < model->import_count; i++) {
         SysmlImport *imp = model->imports[i];
-        SysmlScope *scope = sysml_symtab_get_or_create_scope(
+        Sysml2Scope *scope = sysml2_symtab_get_or_create_scope(
             vctx->symtab, imp->owner_scope);
 
         /* Create import entry and add to scope's import list */
-        SysmlImportEntry *entry = sysml2_arena_alloc(vctx->symtab->arena, sizeof(SysmlImportEntry));
+        Sysml2ImportEntry *entry = sysml2_arena_alloc(vctx->symtab->arena, sizeof(Sysml2ImportEntry));
         if (entry) {
             entry->target = imp->target;
             entry->import_kind = imp->kind;
@@ -201,14 +201,14 @@ static void pass2_resolve_types(
         if (node->typed_by_count == 0) continue;
 
         /* Get scope for this element */
-        SysmlScope *scope = sysml_symtab_get_or_create_scope(
+        Sysml2Scope *scope = sysml2_symtab_get_or_create_scope(
             vctx->symtab, node->parent_id);
 
         for (size_t j = 0; j < node->typed_by_count; j++) {
             const char *type_ref = node->typed_by[j];
 
             /* Try to resolve the type */
-            SysmlSymbol *type_sym = sysml_symtab_resolve(
+            Sysml2Symbol *type_sym = sysml2_symtab_resolve(
                 vctx->symtab, scope, type_ref);
 
             if (!type_sym) {
@@ -234,7 +234,7 @@ static void pass2_resolve_types(
                     /* Add suggestions if enabled */
                     if (vctx->options->suggest_corrections) {
                         const char *suggestions[8];
-                        size_t count = sysml_symtab_find_similar(
+                        size_t count = sysml2_symtab_find_similar(
                             vctx->symtab, scope, type_ref,
                             suggestions, vctx->options->max_suggestions);
 
@@ -251,13 +251,13 @@ static void pass2_resolve_types(
                 }
             } else if (vctx->options->check_type_compatibility && type_sym->node) {
                 /* E3006: Type compatibility check */
-                if (!sysml_is_type_compatible(node->kind, type_sym->node->kind)) {
+                if (!sysml2_is_type_compatible(node->kind, type_sym->node->kind)) {
                     char msg[256];
                     snprintf(msg, sizeof(msg),
                         "'%s' cannot be typed by '%s' (%s)",
                         node->name ? node->name : "<anonymous>",
                         type_ref,
-                        sysml_kind_to_string(type_sym->node->kind));
+                        sysml2_kind_to_string(type_sym->node->kind));
 
                     Sysml2SourceRange range = SYSML2_RANGE_INVALID;
                     range.start = node->loc;
@@ -411,11 +411,11 @@ static bool check_cycles_from_node(
     cycle_push(cd, node->id);
 
     /* Follow typed_by references */
-    SysmlScope *scope = sysml_symtab_get_or_create_scope(
+    Sysml2Scope *scope = sysml2_symtab_get_or_create_scope(
         vctx->symtab, node->parent_id);
 
     for (size_t i = 0; i < node->typed_by_count; i++) {
-        SysmlSymbol *type_sym = sysml_symtab_resolve(
+        Sysml2Symbol *type_sym = sysml2_symtab_resolve(
             vctx->symtab, scope, node->typed_by[i]);
         if (type_sym && type_sym->node) {
             if (check_cycles_from_node(vctx, cd, type_sym->node)) {
@@ -448,27 +448,27 @@ static void pass3_detect_cycles(
 
 /* ========== Main Validation Entry Point ========== */
 
-Sysml2Result sysml_validate(
+Sysml2Result sysml2_validate(
     const SysmlSemanticModel *model,
     Sysml2DiagContext *diag_ctx,
     const Sysml2SourceFile *source_file,
     Sysml2Arena *arena,
     Sysml2Intern *intern,
-    const SysmlValidationOptions *options
+    const Sysml2ValidationOptions *options
 ) {
     if (!model || !diag_ctx || !arena || !intern) {
         return SYSML2_ERROR_SEMANTIC;
     }
 
     /* Use default options if none provided */
-    SysmlValidationOptions default_opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2ValidationOptions default_opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
     if (!options) {
         options = &default_opts;
     }
 
     /* Initialize symbol table */
-    SysmlSymbolTable symtab;
-    sysml_symtab_init(&symtab, arena, intern);
+    Sysml2SymbolTable symtab;
+    sysml2_symtab_init(&symtab, arena, intern);
 
     /* Set up validation context */
     ValidationContext vctx = {
@@ -484,7 +484,7 @@ Sysml2Result sysml_validate(
         pass1_build_symtab(&vctx, model);
     } else {
         /* Still need to build symbol table for other passes */
-        SysmlValidationOptions temp_opts = *options;
+        Sysml2ValidationOptions temp_opts = *options;
         temp_opts.check_duplicate_names = false;
         vctx.options = &temp_opts;
         pass1_build_symtab(&vctx, model);
@@ -502,34 +502,34 @@ Sysml2Result sysml_validate(
     }
 
     /* Cleanup */
-    sysml_symtab_destroy(&symtab);
+    sysml2_symtab_destroy(&symtab);
 
     return vctx.has_errors ? SYSML2_ERROR_SEMANTIC : SYSML2_OK;
 }
 
 /* ========== Multi-Model Validation ========== */
 
-Sysml2Result sysml_validate_multi(
+Sysml2Result sysml2_validate_multi(
     SysmlSemanticModel **models,
     size_t model_count,
     Sysml2DiagContext *diag_ctx,
     Sysml2Arena *arena,
     Sysml2Intern *intern,
-    const SysmlValidationOptions *options
+    const Sysml2ValidationOptions *options
 ) {
     if (!models || model_count == 0 || !diag_ctx || !arena || !intern) {
         return SYSML2_ERROR_SEMANTIC;
     }
 
     /* Use default options if none provided */
-    SysmlValidationOptions default_opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2ValidationOptions default_opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
     if (!options) {
         options = &default_opts;
     }
 
     /* Initialize unified symbol table */
-    SysmlSymbolTable symtab;
-    sysml_symtab_init(&symtab, arena, intern);
+    Sysml2SymbolTable symtab;
+    sysml2_symtab_init(&symtab, arena, intern);
 
     /* Set up validation context (source_file is NULL for multi-model) */
     ValidationContext vctx = {
@@ -564,7 +564,7 @@ Sysml2Result sysml_validate_multi(
     }
 
     /* Cleanup */
-    sysml_symtab_destroy(&symtab);
+    sysml2_symtab_destroy(&symtab);
 
     return vctx.has_errors ? SYSML2_ERROR_SEMANTIC : SYSML2_OK;
 }

@@ -13,7 +13,7 @@
 /*
  * Create a new build context
  */
-SysmlBuildContext *sysml_build_context_create(
+SysmlBuildContext *sysml2_build_context_create(
     Sysml2Arena *arena,
     Sysml2Intern *intern,
     const char *source_name
@@ -59,7 +59,7 @@ SysmlBuildContext *sysml_build_context_create(
 /*
  * Destroy a build context
  */
-void sysml_build_context_destroy(SysmlBuildContext *ctx) {
+void sysml2_build_context_destroy(SysmlBuildContext *ctx) {
     /* All memory is in the arena, nothing to free */
     (void)ctx;
 }
@@ -67,7 +67,7 @@ void sysml_build_context_destroy(SysmlBuildContext *ctx) {
 /*
  * Push a new scope onto the scope stack
  */
-void sysml_build_push_scope(SysmlBuildContext *ctx, const char *scope_id) {
+void sysml2_build_push_scope(SysmlBuildContext *ctx, const char *scope_id) {
     if (!ctx || !scope_id) return;
 
     /* Grow stack if needed */
@@ -86,7 +86,7 @@ void sysml_build_push_scope(SysmlBuildContext *ctx, const char *scope_id) {
 /*
  * Pop the current scope from the stack
  */
-void sysml_build_pop_scope(SysmlBuildContext *ctx) {
+void sysml2_build_pop_scope(SysmlBuildContext *ctx) {
     if (!ctx || ctx->scope_depth == 0) return;
     ctx->scope_depth--;
 }
@@ -94,7 +94,7 @@ void sysml_build_pop_scope(SysmlBuildContext *ctx) {
 /*
  * Get the current scope ID
  */
-const char *sysml_build_current_scope(SysmlBuildContext *ctx) {
+const char *sysml2_build_current_scope(SysmlBuildContext *ctx) {
     if (!ctx || ctx->scope_depth == 0) return NULL;
     return ctx->scope_stack[ctx->scope_depth - 1];
 }
@@ -102,7 +102,7 @@ const char *sysml_build_current_scope(SysmlBuildContext *ctx) {
 /*
  * Generate a path-based ID for an element
  */
-const char *sysml_build_make_id(SysmlBuildContext *ctx, const char *name) {
+const char *sysml2_build_make_id(SysmlBuildContext *ctx, const char *name) {
     if (!ctx) return NULL;
 
     /* Generate anonymous name if needed */
@@ -113,7 +113,7 @@ const char *sysml_build_make_id(SysmlBuildContext *ctx, const char *name) {
     }
 
     /* Build path: parent::name */
-    const char *parent = sysml_build_current_scope(ctx);
+    const char *parent = sysml2_build_current_scope(ctx);
     if (!parent) {
         /* Root level - just the name */
         return sysml2_intern(ctx->intern, name);
@@ -140,10 +140,10 @@ const char *sysml_build_make_id(SysmlBuildContext *ctx, const char *name) {
 /*
  * Generate a unique relationship ID
  */
-const char *sysml_build_make_rel_id(SysmlBuildContext *ctx, const char *kind) {
+const char *sysml2_build_make_rel_id(SysmlBuildContext *ctx, const char *kind) {
     if (!ctx) return NULL;
 
-    const char *parent = sysml_build_current_scope(ctx);
+    const char *parent = sysml2_build_current_scope(ctx);
     char id_buf[256];
 
     if (parent) {
@@ -160,7 +160,7 @@ const char *sysml_build_make_rel_id(SysmlBuildContext *ctx, const char *kind) {
 /*
  * Create a new AST node
  */
-SysmlNode *sysml_build_node(
+SysmlNode *sysml2_build_node(
     SysmlBuildContext *ctx,
     SysmlNodeKind kind,
     const char *name
@@ -173,10 +173,10 @@ SysmlNode *sysml_build_node(
     /* Intern the name if provided */
     const char *interned_name = name ? sysml2_intern(ctx->intern, name) : NULL;
 
-    node->id = sysml_build_make_id(ctx, name);
+    node->id = sysml2_build_make_id(ctx, name);
     node->name = interned_name;
     node->kind = kind;
-    node->parent_id = sysml_build_current_scope(ctx);
+    node->parent_id = sysml2_build_current_scope(ctx);
     node->typed_by = NULL;
     node->typed_by_count = 0;
     node->loc = SYSML2_LOC_INVALID;
@@ -184,7 +184,7 @@ SysmlNode *sysml_build_node(
     node->trailing_trivia = NULL;
 
     /* Attach any pending trivia as leading trivia */
-    sysml_build_attach_pending_trivia(ctx, node);
+    sysml2_build_attach_pending_trivia(ctx, node);
 
     return node;
 }
@@ -200,7 +200,7 @@ static void ensure_element_capacity(SysmlBuildContext *ctx) {
 /*
  * Add an element to the model
  */
-void sysml_build_add_element(SysmlBuildContext *ctx, SysmlNode *node) {
+void sysml2_build_add_element(SysmlBuildContext *ctx, SysmlNode *node) {
     if (!ctx || !node) return;
     ensure_element_capacity(ctx);
     ctx->elements[ctx->element_count++] = node;
@@ -217,7 +217,7 @@ static void ensure_relationship_capacity(SysmlBuildContext *ctx) {
 /*
  * Create a new relationship
  */
-SysmlRelationship *sysml_build_relationship(
+SysmlRelationship *sysml2_build_relationship(
     SysmlBuildContext *ctx,
     SysmlNodeKind kind,
     const char *source,
@@ -242,7 +242,7 @@ SysmlRelationship *sysml_build_relationship(
         default:                        kind_prefix = "rel"; break;
     }
 
-    rel->id = sysml_build_make_rel_id(ctx, kind_prefix);
+    rel->id = sysml2_build_make_rel_id(ctx, kind_prefix);
     rel->kind = kind;
     rel->source = source ? sysml2_intern(ctx->intern, source) : NULL;
     rel->target = target ? sysml2_intern(ctx->intern, target) : NULL;
@@ -254,7 +254,7 @@ SysmlRelationship *sysml_build_relationship(
 /*
  * Add a relationship to the model
  */
-void sysml_build_add_relationship(SysmlBuildContext *ctx, SysmlRelationship *rel) {
+void sysml2_build_add_relationship(SysmlBuildContext *ctx, SysmlRelationship *rel) {
     if (!ctx || !rel) return;
     ensure_relationship_capacity(ctx);
     ctx->relationships[ctx->relationship_count++] = rel;
@@ -263,7 +263,7 @@ void sysml_build_add_relationship(SysmlBuildContext *ctx, SysmlRelationship *rel
 /*
  * Add a type specialization to a node
  */
-void sysml_build_add_typed_by(
+void sysml2_build_add_typed_by(
     SysmlBuildContext *ctx,
     SysmlNode *node,
     const char *type_ref
@@ -300,7 +300,7 @@ static void ensure_import_capacity(SysmlBuildContext *ctx) {
 /*
  * Add an import declaration to the model
  */
-void sysml_build_add_import(
+void sysml2_build_add_import(
     SysmlBuildContext *ctx,
     SysmlNodeKind kind,
     const char *target
@@ -318,7 +318,7 @@ void sysml_build_add_import(
     imp->id = sysml2_intern(ctx->intern, id_buf);
     imp->kind = kind;
     imp->target = sysml2_intern(ctx->intern, target);
-    imp->owner_scope = sysml_build_current_scope(ctx);
+    imp->owner_scope = sysml2_build_current_scope(ctx);
     imp->loc = SYSML2_LOC_INVALID;
 
     ctx->imports[ctx->import_count++] = imp;
@@ -327,7 +327,7 @@ void sysml_build_add_import(
 /*
  * Finalize the build and return the semantic model
  */
-SysmlSemanticModel *sysml_build_finalize(SysmlBuildContext *ctx) {
+SysmlSemanticModel *sysml2_build_finalize(SysmlBuildContext *ctx) {
     if (!ctx) return NULL;
 
     SysmlSemanticModel *model = SYSML2_ARENA_NEW(ctx->arena, SysmlSemanticModel);
@@ -353,7 +353,7 @@ SysmlSemanticModel *sysml_build_finalize(SysmlBuildContext *ctx) {
 /*
  * Create a trivia node
  */
-SysmlTrivia *sysml_build_trivia(
+SysmlTrivia *sysml2_build_trivia(
     SysmlBuildContext *ctx,
     SysmlTriviaKind kind,
     const char *text,
@@ -375,7 +375,7 @@ SysmlTrivia *sysml_build_trivia(
 /*
  * Add a trivia node to the pending list
  */
-void sysml_build_add_pending_trivia(SysmlBuildContext *ctx, SysmlTrivia *trivia) {
+void sysml2_build_add_pending_trivia(SysmlBuildContext *ctx, SysmlTrivia *trivia) {
     if (!ctx || !trivia) return;
 
     if (ctx->pending_trivia_tail) {
@@ -390,7 +390,7 @@ void sysml_build_add_pending_trivia(SysmlBuildContext *ctx, SysmlTrivia *trivia)
 /*
  * Attach pending trivia to a node
  */
-void sysml_build_attach_pending_trivia(SysmlBuildContext *ctx, SysmlNode *node) {
+void sysml2_build_attach_pending_trivia(SysmlBuildContext *ctx, SysmlNode *node) {
     if (!ctx || !node) return;
 
     if (ctx->pending_trivia_head) {
@@ -406,9 +406,9 @@ void sysml_build_attach_pending_trivia(SysmlBuildContext *ctx, SysmlNode *node) 
  */
 
 /* Forward declaration - defined in sysml_parser.c via grammar */
-struct SysmlParserContext;
+struct Sysml2ParserContext;
 
-void sysml_capture_line_comment(struct SysmlParserContext *pctx, size_t start_offset, size_t end_offset) {
+void sysml2_capture_line_comment(struct Sysml2ParserContext *pctx, size_t start_offset, size_t end_offset) {
     if (!pctx) return;
 
     /* The parser context struct layout - access input and build_ctx */
@@ -454,13 +454,13 @@ void sysml_capture_line_comment(struct SysmlParserContext *pctx, size_t start_of
     const char *interned_text = text_len > 0 ? sysml2_intern_n(build_ctx->intern, text, text_len) : NULL;
 
     /* Create trivia node */
-    SysmlTrivia *trivia = sysml_build_trivia(build_ctx, SYSML_TRIVIA_LINE_COMMENT, interned_text, SYSML2_LOC_INVALID);
+    SysmlTrivia *trivia = sysml2_build_trivia(build_ctx, SYSML_TRIVIA_LINE_COMMENT, interned_text, SYSML2_LOC_INVALID);
     if (trivia) {
-        sysml_build_add_pending_trivia(build_ctx, trivia);
+        sysml2_build_add_pending_trivia(build_ctx, trivia);
     }
 }
 
-void sysml_capture_block_comment(struct SysmlParserContext *pctx, size_t start_offset, size_t end_offset) {
+void sysml2_capture_block_comment(struct Sysml2ParserContext *pctx, size_t start_offset, size_t end_offset) {
     if (!pctx) return;
 
     typedef struct {
@@ -499,13 +499,13 @@ void sysml_capture_block_comment(struct SysmlParserContext *pctx, size_t start_o
     const char *interned_text = text_len > 0 ? sysml2_intern_n(build_ctx->intern, text, text_len) : NULL;
 
     /* Create trivia node */
-    SysmlTrivia *trivia = sysml_build_trivia(build_ctx, SYSML_TRIVIA_BLOCK_COMMENT, interned_text, SYSML2_LOC_INVALID);
+    SysmlTrivia *trivia = sysml2_build_trivia(build_ctx, SYSML_TRIVIA_BLOCK_COMMENT, interned_text, SYSML2_LOC_INVALID);
     if (trivia) {
-        sysml_build_add_pending_trivia(build_ctx, trivia);
+        sysml2_build_add_pending_trivia(build_ctx, trivia);
     }
 }
 
-void sysml_capture_blank_lines(struct SysmlParserContext *pctx, size_t start_offset, size_t end_offset) {
+void sysml2_capture_blank_lines(struct Sysml2ParserContext *pctx, size_t start_offset, size_t end_offset) {
     if (!pctx) return;
 
     typedef struct {
@@ -534,8 +534,8 @@ void sysml_capture_blank_lines(struct SysmlParserContext *pctx, size_t start_off
     if (len < 2) return;  /* Need at least 2 newlines for a blank line */
 
     /* Create trivia node - text is NULL for blank lines */
-    SysmlTrivia *trivia = sysml_build_trivia(build_ctx, SYSML_TRIVIA_BLANK_LINE, NULL, SYSML2_LOC_INVALID);
+    SysmlTrivia *trivia = sysml2_build_trivia(build_ctx, SYSML_TRIVIA_BLANK_LINE, NULL, SYSML2_LOC_INVALID);
     if (trivia) {
-        sysml_build_add_pending_trivia(build_ctx, trivia);
+        sysml2_build_add_pending_trivia(build_ctx, trivia);
     }
 }

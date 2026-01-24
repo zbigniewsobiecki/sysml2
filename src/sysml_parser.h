@@ -31,10 +31,10 @@ typedef struct {
     struct SysmlBuildContext *build_ctx;
 } SysmlParserContext;
 
-#define PCC_GETCHAR(auxil) sysml_getchar(auxil)
-#define PCC_ERROR(auxil) sysml_error(auxil)
+#define PCC_GETCHAR(auxil) sysml2_getchar(auxil)
+#define PCC_ERROR(auxil) sysml2_error(auxil)
 
-static inline int sysml_getchar(SysmlParserContext *ctx) {
+static inline int sysml2_getchar(SysmlParserContext *ctx) {
     if (ctx->input_pos >= ctx->input_len) return EOF;
     int c = (unsigned char)ctx->input[ctx->input_pos++];
     if (c == '\n') {
@@ -47,7 +47,7 @@ static inline int sysml_getchar(SysmlParserContext *ctx) {
 }
 
 /* Check if a rule name is "noise" that we don't want to report */
-static inline int sysml_is_noise_rule(const char *rule) {
+static inline int sysml2_is_noise_rule(const char *rule) {
     return strcmp(rule, "_") == 0 || strcmp(rule, "WS") == 0 ||
            strcmp(rule, "LineComment") == 0 || strcmp(rule, "BlockComment") == 0 ||
            strcmp(rule, "IdentCont") == 0 || strcmp(rule, "StringChar") == 0 ||
@@ -55,10 +55,10 @@ static inline int sysml_is_noise_rule(const char *rule) {
 }
 
 /* Debug hook to track furthest failure position */
-static inline void sysml_debug_hook(SysmlParserContext *ctx, int event,
+static inline void sysml2_debug_hook(SysmlParserContext *ctx, int event,
                                      const char *rule, size_t pos) {
     if (event != 2) return;  /* Only track NOMATCH (event == 2) */
-    if (sysml_is_noise_rule(rule)) return;
+    if (sysml2_is_noise_rule(rule)) return;
 
     if (pos > ctx->furthest_pos) {
         /* New furthest position - reset tracking */
@@ -79,7 +79,7 @@ static inline void sysml_debug_hook(SysmlParserContext *ctx, int event,
 }
 
 #define PCC_DEBUG(auxil, event, rule, level, pos, buffer, length) \
-    sysml_debug_hook((auxil), (event), (rule), (pos))
+    sysml2_debug_hook((auxil), (event), (rule), (pos))
 
 #define ANSI_BOLD    "\x1b[1m"
 #define ANSI_RED     "\x1b[31m"
@@ -166,7 +166,7 @@ static const SysmlExpectation expectations[] = {
     {NULL, NULL, NULL}
 };
 
-static const SysmlExpectation *sysml_lookup_expectation(const char *rule) {
+static const SysmlExpectation *sysml2_lookup_expectation(const char *rule) {
     for (int i = 0; expectations[i].rule; i++) {
         if (strcmp(expectations[i].rule, rule) == 0) {
             return &expectations[i];
@@ -176,7 +176,7 @@ static const SysmlExpectation *sysml_lookup_expectation(const char *rule) {
 }
 
 /* Compute line and column from position */
-static void sysml_pos_to_line_col(SysmlParserContext *ctx, size_t pos,
+static void sysml2_pos_to_line_col(SysmlParserContext *ctx, size_t pos,
                                    int *out_line, int *out_col) {
     int line = 1;
     int col = 1;
@@ -192,13 +192,13 @@ static void sysml_pos_to_line_col(SysmlParserContext *ctx, size_t pos,
     *out_col = col;
 }
 
-static inline void sysml_error(SysmlParserContext *ctx) {
+static inline void sysml2_error(SysmlParserContext *ctx) {
     ctx->error_count++;
 
     /* Use furthest position for error location if available */
     int err_line, err_col;
     if (ctx->furthest_pos > 0 && ctx->failed_rule_count > 0) {
-        sysml_pos_to_line_col(ctx, ctx->furthest_pos, &err_line, &err_col);
+        sysml2_pos_to_line_col(ctx, ctx->furthest_pos, &err_line, &err_col);
     } else {
         err_line = ctx->line;
         err_col = ctx->col;
@@ -210,7 +210,7 @@ static inline void sysml_error(SysmlParserContext *ctx) {
     int count = 0;
 
     for (int i = 0; i < ctx->failed_rule_count && count < 3; i++) {
-        const SysmlExpectation *exp = sysml_lookup_expectation(ctx->failed_rules[i]);
+        const SysmlExpectation *exp = sysml2_lookup_expectation(ctx->failed_rules[i]);
         if (!exp) continue;
 
         if (count > 0) {
@@ -264,11 +264,11 @@ static inline void sysml_error(SysmlParserContext *ctx) {
 extern "C" {
 #endif
 
-typedef struct sysml_context_tag sysml_context_t;
+typedef struct sysml2_context_tag sysml2_context_t;
 
-sysml_context_t *sysml_create(SysmlParserContext *auxil);
-int sysml_parse(sysml_context_t *ctx, void **ret);
-void sysml_destroy(sysml_context_t *ctx);
+sysml2_context_t *sysml2_create(SysmlParserContext *auxil);
+int sysml2_parse(sysml2_context_t *ctx, void **ret);
+void sysml2_destroy(sysml2_context_t *ctx);
 
 #ifdef __cplusplus
 }

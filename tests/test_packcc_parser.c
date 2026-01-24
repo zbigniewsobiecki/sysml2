@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
     };
 
     /* Create parser */
-    sysml_context_t *parser = sysml_create(&ctx);
+    sysml2_context_t *parser = sysml2_create(&ctx);
     if (!parser) {
         fprintf(stderr, "Failed to create parser\n");
         free(input);
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
 
     /* Parse */
     void *result = NULL;
-    int ret = sysml_parse(parser, &result);
+    int ret = sysml2_parse(parser, &result);
 
     /* Check both parse result and error count */
     int success = ret && (ctx.error_count == 0);
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
     }
 
     /* Cleanup */
-    sysml_destroy(parser);
+    sysml2_destroy(parser);
     free(input);
 
     return success ? 0 : 1;

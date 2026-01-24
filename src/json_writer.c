@@ -16,7 +16,7 @@
  */
 typedef struct {
     FILE *out;
-    const SysmlJsonOptions *options;
+    const Sysml2JsonOptions *options;
     int indent_level;
 } JsonWriter;
 
@@ -42,7 +42,7 @@ static void write_newline(JsonWriter *w) {
 /*
  * Escape a string for JSON output
  */
-size_t sysml_json_escape_string(const char *str, char *out, size_t out_size) {
+size_t sysml2_json_escape_string(const char *str, char *out, size_t out_size) {
     if (!str) return 0;
 
     size_t written = 0;
@@ -186,7 +186,7 @@ static void write_element(JsonWriter *w, const SysmlNode *node) {
     write_string_field(w, "name", node->name, true);
 
     /* type */
-    write_string_field(w, "type", sysml_kind_to_json_type(node->kind), true);
+    write_string_field(w, "type", sysml2_kind_to_json_type(node->kind), true);
 
     /* parent */
     write_string_field(w, "parent", node->parent_id, true);
@@ -238,7 +238,7 @@ static void write_relationship(JsonWriter *w, const SysmlRelationship *rel) {
     write_string_field(w, "id", rel->id, false);
 
     /* type */
-    write_string_field(w, "type", sysml_kind_to_json_type(rel->kind), true);
+    write_string_field(w, "type", sysml2_kind_to_json_type(rel->kind), true);
 
     /* source */
     write_string_field(w, "source", rel->source, true);
@@ -278,17 +278,17 @@ static void write_relationships(JsonWriter *w, const SysmlSemanticModel *model) 
 /*
  * Write the semantic model as JSON to a file
  */
-Sysml2Result sysml_json_write(
+Sysml2Result sysml2_json_write(
     const SysmlSemanticModel *model,
     FILE *out,
-    const SysmlJsonOptions *options
+    const Sysml2JsonOptions *options
 ) {
     if (!model || !out) {
         return SYSML2_ERROR_SYNTAX;
     }
 
     /* Use default options if not provided */
-    SysmlJsonOptions default_opts = SYSML_JSON_OPTIONS_DEFAULT;
+    Sysml2JsonOptions default_opts = SYSML_JSON_OPTIONS_DEFAULT;
     if (!options) {
         options = &default_opts;
     }
@@ -330,9 +330,9 @@ Sysml2Result sysml_json_write(
 /*
  * Write the semantic model as JSON to a string
  */
-Sysml2Result sysml_json_write_string(
+Sysml2Result sysml2_json_write_string(
     const SysmlSemanticModel *model,
-    const SysmlJsonOptions *options,
+    const Sysml2JsonOptions *options,
     char **out_str
 ) {
     if (!model || !out_str) {
@@ -347,7 +347,7 @@ Sysml2Result sysml_json_write_string(
         return SYSML2_ERROR_OUT_OF_MEMORY;
     }
 
-    Sysml2Result result = sysml_json_write(model, memstream, options);
+    Sysml2Result result = sysml2_json_write(model, memstream, options);
     fclose(memstream);
 
     if (result == SYSML2_OK) {

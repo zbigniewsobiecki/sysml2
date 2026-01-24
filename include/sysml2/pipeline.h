@@ -21,13 +21,13 @@
 /*
  * Pipeline Context - manages state for processing files
  */
-typedef struct SysmlPipelineContext {
+typedef struct Sysml2PipelineContext {
     Sysml2Arena *arena;
     Sysml2Intern *intern;
     Sysml2DiagContext *diag;
-    SysmlImportResolver *resolver;
+    Sysml2ImportResolver *resolver;
     const Sysml2CliOptions *options;
-} SysmlPipelineContext;
+} Sysml2PipelineContext;
 
 /*
  * Create a pipeline context
@@ -37,7 +37,7 @@ typedef struct SysmlPipelineContext {
  * @param options CLI options (caller owns)
  * @return New pipeline context, or NULL on error
  */
-SysmlPipelineContext *sysml_pipeline_create(
+Sysml2PipelineContext *sysml2_pipeline_create(
     Sysml2Arena *arena,
     Sysml2Intern *intern,
     const Sysml2CliOptions *options
@@ -48,7 +48,7 @@ SysmlPipelineContext *sysml_pipeline_create(
  *
  * @param ctx Pipeline context to destroy
  */
-void sysml_pipeline_destroy(SysmlPipelineContext *ctx);
+void sysml2_pipeline_destroy(Sysml2PipelineContext *ctx);
 
 /*
  * Process a single file
@@ -60,8 +60,8 @@ void sysml_pipeline_destroy(SysmlPipelineContext *ctx);
  * @param out_model Output: parsed model (may be NULL if model not needed)
  * @return SYSML2_OK on success, error code otherwise
  */
-Sysml2Result sysml_pipeline_process_file(
-    SysmlPipelineContext *ctx,
+Sysml2Result sysml2_pipeline_process_file(
+    Sysml2PipelineContext *ctx,
     const char *path,
     SysmlSemanticModel **out_model
 );
@@ -75,8 +75,8 @@ Sysml2Result sysml_pipeline_process_file(
  * @param out_model Output: parsed model (may be NULL if model not needed)
  * @return SYSML2_OK on success, error code otherwise
  */
-Sysml2Result sysml_pipeline_process_stdin(
-    SysmlPipelineContext *ctx,
+Sysml2Result sysml2_pipeline_process_stdin(
+    Sysml2PipelineContext *ctx,
     SysmlSemanticModel **out_model
 );
 
@@ -90,8 +90,8 @@ Sysml2Result sysml_pipeline_process_stdin(
  * @param out_model Output: parsed model (may be NULL if model not needed)
  * @return SYSML2_OK on success, error code otherwise
  */
-Sysml2Result sysml_pipeline_process_input(
-    SysmlPipelineContext *ctx,
+Sysml2Result sysml2_pipeline_process_input(
+    Sysml2PipelineContext *ctx,
     const char *display_name,
     const char *content,
     size_t content_length,
@@ -104,7 +104,7 @@ Sysml2Result sysml_pipeline_process_input(
  * @param ctx Pipeline context
  * @return SYSML2_OK on success, error code otherwise
  */
-Sysml2Result sysml_pipeline_resolve_all(SysmlPipelineContext *ctx);
+Sysml2Result sysml2_pipeline_resolve_all(Sysml2PipelineContext *ctx);
 
 /*
  * Run validation on all cached models
@@ -112,7 +112,7 @@ Sysml2Result sysml_pipeline_resolve_all(SysmlPipelineContext *ctx);
  * @param ctx Pipeline context
  * @return SYSML2_OK on success, error code otherwise
  */
-Sysml2Result sysml_pipeline_validate_all(SysmlPipelineContext *ctx);
+Sysml2Result sysml2_pipeline_validate_all(Sysml2PipelineContext *ctx);
 
 /*
  * Write model as JSON to output stream
@@ -122,8 +122,8 @@ Sysml2Result sysml_pipeline_validate_all(SysmlPipelineContext *ctx);
  * @param out Output stream
  * @return SYSML2_OK on success, error code otherwise
  */
-Sysml2Result sysml_pipeline_write_json(
-    SysmlPipelineContext *ctx,
+Sysml2Result sysml2_pipeline_write_json(
+    Sysml2PipelineContext *ctx,
     SysmlSemanticModel *model,
     FILE *out
 );
@@ -136,8 +136,8 @@ Sysml2Result sysml_pipeline_write_json(
  * @param out Output stream
  * @return SYSML2_OK on success, error code otherwise
  */
-Sysml2Result sysml_pipeline_write_sysml(
-    SysmlPipelineContext *ctx,
+Sysml2Result sysml2_pipeline_write_sysml(
+    Sysml2PipelineContext *ctx,
     SysmlSemanticModel *model,
     FILE *out
 );
@@ -148,7 +148,7 @@ Sysml2Result sysml_pipeline_write_sysml(
  * @param ctx Pipeline context
  * @param output Output stream
  */
-void sysml_pipeline_print_diagnostics(SysmlPipelineContext *ctx, FILE *output);
+void sysml2_pipeline_print_diagnostics(Sysml2PipelineContext *ctx, FILE *output);
 
 /*
  * Get diagnostic context from pipeline
@@ -156,7 +156,7 @@ void sysml_pipeline_print_diagnostics(SysmlPipelineContext *ctx, FILE *output);
  * @param ctx Pipeline context
  * @return Diagnostic context
  */
-Sysml2DiagContext *sysml_pipeline_get_diag(SysmlPipelineContext *ctx);
+Sysml2DiagContext *sysml2_pipeline_get_diag(Sysml2PipelineContext *ctx);
 
 /*
  * Get import resolver from pipeline
@@ -164,7 +164,7 @@ Sysml2DiagContext *sysml_pipeline_get_diag(SysmlPipelineContext *ctx);
  * @param ctx Pipeline context
  * @return Import resolver
  */
-SysmlImportResolver *sysml_pipeline_get_resolver(SysmlPipelineContext *ctx);
+Sysml2ImportResolver *sysml2_pipeline_get_resolver(Sysml2PipelineContext *ctx);
 
 /*
  * Check if pipeline has errors
@@ -172,6 +172,6 @@ SysmlImportResolver *sysml_pipeline_get_resolver(SysmlPipelineContext *ctx);
  * @param ctx Pipeline context
  * @return true if errors have been recorded
  */
-bool sysml_pipeline_has_errors(SysmlPipelineContext *ctx);
+bool sysml2_pipeline_has_errors(Sysml2PipelineContext *ctx);
 
 #endif /* SYSML2_PIPELINE_H */

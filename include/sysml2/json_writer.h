@@ -21,7 +21,7 @@ typedef struct {
     bool pretty;          /* Pretty print with indentation */
     int indent_size;      /* Spaces per indent level (default: 2) */
     bool include_source;  /* Include source file in meta */
-} SysmlJsonOptions;
+} Sysml2JsonOptions;
 
 /* Default JSON options */
 #define SYSML_JSON_OPTIONS_DEFAULT { .pretty = true, .indent_size = 2, .include_source = true }
@@ -41,10 +41,10 @@ typedef struct {
  * @param options Output options (can be NULL for defaults)
  * @return SYSML2_OK on success, error code on failure
  */
-Sysml2Result sysml_json_write(
+Sysml2Result sysml2_json_write(
     const SysmlSemanticModel *model,
     FILE *out,
-    const SysmlJsonOptions *options
+    const Sysml2JsonOptions *options
 );
 
 /*
@@ -57,9 +57,9 @@ Sysml2Result sysml_json_write(
  * @param out_str Output string pointer
  * @return SYSML2_OK on success, error code on failure
  */
-Sysml2Result sysml_json_write_string(
+Sysml2Result sysml2_json_write_string(
     const SysmlSemanticModel *model,
-    const SysmlJsonOptions *options,
+    const Sysml2JsonOptions *options,
     char **out_str
 );
 
@@ -73,6 +73,6 @@ Sysml2Result sysml_json_write_string(
  * @param out_size Size of output buffer
  * @return Number of characters written (excluding null terminator)
  */
-size_t sysml_json_escape_string(const char *str, char *out, size_t out_size);
+size_t sysml2_json_escape_string(const char *str, char *out, size_t out_size);
 
 #endif /* SYSML2_JSON_WRITER_H */

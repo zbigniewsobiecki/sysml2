@@ -17,28 +17,28 @@
 #include "diagnostic.h"
 
 /* Forward declaration */
-typedef struct SysmlImportResolver SysmlImportResolver;
+typedef struct Sysml2ImportResolver Sysml2ImportResolver;
 
 /*
  * File cache entry - stores a parsed file to avoid re-parsing
  */
-typedef struct SysmlFileCache {
+typedef struct Sysml2FileCache {
     char *path;                      /* Full path to file (owned) */
     SysmlSemanticModel *model;       /* Parsed model (owned by arena) */
-    struct SysmlFileCache *next;     /* Next entry in linked list */
-} SysmlFileCache;
+    struct Sysml2FileCache *next;     /* Next entry in linked list */
+} Sysml2FileCache;
 
 /*
  * Import Resolver - manages library paths, file caching, and cycle detection
  */
-struct SysmlImportResolver {
+struct Sysml2ImportResolver {
     /* Library search paths */
     char **library_paths;            /* Array of library search paths (owned) */
     size_t path_count;
     size_t path_capacity;
 
     /* File cache */
-    SysmlFileCache *cache;           /* Linked list of parsed files */
+    Sysml2FileCache *cache;           /* Linked list of parsed files */
 
     /* Cycle detection */
     char **resolution_stack;         /* Stack of files being resolved (owned) */
@@ -62,7 +62,7 @@ struct SysmlImportResolver {
  * @param intern String interning table
  * @return New resolver, or NULL on allocation failure
  */
-SysmlImportResolver *sysml_resolver_create(
+Sysml2ImportResolver *sysml2_resolver_create(
     Sysml2Arena *arena,
     Sysml2Intern *intern
 );
@@ -74,7 +74,7 @@ SysmlImportResolver *sysml_resolver_create(
  *
  * @param resolver Resolver to destroy (may be NULL)
  */
-void sysml_resolver_destroy(SysmlImportResolver *resolver);
+void sysml2_resolver_destroy(Sysml2ImportResolver *resolver);
 
 /*
  * Add a library search path
@@ -84,7 +84,7 @@ void sysml_resolver_destroy(SysmlImportResolver *resolver);
  * @param resolver Import resolver
  * @param path Directory path to add
  */
-void sysml_resolver_add_path(SysmlImportResolver *resolver, const char *path);
+void sysml2_resolver_add_path(Sysml2ImportResolver *resolver, const char *path);
 
 /*
  * Add library paths from the SYSML2_LIBRARY_PATH environment variable
@@ -93,7 +93,7 @@ void sysml_resolver_add_path(SysmlImportResolver *resolver, const char *path);
  *
  * @param resolver Import resolver
  */
-void sysml_resolver_add_paths_from_env(SysmlImportResolver *resolver);
+void sysml2_resolver_add_paths_from_env(Sysml2ImportResolver *resolver);
 
 /*
  * Cache a parsed model for a file
@@ -105,8 +105,8 @@ void sysml_resolver_add_paths_from_env(SysmlImportResolver *resolver);
  * @param path Full path to the file
  * @param model Parsed semantic model
  */
-void sysml_resolver_cache_model(
-    SysmlImportResolver *resolver,
+void sysml2_resolver_cache_model(
+    Sysml2ImportResolver *resolver,
     const char *path,
     SysmlSemanticModel *model
 );
@@ -118,8 +118,8 @@ void sysml_resolver_cache_model(
  * @param path Full path to check
  * @return Cached model, or NULL if not cached
  */
-SysmlSemanticModel *sysml_resolver_get_cached(
-    SysmlImportResolver *resolver,
+SysmlSemanticModel *sysml2_resolver_get_cached(
+    Sysml2ImportResolver *resolver,
     const char *path
 );
 
@@ -134,8 +134,8 @@ SysmlSemanticModel *sysml_resolver_get_cached(
  * @param diag Diagnostic context for errors
  * @return SYSML2_OK on success, error code on failure
  */
-Sysml2Result sysml_resolver_resolve_imports(
-    SysmlImportResolver *resolver,
+Sysml2Result sysml2_resolver_resolve_imports(
+    Sysml2ImportResolver *resolver,
     SysmlSemanticModel *model,
     Sysml2DiagContext *diag
 );
@@ -147,8 +147,8 @@ Sysml2Result sysml_resolver_resolve_imports(
  * @param count Output: number of models
  * @return Array of model pointers (owned by resolver)
  */
-SysmlSemanticModel **sysml_resolver_get_all_models(
-    SysmlImportResolver *resolver,
+SysmlSemanticModel **sysml2_resolver_get_all_models(
+    Sysml2ImportResolver *resolver,
     size_t *count
 );
 
@@ -161,8 +161,8 @@ SysmlSemanticModel **sysml_resolver_get_all_models(
  * @param import_target Import target (e.g., "ScalarValues", "ISQ::Length")
  * @return Full path to file (must be freed by caller), or NULL if not found
  */
-char *sysml_resolver_find_file(
-    SysmlImportResolver *resolver,
+char *sysml2_resolver_find_file(
+    Sysml2ImportResolver *resolver,
     const char *import_target
 );
 

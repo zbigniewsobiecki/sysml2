@@ -14,7 +14,7 @@
  * - Usages use bare names (Part, Port, Action, etc.)
  * - Relationships use their semantic names
  */
-const char *sysml_kind_to_json_type(SysmlNodeKind kind) {
+const char *sysml2_kind_to_json_type(SysmlNodeKind kind) {
     switch (kind) {
         /* Imports */
         case SYSML_KIND_IMPORT:           return "Import";
@@ -141,7 +141,7 @@ const char *sysml_kind_to_json_type(SysmlNodeKind kind) {
 /*
  * Human-readable names for debugging and error messages
  */
-const char *sysml_kind_to_string(SysmlNodeKind kind) {
+const char *sysml2_kind_to_string(SysmlNodeKind kind) {
     switch (kind) {
         /* Imports */
         case SYSML_KIND_IMPORT:           return "Import";
@@ -270,7 +270,7 @@ const char *sysml_kind_to_string(SysmlNodeKind kind) {
  *
  * These return the actual textual keyword(s) used in SysML/KerML source.
  */
-const char *sysml_kind_to_keyword(SysmlNodeKind kind) {
+const char *sysml2_kind_to_keyword(SysmlNodeKind kind) {
     switch (kind) {
         /* Imports */
         case SYSML_KIND_IMPORT:           return "import";

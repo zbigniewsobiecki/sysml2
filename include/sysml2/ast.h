@@ -245,12 +245,12 @@ typedef struct {
 } SysmlSemanticModel;
 
 /* Get the JSON type string for a node kind */
-const char *sysml_kind_to_json_type(SysmlNodeKind kind);
+const char *sysml2_kind_to_json_type(SysmlNodeKind kind);
 
 /* Get a human-readable name for a node kind */
-const char *sysml_kind_to_string(SysmlNodeKind kind);
+const char *sysml2_kind_to_string(SysmlNodeKind kind);
 
 /* Get the SysML/KerML keyword for a node kind (for pretty printing) */
-const char *sysml_kind_to_keyword(SysmlNodeKind kind);
+const char *sysml2_kind_to_keyword(SysmlNodeKind kind);
 
 #endif /* SYSML2_AST_H */

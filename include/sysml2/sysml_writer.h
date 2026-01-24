@@ -30,7 +30,7 @@
  * @param out Output file handle
  * @return SYSML2_OK on success, error code on failure
  */
-Sysml2Result sysml_sysml_write(
+Sysml2Result sysml2_sysml_write(
     const SysmlSemanticModel *model,
     FILE *out
 );
@@ -44,7 +44,7 @@ Sysml2Result sysml_sysml_write(
  * @param out_str Output string pointer
  * @return SYSML2_OK on success, error code on failure
  */
-Sysml2Result sysml_sysml_write_string(
+Sysml2Result sysml2_sysml_write_string(
     const SysmlSemanticModel *model,
     char **out_str
 );
