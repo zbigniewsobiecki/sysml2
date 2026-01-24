@@ -509,6 +509,41 @@ static void write_statement(Sysml2Writer *w, const SysmlStatement *stmt) {
             }
             break;
 
+        case SYSML_STMT_REQUIRE_CONSTRAINT:
+            fputs("require ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_ASSUME_CONSTRAINT:
+            fputs("assume ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_SUBJECT:
+            fputs("subject ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_END_MEMBER:
+            fputs("end ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_RETURN:
+            fputs("return ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
         default:
             /* Unknown statement - write raw_text if available */
             if (stmt->raw_text) {
@@ -894,6 +929,11 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
             fputc(' ', w->out);
         }
         write_name(w, node->name);
+    }
+
+    /* Write parameter list if present (for action/state definitions) */
+    if (node->parameter_list) {
+        fputs(node->parameter_list, w->out);
     }
 
     /* Write type relationships with correct operators */

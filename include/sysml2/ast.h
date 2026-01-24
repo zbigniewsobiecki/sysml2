@@ -227,6 +227,17 @@ typedef enum {
     /* Shorthand features */
     SYSML_STMT_SHORTHAND_FEATURE, /* :> name : Type; or :>> name = value; */
 
+    /* Requirement body statements */
+    SYSML_STMT_REQUIRE_CONSTRAINT, /* require constraint {...} */
+    SYSML_STMT_ASSUME_CONSTRAINT,  /* assume constraint {...} */
+    SYSML_STMT_SUBJECT,            /* subject x : Type; */
+
+    /* Connection/interface body statements */
+    SYSML_STMT_END_MEMBER,         /* end port x : Type; */
+
+    /* Return usage */
+    SYSML_STMT_RETURN,             /* return : Type; */
+
     /* Other */
     SYSML_STMT_RESULT_EXPR,    /* bare expression at end of calc/constraint */
 } SysmlStatementKind;
@@ -371,6 +382,9 @@ typedef struct SysmlNode {
 
     /* Visibility */
     SysmlVisibility visibility;
+
+    /* Parameter list for action/state definitions */
+    const char *parameter_list;  /* Raw "(in x : T, out y)" for definitions */
 
     /* Source location for debugging */
     Sysml2SourceLoc loc;

@@ -107,6 +107,12 @@ typedef struct SysmlBuildContext {
     size_t pending_stmt_count;
     size_t pending_stmt_capacity;
 
+    /* Pending parameter list for attachment to next node */
+    const char *pending_param_list;
+
+    /* Pending flow payload for attachment to next flow capture */
+    const char *pending_flow_payload;
+
     /* Pending named comments for attachment to current scope */
     SysmlNamedComment **pending_comments;
     size_t pending_comment_count;
@@ -824,5 +830,70 @@ void sysml2_capture_shorthand_feature(SysmlBuildContext *ctx, const char *text, 
  * @param node Node to attach statements to
  */
 void sysml2_attach_pending_stmts(SysmlBuildContext *ctx, SysmlNode *node);
+
+/*
+ * Capture a require constraint statement
+ *
+ * @param ctx Build context
+ * @param text Raw text of the require constraint
+ * @param len Length of text
+ */
+void sysml2_capture_require_constraint(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture an assume constraint statement
+ *
+ * @param ctx Build context
+ * @param text Raw text of the assume constraint
+ * @param len Length of text
+ */
+void sysml2_capture_assume_constraint(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture a subject usage statement
+ *
+ * @param ctx Build context
+ * @param text Raw text of the subject usage
+ * @param len Length of text
+ */
+void sysml2_capture_subject(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture an end member statement
+ *
+ * @param ctx Build context
+ * @param text Raw text of the end member
+ * @param len Length of text
+ */
+void sysml2_capture_end_member(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture a return usage statement
+ *
+ * @param ctx Build context
+ * @param text Raw text of the return usage
+ * @param len Length of text
+ */
+void sysml2_capture_return_usage(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture an action parameter list
+ *
+ * @param ctx Build context
+ * @param text Raw text of the parameter list including parentheses
+ * @param len Length of text
+ */
+void sysml2_capture_action_params(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture a flow payload type
+ *
+ * Will be used by the next flow capture.
+ *
+ * @param ctx Build context
+ * @param text Raw text of the payload type
+ * @param len Length of text
+ */
+void sysml2_capture_flow_payload(SysmlBuildContext *ctx, const char *text, size_t len);
 
 #endif /* SYSML2_AST_BUILDER_H */

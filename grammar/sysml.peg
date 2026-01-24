@@ -1516,7 +1516,9 @@ FlowUsage <- UsagePrefix* KW_SUCCESSION? KW_FLOW FlowBody
 # Supports: flow : Type of Payload from x to y; OR flow name of Payload from x to y;
 FlowBody <- (COLONGTGT / COLONGT) QualifiedName FlowConnectionPart UsageBody
           / FlowConnectionPart UsageBody
-          / UsageDeclaration (KW_OF NAME COLON QualifiedName Multiplicity? / KW_OF QualifiedName Multiplicity?)? (FlowConnectionPart UsageBody / UsageBody)
+          / UsageDeclaration FlowPayload? (FlowConnectionPart UsageBody / UsageBody)
+FlowPayload <- KW_OF < NAME COLON QualifiedName > Multiplicity? { if (auxil->build_ctx) sysml2_capture_flow_payload(auxil->build_ctx, $1, $1e - $1s); }
+             / KW_OF < QualifiedName > Multiplicity? { if (auxil->build_ctx) sysml2_capture_flow_payload(auxil->build_ctx, $2, $2e - $2s); }
 FlowConnectionPart <- FlowConnectionPartFrom / FlowConnectionPartTo / FlowConnectionPartReverse
 FlowConnectionPartFrom <- KW_FROM < FlowEndMember > KW_TO < FlowEndMember > { if (auxil->build_ctx) sysml2_capture_flow(auxil->build_ctx, NULL, 0, $1, $1e - $1s, $2, $2e - $2s); }
 FlowConnectionPartTo <- < FlowEndMember > KW_TO < FlowEndMember > { if (auxil->build_ctx) sysml2_capture_flow(auxil->build_ctx, NULL, 0, $1, $1e - $1s, $2, $2e - $2s); }
@@ -1532,7 +1534,7 @@ AllocationPart <- KW_ALLOCATE? (BinaryConnectorPart / NaryConnectorPart)
 # Also supports ref action name (params) :>> other;
 ActionUsage <- UsagePrefix* KW_ACTION < ActionDeclaration > { sysml2_build_push(auxil, SYSML_KIND_ACTION_USAGE, $1, $1e - $1s); } ActionUsageBody { sysml2_pop(auxil); }
 ActionDeclaration <- Identification? ActionParameterList? UsageSpecializations? FeatureValue?
-ActionParameterList <- LPAREN ActionParameter (COMMA ActionParameter)* RPAREN
+ActionParameterList <- < LPAREN ActionParameter (COMMA ActionParameter)* RPAREN > { if (auxil->build_ctx) sysml2_capture_action_params(auxil->build_ctx, $1, $1e - $1s); }
 ActionParameter <- Direction? KW_REF? KW_ITEM? NAME (TypedBy / Subsets)? (EQ OwnedExpression)?
 ActionUsageBody <- KW_TERMINATE SEMICOLON / KW_SEND SendActionTail / KW_ACCEPT AcceptActionTail / ActionAssignBody / ActionWhileBody / ActionForBody / ActionBody
 ActionAssignBody <- KW_ASSIGN QualifiedName FeatureChain? COLONEQ OwnedExpression SEMICOLON
@@ -1575,7 +1577,7 @@ ParameterUsage <- Direction? UsagePrefix* ParameterKind? < UsageDeclaration > { 
 Direction <- KW_INOUT { if (auxil->build_ctx) sysml2_capture_direction(auxil->build_ctx, SYSML_DIR_INOUT); }
            / KW_OUT { if (auxil->build_ctx) sysml2_capture_direction(auxil->build_ctx, SYSML_DIR_OUT); }
            / KW_IN { if (auxil->build_ctx) sysml2_capture_direction(auxil->build_ctx, SYSML_DIR_IN); }
-SubjectUsage <- KW_SUBJECT (UsageDeclaration UsageBody / FeatureValue SEMICOLON)
+SubjectUsage <- KW_SUBJECT < (UsageDeclaration UsageBody / FeatureValue SEMICOLON) > { if (auxil->build_ctx) sysml2_capture_subject(auxil->build_ctx, $1, $1e - $1s); }
 ActorUsage <- KW_ACTOR (UsageDeclaration UsageBody / FeatureValue SEMICOLON)
 StakeholderUsage <- KW_STAKEHOLDER (UsageDeclaration UsageBody / FeatureValue SEMICOLON)
 ObjectiveUsage <- KW_OBJECTIVE UsageDeclaration RequirementBody
@@ -1584,7 +1586,7 @@ RequirementReference <- RequirementConstraintKind UsageDeclaration? UsageBody
 RequirementConstraintKind <- KW_ASSUME KW_CONSTRAINT? / KW_REQUIRE KW_CONSTRAINT?
 VerifyRequirementUsage <- KW_VERIFY KW_REQUIREMENT? UsageDeclaration? UsageBody
                         / KW_VERIFY QualifiedName FeatureChain UsageBody
-ReturnUsage <- KW_RETURN ReturnUsageKind? UsageDeclaration UsageBody
+ReturnUsage <- KW_RETURN < ReturnUsageKind? UsageDeclaration UsageBody > { if (auxil->build_ctx) sysml2_capture_return_usage(auxil->build_ctx, $1, $1e - $1s); }
 ReturnUsageKind <- KW_ATTRIBUTE / KW_PART / KW_ITEM / KW_REF
 RenderUsage <- KW_RENDER KW_RENDERING? UsageDeclaration UsageBody
 
@@ -1700,16 +1702,16 @@ AssertSatisfyUsage <- KW_ASSERT KW_NOT? KW_SATISFY KW_REQUIREMENT? UsageDeclarat
                     / KW_ASSERT KW_NOT? KW_SATISFY QualifiedName FeatureChain? KW_BY QualifiedName FeatureChain? UsageBody
 
 # === ASSUME/REQUIRE IN REQUIREMENTS ===
-AssumeConstraint <- KW_ASSUME PrefixMetadata* KW_CONSTRAINT? UsageDeclaration ConstraintBody
+AssumeConstraint <- KW_ASSUME < PrefixMetadata* KW_CONSTRAINT? UsageDeclaration ConstraintBody > { if (auxil->build_ctx) sysml2_capture_assume_constraint(auxil->build_ctx, $1, $1e - $1s); }
 # RequireConstraint: with 'constraint' keyword uses ConstraintBody, otherwise uses UsageBody
 # Also supports feature chain: require name.feature;
-RequireConstraint <- KW_REQUIRE PrefixMetadata* KW_CONSTRAINT UsageDeclaration? ConstraintBody
-                   / KW_REQUIRE PrefixMetadata* QualifiedName FeatureChain UsageBody
-                   / KW_REQUIRE PrefixMetadata* UsageDeclaration UsageBody
+RequireConstraint <- KW_REQUIRE < PrefixMetadata* KW_CONSTRAINT UsageDeclaration? ConstraintBody > { if (auxil->build_ctx) sysml2_capture_require_constraint(auxil->build_ctx, $1, $1e - $1s); }
+                   / KW_REQUIRE < PrefixMetadata* QualifiedName FeatureChain UsageBody > { if (auxil->build_ctx) sysml2_capture_require_constraint(auxil->build_ctx, $2, $2e - $2s); }
+                   / KW_REQUIRE < PrefixMetadata* UsageDeclaration UsageBody > { if (auxil->build_ctx) sysml2_capture_require_constraint(auxil->build_ctx, $3, $3e - $3s); }
 
 # === END MEMBER FOR CONNECTIONS ===
 # End member can have identification before multiplicity: end inCart[0..1] item cart: Type;
-EndMember <- KW_END Identification? Multiplicity? KW_REF? (KW_PORT / KW_ITEM / KW_PART / KW_OCCURRENCE / KW_ACTION)? UsageDeclaration UsageBody
+EndMember <- KW_END < Identification? Multiplicity? KW_REF? (KW_PORT / KW_ITEM / KW_PART / KW_OCCURRENCE / KW_ACTION)? UsageDeclaration UsageBody > { if (auxil->build_ctx) sysml2_capture_end_member(auxil->build_ctx, $1, $1e - $1s); }
 
 # === MESSAGE USAGE ===
 # Message can have 'of' for payload type: message name of Type from x to y;

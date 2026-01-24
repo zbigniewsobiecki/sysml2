@@ -97,6 +97,12 @@ SysmlBuildContext *sysml2_build_context_create(
     ctx->pending_stmts = SYSML2_ARENA_NEW_ARRAY(arena, SysmlStatement *, ctx->pending_stmt_capacity);
     ctx->pending_stmt_count = 0;
 
+    /* Initialize pending parameter list */
+    ctx->pending_param_list = NULL;
+
+    /* Initialize pending flow payload */
+    ctx->pending_flow_payload = NULL;
+
     /* Initialize pending named comments */
     ctx->pending_comment_capacity = 8;
     ctx->pending_comments = SYSML2_ARENA_NEW_ARRAY(arena, SysmlNamedComment *, ctx->pending_comment_capacity);
@@ -275,6 +281,10 @@ SysmlNode *sysml2_build_node(
     /* Apply pending visibility */
     node->visibility = ctx->pending_visibility;
     ctx->pending_visibility = SYSML_VIS_PUBLIC;
+
+    /* Apply pending parameter list */
+    node->parameter_list = ctx->pending_param_list;
+    ctx->pending_param_list = NULL;
 
     node->loc = SYSML2_LOC_INVALID;
     node->documentation = NULL;
@@ -1243,6 +1253,7 @@ void sysml2_build_clear_pending_modifiers(SysmlBuildContext *ctx) {
     ctx->pending_default_value = NULL;
     ctx->pending_has_default_keyword = false;
     ctx->pending_param_kind = SYSML_KIND_UNKNOWN;
+    ctx->pending_param_list = NULL;
 }
 
 /*
@@ -1368,7 +1379,13 @@ void sysml2_capture_flow(
     SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_FLOW);
     if (!stmt) return;
 
-    stmt->payload = trim_and_intern(ctx, payload, payload_len);
+    /* Use pending flow payload if available, otherwise use passed payload */
+    if (ctx->pending_flow_payload) {
+        stmt->payload = ctx->pending_flow_payload;
+        ctx->pending_flow_payload = NULL;
+    } else {
+        stmt->payload = trim_and_intern(ctx, payload, payload_len);
+    }
     stmt->source.target = trim_and_intern(ctx, source, source_len);
     stmt->target.target = trim_and_intern(ctx, target, target_len);
 
@@ -1789,4 +1806,92 @@ void sysml2_attach_pending_stmts(SysmlBuildContext *ctx, SysmlNode *node) {
         }
         ctx->pending_rep_count = 0;
     }
+}
+
+/*
+ * Capture a require constraint statement
+ */
+void sysml2_capture_require_constraint(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_REQUIRE_CONSTRAINT);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture an assume constraint statement
+ */
+void sysml2_capture_assume_constraint(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_ASSUME_CONSTRAINT);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture a subject usage statement
+ */
+void sysml2_capture_subject(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_SUBJECT);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture an end member statement
+ */
+void sysml2_capture_end_member(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_END_MEMBER);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture a return usage statement
+ */
+void sysml2_capture_return_usage(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_RETURN);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture an action parameter list
+ */
+void sysml2_capture_action_params(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx || !text || len == 0) return;
+
+    ctx->pending_param_list = trim_and_intern(ctx, text, len);
+}
+
+/*
+ * Capture a flow payload type
+ */
+void sysml2_capture_flow_payload(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx || !text || len == 0) return;
+
+    ctx->pending_flow_payload = trim_and_intern(ctx, text, len);
 }
