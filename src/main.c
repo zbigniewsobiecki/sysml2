@@ -135,7 +135,9 @@ void sysml2_cli_print_help(FILE *output) {
     fprintf(output,
         "sysml2 - SysML v2 Parser and Validator\n"
         "\n"
-        "Usage: sysml2 [options] <file>...\n"
+        "Usage: sysml2 [options] [file]...\n"
+        "\n"
+        "If no files are specified, reads from standard input.\n"
         "\n"
         "Options:\n"
         "  -o, --output <file>    Write output to file\n"
@@ -152,7 +154,8 @@ void sysml2_cli_print_help(FILE *output) {
         "Examples:\n"
         "  sysml2 model.kerml              Validate a KerML file\n"
         "  sysml2 -f json model.sysml      Parse and output JSON AST\n"
-        "  sysml2 --dump-tokens file.kerml Show lexer tokens\n"
+        "  cat model.sysml | sysml2        Parse from stdin\n"
+        "  echo 'package P;' | sysml2      Quick syntax check\n"
         "\n"
     );
 }
@@ -194,6 +197,32 @@ static char *read_file(const char *path, size_t *out_size) {
     return content;
 }
 
+/* Read from stdin into memory (stdin is not seekable) */
+static char *read_stdin(size_t *out_size) {
+    size_t capacity = 4096;
+    size_t length = 0;
+    char *content = malloc(capacity);
+    if (!content) return NULL;
+
+    size_t bytes_read;
+    while ((bytes_read = fread(content + length, 1, capacity - length, stdin)) > 0) {
+        length += bytes_read;
+        if (length == capacity) {
+            capacity *= 2;
+            char *new_content = realloc(content, capacity);
+            if (!new_content) {
+                free(content);
+                return NULL;
+            }
+            content = new_content;
+        }
+    }
+
+    content[length] = '\0';
+    if (out_size) *out_size = length;
+    return content;
+}
+
 /* Build line offset table */
 static uint32_t *build_line_offsets(const char *content, size_t length, uint32_t *out_count) {
     /* Count lines first */
@@ -221,9 +250,11 @@ static uint32_t *build_line_offsets(const char *content, size_t length, uint32_t
     return offsets;
 }
 
-/* Process a single file */
-static Sysml2Result process_file(
-    const char *path,
+/* Process input content (shared by file and stdin processing) */
+static Sysml2Result process_input(
+    const char *display_name,  /* e.g., "<stdin>" or file path */
+    const char *content,
+    size_t content_length,
     const Sysml2CliOptions *options,
     Sysml2Arena *arena,
     Sysml2Intern *intern,
@@ -232,15 +263,7 @@ static Sysml2Result process_file(
     (void)arena;  /* Unused until we add AST building */
 
     if (options->verbose) {
-        fprintf(stderr, "Processing: %s\n", path);
-    }
-
-    /* Read file */
-    size_t content_length;
-    char *content = read_file(path, &content_length);
-    if (!content) {
-        fprintf(stderr, "error: cannot read file '%s': %s\n", path, strerror(errno));
-        return SYSML2_ERROR_FILE_READ;
+        fprintf(stderr, "Processing: %s\n", display_name);
     }
 
     /* Dump tokens if requested (uses the old lexer) */
@@ -249,12 +272,11 @@ static Sysml2Result process_file(
         uint32_t line_count;
         uint32_t *line_offsets = build_line_offsets(content, content_length, &line_count);
         if (!line_offsets) {
-            free(content);
             return SYSML2_ERROR_OUT_OF_MEMORY;
         }
 
         Sysml2SourceFile source_file = {
-            .path = sysml2_intern(intern, path),
+            .path = sysml2_intern(intern, display_name),
             .content = content,
             .content_length = content_length,
             .line_offsets = line_offsets,
@@ -265,7 +287,7 @@ static Sysml2Result process_file(
         sysml2_lexer_init(&lexer, &source_file, intern, diag_ctx);
 
         Sysml2Token token;
-        printf("Tokens for %s:\n", path);
+        printf("Tokens for %s:\n", display_name);
         printf("%-6s %-20s %-10s %s\n", "Line", "Type", "Loc", "Text");
         printf("%-6s %-20s %-10s %s\n", "----", "----", "---", "----");
 
@@ -286,9 +308,9 @@ static Sysml2Result process_file(
         free(line_offsets);
     }
 
-    /* Parse file using packcc-generated parser */
+    /* Parse input using packcc-generated parser */
     SysmlParserContext ctx = {
-        .filename = path,
+        .filename = display_name,
         .input = content,
         .input_len = content_length,
         .input_pos = 0,
@@ -306,7 +328,6 @@ static Sysml2Result process_file(
     sysml_context_t *parser = sysml_create(&ctx);
     if (!parser) {
         fprintf(stderr, "error: failed to create parser\n");
-        free(content);
         return SYSML2_ERROR_OUT_OF_MEMORY;
     }
 
@@ -333,9 +354,29 @@ static Sysml2Result process_file(
     }
 
     sysml_destroy(parser);
-    free(content);
 
     return (parse_ok && ctx.error_count == 0) ? SYSML2_OK : SYSML2_ERROR_SYNTAX;
+}
+
+/* Process a single file */
+static Sysml2Result process_file(
+    const char *path,
+    const Sysml2CliOptions *options,
+    Sysml2Arena *arena,
+    Sysml2Intern *intern,
+    Sysml2DiagContext *diag_ctx
+) {
+    /* Read file */
+    size_t content_length;
+    char *content = read_file(path, &content_length);
+    if (!content) {
+        fprintf(stderr, "error: cannot read file '%s': %s\n", path, strerror(errno));
+        return SYSML2_ERROR_FILE_READ;
+    }
+
+    Sysml2Result result = process_input(path, content, content_length, options, arena, intern, diag_ctx);
+    free(content);
+    return result;
 }
 
 /* Result code to string */
@@ -371,12 +412,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    if (options.input_file_count == 0) {
-        fprintf(stderr, "error: no input files\n\n");
-        sysml2_cli_print_help(stderr);
-        return 1;
-    }
-
     /* Initialize memory arena and string interning */
     Sysml2Arena arena;
     sysml2_arena_init(&arena);
@@ -390,16 +425,34 @@ int main(int argc, char **argv) {
     sysml2_diag_set_max_errors(&diag_ctx, options.max_errors);
     diag_ctx.treat_warnings_as_errors = options.treat_warnings_as_errors;
 
-    /* Process each file */
     Sysml2Result final_result = SYSML2_OK;
-    for (size_t i = 0; i < options.input_file_count; i++) {
-        result = process_file(options.input_files[i], &options, &arena, &intern, &diag_ctx);
+
+    if (options.input_file_count == 0) {
+        /* Read from stdin */
+        size_t content_length;
+        char *content = read_stdin(&content_length);
+        if (!content) {
+            fprintf(stderr, "error: failed to read from stdin\n");
+            sysml2_intern_destroy(&intern);
+            sysml2_arena_destroy(&arena);
+            return 1;
+        }
+        result = process_input("<stdin>", content, content_length, &options, &arena, &intern, &diag_ctx);
+        free(content);
         if (result != SYSML2_OK) {
             final_result = result;
         }
+    } else {
+        /* Process each file */
+        for (size_t i = 0; i < options.input_file_count; i++) {
+            result = process_file(options.input_files[i], &options, &arena, &intern, &diag_ctx);
+            if (result != SYSML2_OK) {
+                final_result = result;
+            }
 
-        if (sysml2_diag_should_stop(&diag_ctx)) {
-            break;
+            if (sysml2_diag_should_stop(&diag_ctx)) {
+                break;
+            }
         }
     }
 
