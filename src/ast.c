@@ -16,6 +16,11 @@
  */
 const char *sysml_kind_to_json_type(SysmlNodeKind kind) {
     switch (kind) {
+        /* Imports */
+        case SYSML_KIND_IMPORT:           return "Import";
+        case SYSML_KIND_IMPORT_ALL:       return "ImportAll";
+        case SYSML_KIND_IMPORT_RECURSIVE: return "ImportRecursive";
+
         /* Packages */
         case SYSML_KIND_PACKAGE:         return "Package";
         case SYSML_KIND_LIBRARY_PACKAGE: return "LibraryPackage";
@@ -45,6 +50,7 @@ const char *sysml_kind_to_json_type(SysmlNodeKind kind) {
         case SYSML_KIND_VIEWPOINT_DEF:   return "ViewpointDef";
         case SYSML_KIND_RENDERING_DEF:   return "RenderingDef";
         case SYSML_KIND_METADATA_DEF:    return "MetadataDef";
+        case SYSML_KIND_DATATYPE:        return "DataType";
 
         /* Usages */
         case SYSML_KIND_ATTRIBUTE_USAGE:   return "Attribute";
@@ -99,6 +105,11 @@ const char *sysml_kind_to_json_type(SysmlNodeKind kind) {
  */
 const char *sysml_kind_to_string(SysmlNodeKind kind) {
     switch (kind) {
+        /* Imports */
+        case SYSML_KIND_IMPORT:           return "Import";
+        case SYSML_KIND_IMPORT_ALL:       return "ImportAll";
+        case SYSML_KIND_IMPORT_RECURSIVE: return "ImportRecursive";
+
         /* Packages */
         case SYSML_KIND_PACKAGE:         return "Package";
         case SYSML_KIND_LIBRARY_PACKAGE: return "LibraryPackage";
@@ -128,6 +139,7 @@ const char *sysml_kind_to_string(SysmlNodeKind kind) {
         case SYSML_KIND_VIEWPOINT_DEF:   return "ViewpointDefinition";
         case SYSML_KIND_RENDERING_DEF:   return "RenderingDefinition";
         case SYSML_KIND_METADATA_DEF:    return "MetadataDefinition";
+        case SYSML_KIND_DATATYPE:        return "DataTypeDefinition";
 
         /* Usages */
         case SYSML_KIND_ATTRIBUTE_USAGE:   return "AttributeUsage";

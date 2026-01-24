@@ -49,6 +49,7 @@ add_library(sysml2_core STATIC
     src/ast.c
     src/ast_builder.c
     src/json_writer.c
+    src/validator.c
 )
 
 # Link math library on Unix
@@ -77,6 +78,10 @@ target_link_libraries(test_lexer sysml2_core)
 add_executable(test_ast tests/test_ast.c)
 target_link_libraries(test_ast sysml2_core)
 
+# Validator unit tests
+add_executable(test_validator tests/test_validator.c)
+target_link_libraries(test_validator sysml2_core)
+
 # PackCC-generated parser test
 add_executable(test_packcc_parser
     src/sysml_parser.c
@@ -88,6 +93,7 @@ target_link_libraries(test_packcc_parser sysml2_core)
 # Add tests
 add_test(NAME lexer_tests COMMAND test_lexer)
 add_test(NAME ast_tests COMMAND test_ast)
+add_test(NAME validator_tests COMMAND test_validator)
 
 # PackCC parser tests - valid syntax files
 file(GLOB PACKCC_VALID_FIXTURES
@@ -143,10 +149,25 @@ foreach(fixture ${JSON_FIXTURES})
     )
 endforeach()
 
+# Validation integration tests
+file(GLOB VALIDATION_FIXTURES
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/validation/*.sysml)
+foreach(fixture ${VALIDATION_FIXTURES})
+    get_filename_component(fixture_name ${fixture} NAME_WE)
+    get_filename_component(fixture_dir ${fixture} DIRECTORY)
+    set(expected_file "${fixture_dir}/${fixture_name}.expected")
+    if(EXISTS "${expected_file}")
+        add_test(NAME validation_${fixture_name}
+            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_validation.sh
+                $<TARGET_FILE:sysml2> ${fixture} ${expected_file}
+        )
+    endif()
+endforeach()
+
 # Custom target for running tests
 add_custom_target(check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS test_lexer test_ast test_packcc_parser sysml2
+    DEPENDS test_lexer test_ast test_validator test_packcc_parser sysml2
 )
 
 # Print configuration summary

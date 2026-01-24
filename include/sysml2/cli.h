@@ -35,6 +35,9 @@ typedef struct {
     bool dump_ast;              /* Print parsed AST */
     bool verbose;               /* Verbose output */
 
+    /* Mode options */
+    bool parse_only;            /* Skip semantic validation */
+
     /* Meta */
     bool show_help;
     bool show_version;

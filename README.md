@@ -96,6 +96,56 @@ model.kerml:20:17: error[E3001]: undefined type 'Engin'
    = help: did you mean 'Engine'?
 ```
 
+## Semantic Validation
+
+The parser performs semantic validation to catch errors beyond syntax:
+
+### Error Types
+
+| Code | Description |
+|------|-------------|
+| E3001 | Undefined type reference |
+| E3004 | Duplicate definition in same scope |
+| E3005 | Circular specialization chain |
+| E3006 | Type compatibility mismatch |
+
+### Cross-File Import Resolution
+
+When multiple files are provided, types can be resolved across files via imports:
+
+```bash
+# File A defines types, File B imports them
+./sysml2 package_a.sysml package_b.sysml
+```
+
+```sysml
+// package_a.sysml
+package A {
+    part def Engine;
+    datatype Real;
+}
+
+// package_b.sysml
+package B {
+    import A::*;
+    part car : Engine;      // Resolves via import
+    attribute weight : Real; // Resolves via import
+}
+```
+
+Supported import patterns:
+- `import A::Engine;` - Direct element import
+- `import A::*;` - Namespace import (all direct members)
+- `import A::**;` - Recursive import (all nested members)
+
+### Validation Options
+
+```bash
+./sysml2 model.sysml                  # Full validation (default)
+./sysml2 --parse-only model.sysml     # Syntax check only, skip validation
+./sysml2 --no-validate model.sysml    # Same as --parse-only
+```
+
 ## Supported Language Features
 
 ### KerML
@@ -116,6 +166,8 @@ model.kerml:20:17: error[E3001]: undefined type 'Engin'
 - Interface definitions
 - Item definitions
 - Attribute definitions
+- Enumeration definitions
+- Datatype definitions (KerML primitive types)
 
 ## Testing
 
@@ -134,7 +186,9 @@ Run individual test groups:
 ```bash
 ./test_lexer            # Lexer unit tests
 ./test_ast              # AST/builder/JSON unit tests
+./test_validator        # Validator unit tests
 ctest -R json_output    # JSON fixture tests
+ctest -R validation     # Validation fixture tests
 ```
 
 ## Project Structure
@@ -151,7 +205,8 @@ sysml2/
 │   ├── cli.h           # CLI options
 │   ├── ast.h           # AST node types
 │   ├── ast_builder.h   # AST builder context
-│   └── json_writer.h   # JSON serialization
+│   ├── json_writer.h   # JSON serialization
+│   └── validator.h     # Semantic validator
 ├── src/
 │   ├── arena.c         # Arena allocator implementation
 │   ├── intern.c        # String interning implementation
@@ -161,6 +216,7 @@ sysml2/
 │   ├── ast.c           # AST utilities
 │   ├── ast_builder.c   # AST builder implementation
 │   ├── json_writer.c   # JSON writer implementation
+│   ├── validator.c     # Semantic validation
 │   ├── main.c          # CLI entry point
 │   └── sysml_parser.c  # PackCC-generated parser
 ├── grammar/
@@ -168,10 +224,13 @@ sysml2/
 ├── tests/
 │   ├── test_lexer.c           # Lexer unit tests
 │   ├── test_ast.c             # AST/builder/JSON unit tests
+│   ├── test_validator.c       # Validator unit tests
 │   ├── test_packcc_parser.c   # Parser integration tests
 │   ├── test_json_output.sh    # JSON output fixture tests
+│   ├── test_validation.sh     # Validation fixture tests
 │   └── fixtures/              # Test fixtures
 │       ├── json/              # JSON output test pairs
+│       ├── validation/        # Validation test cases
 │       ├── official/          # Official SysML v2 examples
 │       └── errors/            # Error case tests
 └── CMakeLists.txt

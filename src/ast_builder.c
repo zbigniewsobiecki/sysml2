@@ -43,6 +43,11 @@ SysmlBuildContext *sysml_build_context_create(
     ctx->relationships = SYSML2_ARENA_NEW_ARRAY(arena, SysmlRelationship *, ctx->relationship_capacity);
     ctx->relationship_count = 0;
 
+    /* Initialize import array */
+    ctx->import_capacity = SYSML_BUILD_DEFAULT_IMPORT_CAPACITY;
+    ctx->imports = SYSML2_ARENA_NEW_ARRAY(arena, SysmlImport *, ctx->import_capacity);
+    ctx->import_count = 0;
+
     return ctx;
 }
 
@@ -287,6 +292,47 @@ void sysml_build_add_typed_by(
 }
 
 /*
+ * Grow the imports array if needed
+ */
+static void ensure_import_capacity(SysmlBuildContext *ctx) {
+    if (ctx->import_count >= ctx->import_capacity) {
+        size_t new_capacity = ctx->import_capacity * 2;
+        SysmlImport **new_imports = SYSML2_ARENA_NEW_ARRAY(ctx->arena, SysmlImport *, new_capacity);
+        if (!new_imports) return;
+        memcpy(new_imports, ctx->imports, ctx->import_count * sizeof(SysmlImport *));
+        ctx->imports = new_imports;
+        ctx->import_capacity = new_capacity;
+    }
+}
+
+/*
+ * Add an import declaration to the model
+ */
+void sysml_build_add_import(
+    SysmlBuildContext *ctx,
+    SysmlNodeKind kind,
+    const char *target
+) {
+    if (!ctx || !target) return;
+
+    ensure_import_capacity(ctx);
+
+    SysmlImport *imp = SYSML2_ARENA_NEW(ctx->arena, SysmlImport);
+    if (!imp) return;
+
+    /* Generate a unique ID for the import */
+    char id_buf[256];
+    snprintf(id_buf, sizeof(id_buf), "_import_%zu", ctx->import_count);
+    imp->id = sysml2_intern(ctx->intern, id_buf);
+    imp->kind = kind;
+    imp->target = sysml2_intern(ctx->intern, target);
+    imp->owner_scope = sysml_build_current_scope(ctx);
+    imp->loc = SYSML2_LOC_INVALID;
+
+    ctx->imports[ctx->import_count++] = imp;
+}
+
+/*
  * Finalize the build and return the semantic model
  */
 SysmlSemanticModel *sysml_build_finalize(SysmlBuildContext *ctx) {
@@ -304,6 +350,10 @@ SysmlSemanticModel *sysml_build_finalize(SysmlBuildContext *ctx) {
     model->relationships = ctx->relationships;
     model->relationship_count = ctx->relationship_count;
     model->relationship_capacity = ctx->relationship_capacity;
+
+    model->imports = ctx->imports;
+    model->import_count = ctx->import_count;
+    model->import_capacity = ctx->import_capacity;
 
     return model;
 }
