@@ -71,15 +71,19 @@ int main(int argc, char **argv) {
     void *result = NULL;
     int ret = sysml_parse(parser, &result);
 
-    if (ret) {
+    /* Check both parse result and error count */
+    int success = ret && (ctx.error_count == 0);
+
+    if (success) {
         printf("PASS: %s\n", argv[1]);
     } else {
-        printf("FAIL: %s (parse error)\n", argv[1]);
+        printf("FAIL: %s (%d error%s)\n", argv[1], ctx.error_count,
+               ctx.error_count == 1 ? "" : "s");
     }
 
     /* Cleanup */
     sysml_destroy(parser);
     free(input);
 
-    return ret ? 0 : 1;
+    return success ? 0 : 1;
 }
