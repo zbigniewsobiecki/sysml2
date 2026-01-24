@@ -232,6 +232,12 @@ static size_t get_imports(const SysmlSemanticModel *model, const char *scope_id,
 }
 
 /*
+ * Forward declarations
+ */
+static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemanticModel *model);
+static void write_applied_metadata(Sysml2Writer *w, const SysmlNode *node);
+
+/*
  * Write an import declaration
  */
 static void write_import(Sysml2Writer *w, const SysmlImport *imp) {
@@ -270,7 +276,7 @@ static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
     const SysmlNode **children = NULL;
     size_t child_count = get_children(model, node->id, &children);
 
-    if (import_count == 0 && child_count == 0) {
+    if (import_count == 0 && child_count == 0 && node->metadata_count == 0) {
         /* Empty body: use semicolon */
         fputc(';', w->out);
         if (node->trailing_trivia) {
@@ -287,7 +293,15 @@ static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
 
         w->indent_level++;
 
-        /* Write imports first */
+        /* Write applied metadata first (inside the body) */
+        if (node->metadata_count > 0) {
+            write_applied_metadata(w, node);
+            if (import_count > 0 || child_count > 0) {
+                write_newline(w);
+            }
+        }
+
+        /* Write imports */
         for (size_t i = 0; i < import_count; i++) {
             write_import(w, imports[i]);
         }
@@ -314,6 +328,44 @@ static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
 }
 
 /*
+ * Write applied metadata (@Type { ... })
+ */
+static void write_applied_metadata(Sysml2Writer *w, const SysmlNode *node) {
+    for (size_t i = 0; i < node->metadata_count; i++) {
+        SysmlMetadataUsage *m = node->metadata[i];
+        if (!m) continue;
+
+        write_indent(w);
+        fputc('@', w->out);
+        fputs(m->type_ref, w->out);
+
+        if (m->feature_count > 0) {
+            fputs(" {", w->out);
+            write_newline(w);
+            w->indent_level++;
+            for (size_t j = 0; j < m->feature_count; j++) {
+                SysmlMetadataFeature *f = m->features[j];
+                if (!f) continue;
+                write_indent(w);
+                fputs(f->name, w->out);
+                if (f->value) {
+                    fputs(" = ", w->out);
+                    fputs(f->value, w->out);
+                }
+                fputc(';', w->out);
+                write_newline(w);
+            }
+            w->indent_level--;
+            write_indent(w);
+            fputc('}', w->out);
+        } else {
+            fputc(';', w->out);
+        }
+        write_newline(w);
+    }
+}
+
+/*
  * Write a definition or usage node
  */
 static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemanticModel *model) {
@@ -325,6 +377,13 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
     }
 
     write_indent(w);
+
+    /* Write prefix metadata before keyword */
+    for (size_t i = 0; i < node->prefix_metadata_count; i++) {
+        fputc('#', w->out);
+        fputs(node->prefix_metadata[i], w->out);
+        fputc(' ', w->out);
+    }
 
     /* Write keyword */
     const char *keyword = sysml2_kind_to_keyword(node->kind);

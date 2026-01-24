@@ -58,6 +58,14 @@ typedef struct SysmlBuildContext {
     /* Pending trivia for attachment to next node */
     SysmlTrivia *pending_trivia_head;
     SysmlTrivia *pending_trivia_tail;
+
+    /* Pending prefix metadata for attachment to next node */
+    const char **pending_prefix_metadata;
+    size_t pending_prefix_metadata_count;
+    size_t pending_prefix_metadata_capacity;
+
+    /* Current metadata usage being built */
+    SysmlMetadataUsage *current_metadata;
 } SysmlBuildContext;
 
 /*
@@ -283,6 +291,115 @@ SysmlTrivia *sysml2_build_trivia(
     SysmlTriviaKind kind,
     const char *text,
     Sysml2SourceLoc loc
+);
+
+/*
+ * Create a metadata usage
+ *
+ * @param ctx Build context
+ * @param type_ref Metadata type (e.g., "SourceLink")
+ * @return New metadata usage, or NULL on failure
+ */
+SysmlMetadataUsage *sysml2_build_metadata_usage(
+    SysmlBuildContext *ctx,
+    const char *type_ref
+);
+
+/*
+ * Add a feature to metadata usage
+ *
+ * @param ctx Build context
+ * @param meta Metadata usage to modify
+ * @param name Feature name
+ * @param value Feature value (string or expression)
+ */
+void sysml2_build_metadata_add_feature(
+    SysmlBuildContext *ctx,
+    SysmlMetadataUsage *meta,
+    const char *name,
+    const char *value
+);
+
+/*
+ * Add an "about" target to metadata
+ *
+ * @param ctx Build context
+ * @param meta Metadata usage to modify
+ * @param target_ref Target element reference
+ */
+void sysml2_build_metadata_add_about(
+    SysmlBuildContext *ctx,
+    SysmlMetadataUsage *meta,
+    const char *target_ref
+);
+
+/*
+ * Attach metadata to a node
+ *
+ * @param ctx Build context
+ * @param node Node to attach metadata to
+ * @param meta Metadata usage to attach
+ */
+void sysml2_build_add_metadata(
+    SysmlBuildContext *ctx,
+    SysmlNode *node,
+    SysmlMetadataUsage *meta
+);
+
+/*
+ * Add prefix metadata to a node
+ *
+ * @param ctx Build context
+ * @param node Node to modify
+ * @param metadata_ref Metadata type reference (e.g., "SourceLink")
+ */
+void sysml2_build_add_prefix_metadata(
+    SysmlBuildContext *ctx,
+    SysmlNode *node,
+    const char *metadata_ref
+);
+
+/*
+ * Add a pending prefix metadata that will be attached to the next node
+ *
+ * @param ctx Build context
+ * @param metadata_ref Metadata type reference (e.g., "SourceLink")
+ */
+void sysml2_build_add_pending_prefix_metadata(
+    SysmlBuildContext *ctx,
+    const char *metadata_ref
+);
+
+/*
+ * Start building a metadata usage
+ *
+ * @param ctx Build context
+ * @param type_ref Metadata type reference
+ * @return New metadata usage, or NULL on failure
+ */
+SysmlMetadataUsage *sysml2_build_start_metadata(
+    SysmlBuildContext *ctx,
+    const char *type_ref
+);
+
+/*
+ * Finish building a metadata usage and attach to current scope's node
+ *
+ * @param ctx Build context
+ */
+void sysml2_build_end_metadata(SysmlBuildContext *ctx);
+
+/*
+ * Add a feature to the current metadata usage being built
+ *
+ * @param ctx Build context
+ * @param name Feature name
+ * @param value Feature value (string or expression)
+ */
+void sysml2_build_current_metadata_add_feature(
+    SysmlBuildContext *ctx,
+    const char *name,
+    const char *value
 );
 
 #endif /* SYSML2_AST_BUILDER_H */

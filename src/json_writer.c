@@ -212,6 +212,49 @@ static void write_element(JsonWriter *w, const SysmlNode *node) {
         write_string_array_field(w, "typedBy", node->typed_by, node->typed_by_count, true);
     }
 
+    /* prefixMetadata (if present) */
+    if (node->prefix_metadata && node->prefix_metadata_count > 0) {
+        write_string_array_field(w, "prefixMetadata", node->prefix_metadata, node->prefix_metadata_count, true);
+    }
+
+    /* metadata (if present) */
+    if (node->metadata && node->metadata_count > 0) {
+        fputc(',', w->out);
+        write_newline(w);
+        write_indent(w);
+        fputs("\"metadata\": [", w->out);
+        for (size_t i = 0; i < node->metadata_count; i++) {
+            SysmlMetadataUsage *m = node->metadata[i];
+            if (!m) continue;
+            if (i > 0) fputc(',', w->out);
+            write_newline(w);
+            write_indent(w);
+            fputs("  { \"type\": ", w->out);
+            write_string(w, m->type_ref);
+            if (m->feature_count > 0) {
+                fputs(", \"features\": {", w->out);
+                for (size_t j = 0; j < m->feature_count; j++) {
+                    SysmlMetadataFeature *f = m->features[j];
+                    if (!f) continue;
+                    if (j > 0) fputc(',', w->out);
+                    fputc(' ', w->out);
+                    write_string(w, f->name);
+                    fputs(": ", w->out);
+                    if (f->value) {
+                        write_string(w, f->value);
+                    } else {
+                        fputs("null", w->out);
+                    }
+                }
+                fputs(" }", w->out);
+            }
+            fputs(" }", w->out);
+        }
+        write_newline(w);
+        write_indent(w);
+        fputc(']', w->out);
+    }
+
     write_newline(w);
     w->indent_level--;
     write_indent(w);

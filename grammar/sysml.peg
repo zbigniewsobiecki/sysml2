@@ -527,6 +527,77 @@ static void sysml2_build_import(SysmlParserContext *ctx, const char *text, size_
         sysml2_build_add_import(ctx->build_ctx, kind, target);
     }
 }
+
+/* Capture prefix metadata (#MetadataName) */
+static void sysml2_capture_prefix_metadata(SysmlParserContext *ctx, const char *text, size_t len) {
+    if (!ctx->build_ctx || !text || len == 0) return;
+    /* Skip leading whitespace */
+    while (len > 0 && (*text == ' ' || *text == '\t')) { text++; len--; }
+    /* Trim trailing whitespace */
+    while (len > 0 && (text[len-1] == ' ' || text[len-1] == '\t')) len--;
+    if (len == 0) return;
+    /* Intern and add to pending */
+    const char *ref = sysml2_intern_n(ctx->build_ctx->intern, text, len);
+    if (ref) {
+        sysml2_build_add_pending_prefix_metadata(ctx->build_ctx, ref);
+    }
+}
+
+/* Start capturing a metadata usage (@Type { ... }) */
+static void sysml2_capture_start_metadata(SysmlParserContext *ctx, const char *text, size_t len) {
+    if (!ctx->build_ctx || !text || len == 0) return;
+    /* Skip leading whitespace */
+    while (len > 0 && (*text == ' ' || *text == '\t')) { text++; len--; }
+    /* Trim trailing whitespace */
+    while (len > 0 && (text[len-1] == ' ' || text[len-1] == '\t')) len--;
+    if (len == 0) return;
+    /* Intern and start metadata */
+    const char *ref = sysml2_intern_n(ctx->build_ctx->intern, text, len);
+    if (ref) {
+        sysml2_build_start_metadata(ctx->build_ctx, ref);
+    }
+}
+
+/* End capturing a metadata usage */
+static void sysml2_capture_end_metadata(SysmlParserContext *ctx) {
+    if (!ctx->build_ctx) return;
+    sysml2_build_end_metadata(ctx->build_ctx);
+}
+
+/* Helper: extract feature value from captured text (strips = or := prefix, stops at ; or }) */
+static const char *sysml2_extract_feature_value(SysmlParserContext *ctx, const char *text, size_t len) {
+    if (!ctx->build_ctx || !text || len == 0) return NULL;
+    /* Skip leading whitespace */
+    while (len > 0 && (*text == ' ' || *text == '\t')) { text++; len--; }
+    /* Skip assignment operator (= or :=) */
+    if (len > 0 && *text == '=') { text++; len--; }
+    else if (len > 1 && text[0] == ':' && text[1] == '=') { text += 2; len -= 2; }
+    /* Skip whitespace after operator */
+    while (len > 0 && (*text == ' ' || *text == '\t')) { text++; len--; }
+    /* Trim trailing whitespace and terminators */
+    while (len > 0 && (text[len-1] == ' ' || text[len-1] == '\t' ||
+                       text[len-1] == ';' || text[len-1] == '{' || text[len-1] == '}')) len--;
+    if (len == 0) return NULL;
+    return sysml2_intern_n(ctx->build_ctx->intern, text, len);
+}
+
+/* Capture metadata feature assignment (name = value) */
+static void sysml2_capture_metadata_feature(SysmlParserContext *ctx, const char *name_text, size_t name_len,
+                                            const char *value_text, size_t value_len) {
+    if (!ctx->build_ctx || !ctx->build_ctx->current_metadata) return;
+    if (!name_text || name_len == 0) return;
+
+    /* Skip leading whitespace in name */
+    while (name_len > 0 && (*name_text == ' ' || *name_text == '\t')) { name_text++; name_len--; }
+    /* Trim trailing whitespace in name */
+    while (name_len > 0 && (name_text[name_len-1] == ' ' || name_text[name_len-1] == '\t')) name_len--;
+    if (name_len == 0) return;
+
+    const char *name = sysml2_intern_n(ctx->build_ctx->intern, name_text, name_len);
+    const char *value = sysml2_extract_feature_value(ctx, value_text, value_len);
+
+    sysml2_build_metadata_add_feature(ctx->build_ctx, ctx->build_ctx->current_metadata, name, value);
+}
 }
 
 %auxil "SysmlParserContext *"
@@ -1083,12 +1154,13 @@ SuccessionFlowDefinition <- KerMLFeaturePrefix KW_SUCCESSION KW_FLOW < KerMLFlow
     KerMLTypeBody { sysml2_pop(auxil); }
 
 # Metadata
-PrefixMetadata <- HASH QualifiedName
-MetadataUsage <- AT QualifiedName MetadataUsageTail / AT? KW_METADATA Identification? (COLON QualifiedName)? (KW_ABOUT QualifiedName (COMMA QualifiedName)*)? MetadataBody
+PrefixMetadata <- HASH < QualifiedName > { sysml2_capture_prefix_metadata(auxil, $1, $1e - $1s); }
+MetadataUsage <- AT < QualifiedName > { sysml2_capture_start_metadata(auxil, $1, $1e - $1s); } MetadataUsageTail { sysml2_capture_end_metadata(auxil); }
+              / AT? KW_METADATA Identification? (COLON QualifiedName)? (KW_ABOUT QualifiedName (COMMA QualifiedName)*)? MetadataBody
 MetadataUsageTail <- (KW_ABOUT QualifiedName (COMMA QualifiedName)*)? (MetadataBody / SEMICOLON)
 MetadataBody <- SEMICOLON / LBRACE MetadataBodyElement* RBRACE
-MetadataBodyElement <- ShorthandFeatureMember / AnnotatingElement / MetadataBodyFeature
-MetadataBodyFeature <- MemberPrefix KW_REF? NAME FeatureValue? (SEMICOLON / MetadataBody)
+MetadataBodyElement <- MetadataBodyFeature / ShorthandFeatureMember / AnnotatingElement
+MetadataBodyFeature <- MemberPrefix KW_REF? < NAME > < FeatureValue? > (SEMICOLON / MetadataBody) { sysml2_capture_metadata_feature(auxil, $1, $1e - $1s, $2, $2e - $2s); }
 
 # Annotating Elements
 AnnotatingElement <- Comment / Documentation / TextualRepresentation / MetadataUsage

@@ -635,6 +635,112 @@ TEST(node_initializes_new_fields) {
     ASSERT_EQ(node->redefines_count, 0);
     ASSERT_NULL(node->references);
     ASSERT_EQ(node->references_count, 0);
+    ASSERT_NULL(node->metadata);
+    ASSERT_EQ(node->metadata_count, 0);
+    ASSERT_NULL(node->prefix_metadata);
+    ASSERT_EQ(node->prefix_metadata_count, 0);
+
+    sysml2_build_context_destroy(ctx);
+    sysml2_arena_destroy(&arena);
+}
+
+/* ========== Metadata Builder Tests ========== */
+
+TEST(metadata_usage_simple) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
+
+    SysmlMetadataUsage *meta = sysml2_build_metadata_usage(ctx, "SourceLink");
+    ASSERT_NOT_NULL(meta);
+    ASSERT_STR_EQ(meta->type_ref, "SourceLink");
+    ASSERT_EQ(meta->feature_count, 0);
+    ASSERT_EQ(meta->about_count, 0);
+
+    sysml2_build_context_destroy(ctx);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(metadata_usage_with_features) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
+
+    SysmlMetadataUsage *meta = sysml2_build_metadata_usage(ctx, "SourceLink");
+    sysml2_build_metadata_add_feature(ctx, meta, "filePath", "\"src/engine.cpp\"");
+    sysml2_build_metadata_add_feature(ctx, meta, "lineNumber", "42");
+
+    ASSERT_EQ(meta->feature_count, 2);
+    ASSERT_STR_EQ(meta->features[0]->name, "filePath");
+    ASSERT_STR_EQ(meta->features[0]->value, "\"src/engine.cpp\"");
+    ASSERT_STR_EQ(meta->features[1]->name, "lineNumber");
+    ASSERT_STR_EQ(meta->features[1]->value, "42");
+
+    sysml2_build_context_destroy(ctx);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(add_prefix_metadata_single) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
+
+    SysmlNode *node = sysml2_build_node(ctx, SYSML_KIND_PART_DEF, "Engine");
+    sysml2_build_add_prefix_metadata(ctx, node, "SourceLink");
+
+    ASSERT_EQ(node->prefix_metadata_count, 1);
+    ASSERT_STR_EQ(node->prefix_metadata[0], "SourceLink");
+
+    sysml2_build_context_destroy(ctx);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(add_prefix_metadata_multiple) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
+
+    SysmlNode *node = sysml2_build_node(ctx, SYSML_KIND_PART_DEF, "Engine");
+    sysml2_build_add_prefix_metadata(ctx, node, "Deprecated");
+    sysml2_build_add_prefix_metadata(ctx, node, "SourceLink");
+
+    ASSERT_EQ(node->prefix_metadata_count, 2);
+    ASSERT_STR_EQ(node->prefix_metadata[0], "Deprecated");
+    ASSERT_STR_EQ(node->prefix_metadata[1], "SourceLink");
+
+    sysml2_build_context_destroy(ctx);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(add_metadata_to_node) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
+
+    SysmlNode *node = sysml2_build_node(ctx, SYSML_KIND_PART_DEF, "Engine");
+    SysmlMetadataUsage *meta = sysml2_build_metadata_usage(ctx, "SourceLink");
+    sysml2_build_metadata_add_feature(ctx, meta, "filePath", "\"engine.cpp\"");
+    sysml2_build_add_metadata(ctx, node, meta);
+
+    ASSERT_EQ(node->metadata_count, 1);
+    ASSERT_STR_EQ(node->metadata[0]->type_ref, "SourceLink");
+    ASSERT_EQ(node->metadata[0]->feature_count, 1);
+    ASSERT_STR_EQ(node->metadata[0]->features[0]->name, "filePath");
 
     sysml2_build_context_destroy(ctx);
     sysml2_arena_destroy(&arena);
@@ -876,6 +982,14 @@ int main(void) {
     RUN_TEST(references_single);
     RUN_TEST(mixed_type_relationships);
     RUN_TEST(node_initializes_new_fields);
+
+    /* Metadata builder tests */
+    printf("\n  Metadata builder tests:\n");
+    RUN_TEST(metadata_usage_simple);
+    RUN_TEST(metadata_usage_with_features);
+    RUN_TEST(add_prefix_metadata_single);
+    RUN_TEST(add_prefix_metadata_multiple);
+    RUN_TEST(add_metadata_to_node);
 
     /* Relationship tests */
     printf("\n  Relationship tests:\n");

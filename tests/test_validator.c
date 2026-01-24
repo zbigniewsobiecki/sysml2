@@ -379,6 +379,12 @@ TEST(validate_e3004_duplicate_name) {
     part2->redefines_count = 0;
     part2->references = NULL;
     part2->references_count = 0;
+    part2->metadata = NULL;
+    part2->metadata_count = 0;
+    part2->prefix_metadata = NULL;
+    part2->prefix_metadata_count = 0;
+    part2->leading_trivia = NULL;
+    part2->trailing_trivia = NULL;
     part2->loc.line = 8;
     sysml2_build_add_element(ctx.build_ctx, part2);
 

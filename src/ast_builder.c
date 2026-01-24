@@ -53,6 +53,14 @@ SysmlBuildContext *sysml2_build_context_create(
     ctx->pending_trivia_head = NULL;
     ctx->pending_trivia_tail = NULL;
 
+    /* Initialize pending prefix metadata */
+    ctx->pending_prefix_metadata_capacity = 8;
+    ctx->pending_prefix_metadata = SYSML2_ARENA_NEW_ARRAY(arena, const char *, ctx->pending_prefix_metadata_capacity);
+    ctx->pending_prefix_metadata_count = 0;
+
+    /* Initialize current metadata */
+    ctx->current_metadata = NULL;
+
     return ctx;
 }
 
@@ -186,11 +194,26 @@ SysmlNode *sysml2_build_node(
     node->references = NULL;
     node->references_count = 0;
     node->loc = SYSML2_LOC_INVALID;
+    node->metadata = NULL;
+    node->metadata_count = 0;
+    node->prefix_metadata = NULL;
+    node->prefix_metadata_count = 0;
     node->leading_trivia = NULL;
     node->trailing_trivia = NULL;
 
     /* Attach any pending trivia as leading trivia */
     sysml2_build_attach_pending_trivia(ctx, node);
+
+    /* Attach any pending prefix metadata */
+    if (ctx->pending_prefix_metadata_count > 0) {
+        node->prefix_metadata = SYSML2_ARENA_NEW_ARRAY(ctx->arena, const char *, ctx->pending_prefix_metadata_count);
+        if (node->prefix_metadata) {
+            memcpy(node->prefix_metadata, ctx->pending_prefix_metadata,
+                   ctx->pending_prefix_metadata_count * sizeof(const char *));
+            node->prefix_metadata_count = ctx->pending_prefix_metadata_count;
+        }
+        ctx->pending_prefix_metadata_count = 0;
+    }
 
     return node;
 }
@@ -491,6 +514,219 @@ void sysml2_build_attach_pending_trivia(SysmlBuildContext *ctx, SysmlNode *node)
         ctx->pending_trivia_head = NULL;
         ctx->pending_trivia_tail = NULL;
     }
+}
+
+/*
+ * Create a metadata usage
+ */
+SysmlMetadataUsage *sysml2_build_metadata_usage(
+    SysmlBuildContext *ctx,
+    const char *type_ref
+) {
+    if (!ctx || !type_ref) return NULL;
+
+    SysmlMetadataUsage *meta = SYSML2_ARENA_NEW(ctx->arena, SysmlMetadataUsage);
+    if (!meta) return NULL;
+
+    meta->type_ref = sysml2_intern(ctx->intern, type_ref);
+    meta->about = NULL;
+    meta->about_count = 0;
+    meta->features = NULL;
+    meta->feature_count = 0;
+
+    return meta;
+}
+
+/*
+ * Add a feature to metadata usage
+ */
+void sysml2_build_metadata_add_feature(
+    SysmlBuildContext *ctx,
+    SysmlMetadataUsage *meta,
+    const char *name,
+    const char *value
+) {
+    if (!ctx || !meta || !name) return;
+
+    /* Create feature */
+    SysmlMetadataFeature *feature = SYSML2_ARENA_NEW(ctx->arena, SysmlMetadataFeature);
+    if (!feature) return;
+
+    feature->name = sysml2_intern(ctx->intern, name);
+    feature->value = value ? sysml2_intern(ctx->intern, value) : NULL;
+
+    /* Grow features array */
+    size_t new_count = meta->feature_count + 1;
+    SysmlMetadataFeature **new_features = SYSML2_ARENA_NEW_ARRAY(ctx->arena, SysmlMetadataFeature *, new_count);
+    if (!new_features) return;
+
+    /* Copy existing features */
+    if (meta->features && meta->feature_count > 0) {
+        memcpy(new_features, meta->features, meta->feature_count * sizeof(SysmlMetadataFeature *));
+    }
+
+    /* Add new feature */
+    new_features[meta->feature_count] = feature;
+    meta->features = new_features;
+    meta->feature_count = new_count;
+}
+
+/*
+ * Add an "about" target to metadata
+ */
+void sysml2_build_metadata_add_about(
+    SysmlBuildContext *ctx,
+    SysmlMetadataUsage *meta,
+    const char *target_ref
+) {
+    if (!ctx || !meta || !target_ref) return;
+
+    /* Intern the target reference */
+    const char *interned_ref = sysml2_intern(ctx->intern, target_ref);
+
+    /* Grow about array */
+    size_t new_count = meta->about_count + 1;
+    const char **new_about = SYSML2_ARENA_NEW_ARRAY(ctx->arena, const char *, new_count);
+    if (!new_about) return;
+
+    /* Copy existing about targets */
+    if (meta->about && meta->about_count > 0) {
+        memcpy(new_about, meta->about, meta->about_count * sizeof(const char *));
+    }
+
+    /* Add new about target */
+    new_about[meta->about_count] = interned_ref;
+    meta->about = new_about;
+    meta->about_count = new_count;
+}
+
+/*
+ * Attach metadata to a node
+ */
+void sysml2_build_add_metadata(
+    SysmlBuildContext *ctx,
+    SysmlNode *node,
+    SysmlMetadataUsage *meta
+) {
+    if (!ctx || !node || !meta) return;
+
+    /* Grow metadata array */
+    size_t new_count = node->metadata_count + 1;
+    SysmlMetadataUsage **new_metadata = SYSML2_ARENA_NEW_ARRAY(ctx->arena, SysmlMetadataUsage *, new_count);
+    if (!new_metadata) return;
+
+    /* Copy existing metadata */
+    if (node->metadata && node->metadata_count > 0) {
+        memcpy(new_metadata, node->metadata, node->metadata_count * sizeof(SysmlMetadataUsage *));
+    }
+
+    /* Add new metadata */
+    new_metadata[node->metadata_count] = meta;
+    node->metadata = new_metadata;
+    node->metadata_count = new_count;
+}
+
+/*
+ * Add prefix metadata to a node
+ */
+void sysml2_build_add_prefix_metadata(
+    SysmlBuildContext *ctx,
+    SysmlNode *node,
+    const char *metadata_ref
+) {
+    if (!ctx || !node || !metadata_ref) return;
+
+    /* Intern the metadata reference */
+    const char *interned_ref = sysml2_intern(ctx->intern, metadata_ref);
+
+    /* Grow prefix_metadata array */
+    size_t new_count = node->prefix_metadata_count + 1;
+    const char **new_prefix_metadata = SYSML2_ARENA_NEW_ARRAY(ctx->arena, const char *, new_count);
+    if (!new_prefix_metadata) return;
+
+    /* Copy existing prefix metadata */
+    if (node->prefix_metadata && node->prefix_metadata_count > 0) {
+        memcpy(new_prefix_metadata, node->prefix_metadata, node->prefix_metadata_count * sizeof(const char *));
+    }
+
+    /* Add new prefix metadata */
+    new_prefix_metadata[node->prefix_metadata_count] = interned_ref;
+    node->prefix_metadata = new_prefix_metadata;
+    node->prefix_metadata_count = new_count;
+}
+
+/*
+ * Add a pending prefix metadata that will be attached to the next node
+ */
+void sysml2_build_add_pending_prefix_metadata(
+    SysmlBuildContext *ctx,
+    const char *metadata_ref
+) {
+    if (!ctx || !metadata_ref) return;
+
+    /* Grow array if needed */
+    if (ctx->pending_prefix_metadata_count >= ctx->pending_prefix_metadata_capacity) {
+        size_t new_capacity = ctx->pending_prefix_metadata_capacity * 2;
+        const char **new_pending = SYSML2_ARENA_NEW_ARRAY(ctx->arena, const char *, new_capacity);
+        if (!new_pending) return;
+        if (ctx->pending_prefix_metadata) {
+            memcpy(new_pending, ctx->pending_prefix_metadata,
+                   ctx->pending_prefix_metadata_count * sizeof(const char *));
+        }
+        ctx->pending_prefix_metadata = new_pending;
+        ctx->pending_prefix_metadata_capacity = new_capacity;
+    }
+
+    /* Add the prefix metadata */
+    ctx->pending_prefix_metadata[ctx->pending_prefix_metadata_count++] =
+        sysml2_intern(ctx->intern, metadata_ref);
+}
+
+/*
+ * Start building a metadata usage
+ */
+SysmlMetadataUsage *sysml2_build_start_metadata(
+    SysmlBuildContext *ctx,
+    const char *type_ref
+) {
+    if (!ctx || !type_ref) return NULL;
+
+    ctx->current_metadata = sysml2_build_metadata_usage(ctx, type_ref);
+    return ctx->current_metadata;
+}
+
+/*
+ * Finish building a metadata usage and attach to current scope's node
+ */
+void sysml2_build_end_metadata(SysmlBuildContext *ctx) {
+    if (!ctx || !ctx->current_metadata) return;
+
+    /* Find the current scope's node (most recently added element in current scope) */
+    const char *current_scope = sysml2_build_current_scope(ctx);
+    if (current_scope) {
+        /* Find the node with this ID */
+        for (size_t i = ctx->element_count; i > 0; i--) {
+            SysmlNode *node = ctx->elements[i - 1];
+            if (node->id == current_scope) {
+                sysml2_build_add_metadata(ctx, node, ctx->current_metadata);
+                break;
+            }
+        }
+    }
+
+    ctx->current_metadata = NULL;
+}
+
+/*
+ * Add a feature to the current metadata usage being built
+ */
+void sysml2_build_current_metadata_add_feature(
+    SysmlBuildContext *ctx,
+    const char *name,
+    const char *value
+) {
+    if (!ctx || !ctx->current_metadata || !name) return;
+    sysml2_build_metadata_add_feature(ctx, ctx->current_metadata, name, value);
 }
 
 /*

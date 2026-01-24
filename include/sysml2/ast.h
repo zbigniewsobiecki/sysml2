@@ -177,6 +177,25 @@ typedef enum {
 #define SYSML_KIND_IS_PACKAGE(k) ((k) >= 0x0100 && (k) < 0x0200)
 
 /*
+ * Metadata Feature - attribute assignment within a metadata usage
+ */
+typedef struct SysmlMetadataFeature {
+    const char *name;               /* Feature name (e.g., "filePath") */
+    const char *value;              /* String value or expression */
+} SysmlMetadataFeature;
+
+/*
+ * Metadata Usage - applied metadata (@Type { attr = val; })
+ */
+typedef struct SysmlMetadataUsage {
+    const char *type_ref;           /* Metadata type (e.g., "SourceLink") */
+    const char **about;             /* Target elements if standalone */
+    size_t about_count;
+    SysmlMetadataFeature **features; /* Attribute assignments */
+    size_t feature_count;
+} SysmlMetadataUsage;
+
+/*
  * AST Node - represents an element in the semantic graph
  *
  * Uses interned strings for memory efficiency.
@@ -202,6 +221,14 @@ typedef struct SysmlNode {
 
     /* Source location for debugging */
     Sysml2SourceLoc loc;
+
+    /* Applied metadata inside element body (@Metadata { ... }) */
+    SysmlMetadataUsage **metadata;
+    size_t metadata_count;
+
+    /* Prefix metadata before element (#Metadata) */
+    const char **prefix_metadata;
+    size_t prefix_metadata_count;
 
     /* Trivia for pretty printing */
     SysmlTrivia *leading_trivia;   /* Comments before node */
