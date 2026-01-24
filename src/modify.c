@@ -560,6 +560,316 @@ SysmlSemanticModel *sysml2_modify_create_scope_chain(
 }
 
 /*
+ * Deep copy a metadata feature
+ */
+static SysmlMetadataFeature *sysml2_modify_copy_metadata_feature(
+    SysmlMetadataFeature *src,
+    Sysml2Arena *arena
+) {
+    if (!src) return NULL;
+
+    SysmlMetadataFeature *dst = sysml2_arena_alloc(arena, sizeof(SysmlMetadataFeature));
+    if (!dst) return NULL;
+
+    /* Strings are interned - just copy pointers */
+    dst->name = src->name;
+    dst->value = src->value;
+
+    return dst;
+}
+
+/*
+ * Deep copy a metadata usage
+ */
+static SysmlMetadataUsage *sysml2_modify_copy_metadata_usage(
+    SysmlMetadataUsage *src,
+    Sysml2Arena *arena
+) {
+    if (!src) return NULL;
+
+    SysmlMetadataUsage *dst = sysml2_arena_alloc(arena, sizeof(SysmlMetadataUsage));
+    if (!dst) return NULL;
+
+    /* Copy scalars and interned strings */
+    dst->type_ref = src->type_ref;
+    dst->about_count = src->about_count;
+    dst->feature_count = src->feature_count;
+
+    /* Deep copy about array */
+    if (src->about_count > 0 && src->about) {
+        dst->about = sysml2_arena_alloc(arena, src->about_count * sizeof(const char *));
+        if (!dst->about) return NULL;
+        memcpy(dst->about, src->about, src->about_count * sizeof(const char *));
+    } else {
+        dst->about = NULL;
+    }
+
+    /* Deep copy features array */
+    if (src->feature_count > 0 && src->features) {
+        dst->features = sysml2_arena_alloc(arena, src->feature_count * sizeof(SysmlMetadataFeature *));
+        if (!dst->features) return NULL;
+        for (size_t i = 0; i < src->feature_count; i++) {
+            dst->features[i] = sysml2_modify_copy_metadata_feature(src->features[i], arena);
+        }
+    } else {
+        dst->features = NULL;
+    }
+
+    return dst;
+}
+
+/*
+ * Deep copy a connector end (struct, not pointer)
+ */
+static void sysml2_modify_copy_connector_end(
+    SysmlConnectorEnd *dst,
+    const SysmlConnectorEnd *src
+) {
+    /* Interned strings - just copy pointers */
+    dst->target = src->target;
+    dst->feature_chain = src->feature_chain;
+    dst->multiplicity = src->multiplicity;
+}
+
+/*
+ * Deep copy a statement (forward declaration for recursion)
+ */
+static SysmlStatement *sysml2_modify_copy_statement(
+    SysmlStatement *src,
+    Sysml2Arena *arena
+);
+
+/*
+ * Deep copy a statement
+ */
+static SysmlStatement *sysml2_modify_copy_statement(
+    SysmlStatement *src,
+    Sysml2Arena *arena
+) {
+    if (!src) return NULL;
+
+    SysmlStatement *dst = sysml2_arena_alloc(arena, sizeof(SysmlStatement));
+    if (!dst) return NULL;
+
+    /* Copy scalars */
+    dst->kind = src->kind;
+    dst->loc = src->loc;
+    dst->nested_count = src->nested_count;
+
+    /* Copy interned strings */
+    dst->raw_text = src->raw_text;
+    dst->name = src->name;
+    dst->guard = src->guard;
+    dst->payload = src->payload;
+
+    /* Copy connector ends (embedded structs) */
+    sysml2_modify_copy_connector_end(&dst->source, &src->source);
+    sysml2_modify_copy_connector_end(&dst->target, &src->target);
+
+    /* Deep copy nested statements */
+    if (src->nested_count > 0 && src->nested) {
+        dst->nested = sysml2_arena_alloc(arena, src->nested_count * sizeof(SysmlStatement *));
+        if (!dst->nested) return NULL;
+        for (size_t i = 0; i < src->nested_count; i++) {
+            dst->nested[i] = sysml2_modify_copy_statement(src->nested[i], arena);
+        }
+    } else {
+        dst->nested = NULL;
+    }
+
+    return dst;
+}
+
+/*
+ * Deep copy a trivia linked list
+ */
+static SysmlTrivia *sysml2_modify_copy_trivia(
+    SysmlTrivia *src,
+    Sysml2Arena *arena
+) {
+    if (!src) return NULL;
+
+    SysmlTrivia *dst = sysml2_arena_alloc(arena, sizeof(SysmlTrivia));
+    if (!dst) return NULL;
+
+    dst->kind = src->kind;
+    dst->text = src->text;  /* Interned */
+    dst->loc = src->loc;
+
+    /* Recursively copy next in linked list */
+    dst->next = sysml2_modify_copy_trivia(src->next, arena);
+
+    return dst;
+}
+
+/*
+ * Deep copy a named comment
+ */
+static SysmlNamedComment *sysml2_modify_copy_named_comment(
+    SysmlNamedComment *src,
+    Sysml2Arena *arena
+) {
+    if (!src) return NULL;
+
+    SysmlNamedComment *dst = sysml2_arena_alloc(arena, sizeof(SysmlNamedComment));
+    if (!dst) return NULL;
+
+    /* Copy scalars and interned strings */
+    dst->id = src->id;
+    dst->name = src->name;
+    dst->locale = src->locale;
+    dst->text = src->text;
+    dst->loc = src->loc;
+    dst->about_count = src->about_count;
+
+    /* Deep copy about array */
+    if (src->about_count > 0 && src->about) {
+        dst->about = sysml2_arena_alloc(arena, src->about_count * sizeof(const char *));
+        if (!dst->about) return NULL;
+        memcpy(dst->about, src->about, src->about_count * sizeof(const char *));
+    } else {
+        dst->about = NULL;
+    }
+
+    return dst;
+}
+
+/*
+ * Deep copy a textual representation
+ */
+static SysmlTextualRep *sysml2_modify_copy_textual_rep(
+    SysmlTextualRep *src,
+    Sysml2Arena *arena
+) {
+    if (!src) return NULL;
+
+    SysmlTextualRep *dst = sysml2_arena_alloc(arena, sizeof(SysmlTextualRep));
+    if (!dst) return NULL;
+
+    /* All fields are interned strings or scalars */
+    dst->id = src->id;
+    dst->name = src->name;
+    dst->language = src->language;
+    dst->text = src->text;
+    dst->loc = src->loc;
+
+    return dst;
+}
+
+/*
+ * Deep copy a node with all its pointer arrays
+ */
+static SysmlNode *sysml2_modify_deep_copy_node(
+    SysmlNode *src,
+    const char *target_scope,
+    Sysml2Arena *arena,
+    Sysml2Intern *intern
+) {
+    if (!src) return NULL;
+
+    SysmlNode *dst = sysml2_arena_alloc(arena, sizeof(SysmlNode));
+    if (!dst) return NULL;
+
+    /* Start with shallow copy for scalar fields */
+    memcpy(dst, src, sizeof(SysmlNode));
+
+    /* Remap IDs */
+    dst->id = sysml2_modify_remap_id(src->id, target_scope, arena, intern);
+    if (src->parent_id) {
+        dst->parent_id = sysml2_modify_remap_id(src->parent_id, target_scope, arena, intern);
+    } else {
+        /* Top-level fragment element → parent is target scope */
+        dst->parent_id = sysml2_intern(intern, target_scope);
+    }
+
+    /* Deep copy typed_by array */
+    if (src->typed_by_count > 0 && src->typed_by) {
+        dst->typed_by = sysml2_arena_alloc(arena, src->typed_by_count * sizeof(const char *));
+        if (!dst->typed_by) return NULL;
+        memcpy(dst->typed_by, src->typed_by, src->typed_by_count * sizeof(const char *));
+    }
+
+    /* Deep copy specializes array */
+    if (src->specializes_count > 0 && src->specializes) {
+        dst->specializes = sysml2_arena_alloc(arena, src->specializes_count * sizeof(const char *));
+        if (!dst->specializes) return NULL;
+        memcpy(dst->specializes, src->specializes, src->specializes_count * sizeof(const char *));
+    }
+
+    /* Deep copy redefines array */
+    if (src->redefines_count > 0 && src->redefines) {
+        dst->redefines = sysml2_arena_alloc(arena, src->redefines_count * sizeof(const char *));
+        if (!dst->redefines) return NULL;
+        memcpy(dst->redefines, src->redefines, src->redefines_count * sizeof(const char *));
+    }
+
+    /* Deep copy references array */
+    if (src->references_count > 0 && src->references) {
+        dst->references = sysml2_arena_alloc(arena, src->references_count * sizeof(const char *));
+        if (!dst->references) return NULL;
+        memcpy(dst->references, src->references, src->references_count * sizeof(const char *));
+    }
+
+    /* Deep copy metadata array */
+    if (src->metadata_count > 0 && src->metadata) {
+        dst->metadata = sysml2_arena_alloc(arena, src->metadata_count * sizeof(SysmlMetadataUsage *));
+        if (!dst->metadata) return NULL;
+        for (size_t i = 0; i < src->metadata_count; i++) {
+            dst->metadata[i] = sysml2_modify_copy_metadata_usage(src->metadata[i], arena);
+        }
+    }
+
+    /* Deep copy prefix_metadata array (interned strings) */
+    if (src->prefix_metadata_count > 0 && src->prefix_metadata) {
+        dst->prefix_metadata = sysml2_arena_alloc(arena, src->prefix_metadata_count * sizeof(const char *));
+        if (!dst->prefix_metadata) return NULL;
+        memcpy(dst->prefix_metadata, src->prefix_metadata, src->prefix_metadata_count * sizeof(const char *));
+    }
+
+    /* Deep copy prefix_applied_metadata array */
+    if (src->prefix_applied_metadata_count > 0 && src->prefix_applied_metadata) {
+        dst->prefix_applied_metadata = sysml2_arena_alloc(arena, src->prefix_applied_metadata_count * sizeof(SysmlMetadataUsage *));
+        if (!dst->prefix_applied_metadata) return NULL;
+        for (size_t i = 0; i < src->prefix_applied_metadata_count; i++) {
+            dst->prefix_applied_metadata[i] = sysml2_modify_copy_metadata_usage(src->prefix_applied_metadata[i], arena);
+        }
+    }
+
+    /* Deep copy trivia linked lists */
+    dst->leading_trivia = sysml2_modify_copy_trivia(src->leading_trivia, arena);
+    dst->trailing_trivia = sysml2_modify_copy_trivia(src->trailing_trivia, arena);
+
+    /* Deep copy body_stmts array */
+    if (src->body_stmt_count > 0 && src->body_stmts) {
+        dst->body_stmts = sysml2_arena_alloc(arena, src->body_stmt_count * sizeof(SysmlStatement *));
+        if (!dst->body_stmts) return NULL;
+        for (size_t i = 0; i < src->body_stmt_count; i++) {
+            dst->body_stmts[i] = sysml2_modify_copy_statement(src->body_stmts[i], arena);
+        }
+    }
+
+    /* Deep copy comments array */
+    if (src->comment_count > 0 && src->comments) {
+        dst->comments = sysml2_arena_alloc(arena, src->comment_count * sizeof(SysmlNamedComment *));
+        if (!dst->comments) return NULL;
+        for (size_t i = 0; i < src->comment_count; i++) {
+            dst->comments[i] = sysml2_modify_copy_named_comment(src->comments[i], arena);
+        }
+    }
+
+    /* Deep copy textual_reps array */
+    if (src->textual_rep_count > 0 && src->textual_reps) {
+        dst->textual_reps = sysml2_arena_alloc(arena, src->textual_rep_count * sizeof(SysmlTextualRep *));
+        if (!dst->textual_reps) return NULL;
+        for (size_t i = 0; i < src->textual_rep_count; i++) {
+            dst->textual_reps[i] = sysml2_modify_copy_textual_rep(src->textual_reps[i], arena);
+        }
+    }
+
+    return dst;
+}
+
+/*
  * Merge a fragment into a model at the specified scope
  */
 SysmlSemanticModel *sysml2_modify_merge_fragment(
@@ -675,27 +985,14 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
         }
     }
 
-    /* Step 5: Add remapped fragment elements */
+    /* Step 5: Add remapped fragment elements (deep copy to avoid pointer aliasing) */
     for (size_t i = 0; i < fragment->element_count; i++) {
         SysmlNode *frag_node = fragment->elements[i];
         if (!frag_node) continue;
 
-        /* Create new node with remapped IDs */
-        SysmlNode *new_node = sysml2_arena_alloc(arena, sizeof(SysmlNode));
+        /* Deep copy node with all pointer arrays and remapped IDs */
+        SysmlNode *new_node = sysml2_modify_deep_copy_node(frag_node, target_scope, arena, intern);
         if (!new_node) return NULL;
-
-        memcpy(new_node, frag_node, sizeof(SysmlNode));
-
-        /* Remap IDs */
-        new_node->id = sysml2_modify_remap_id(frag_node->id, target_scope, arena, intern);
-
-        /* Remap parent ID */
-        if (frag_node->parent_id) {
-            new_node->parent_id = sysml2_modify_remap_id(frag_node->parent_id, target_scope, arena, intern);
-        } else {
-            /* Top-level fragment element → parent is target scope */
-            new_node->parent_id = sysml2_intern(intern, target_scope);
-        }
 
         /* Check if this was a replacement */
         if (id_in_set(new_node->id, replaced_ids, replaced_count)) {

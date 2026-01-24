@@ -177,6 +177,34 @@ typedef enum {
 /* Check if a kind is a package type */
 #define SYSML_KIND_IS_PACKAGE(k) ((k) >= 0x0100 && (k) < 0x0200)
 
+/* Check if a kind is a KerML classifier (can type features per KerML spec) */
+#define SYSML_KIND_IS_KERML_CLASSIFIER(k) \
+    ((k) == SYSML_KIND_TYPE || \
+     (k) == SYSML_KIND_CLASSIFIER || \
+     (k) == SYSML_KIND_CLASS || \
+     (k) == SYSML_KIND_STRUCTURE || \
+     (k) == SYSML_KIND_METACLASS || \
+     (k) == SYSML_KIND_ASSOCIATION || \
+     (k) == SYSML_KIND_ASSOC_STRUCT || \
+     (k) == SYSML_KIND_INTERACTION || \
+     (k) == SYSML_KIND_BEHAVIOR || \
+     (k) == SYSML_KIND_FUNCTION || \
+     (k) == SYSML_KIND_PREDICATE || \
+     (k) == SYSML_KIND_DATATYPE)
+
+/* Check if a kind is a KerML feature (can be typed by any classifier/definition) */
+#define SYSML_KIND_IS_KERML_FEATURE(k) \
+    ((k) == SYSML_KIND_FEATURE || \
+     (k) == SYSML_KIND_STEP || \
+     (k) == SYSML_KIND_EXPRESSION || \
+     (k) == SYSML_KIND_BOOL_EXPRESSION || \
+     (k) == SYSML_KIND_INVARIANT || \
+     (k) == SYSML_KIND_CONNECTOR || \
+     (k) == SYSML_KIND_BINDING_CONNECTOR || \
+     (k) == SYSML_KIND_SUCCESSION || \
+     (k) == SYSML_KIND_KERML_FLOW || \
+     (k) == SYSML_KIND_SUCCESSION_FLOW)
+
 /*
  * Statement Kind Enumeration
  *

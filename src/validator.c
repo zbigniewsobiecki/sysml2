@@ -18,6 +18,38 @@ bool sysml2_is_type_compatible(SysmlNodeKind usage_kind, SysmlNodeKind def_kind)
     /* Package types can contain anything */
     if (SYSML_KIND_IS_PACKAGE(def_kind)) return true;
 
+    /* KerML classifiers can type any feature-like usage per KerML spec.
+     * Class, Structure, Behavior, etc. can type features. */
+    if (SYSML_KIND_IS_KERML_CLASSIFIER(def_kind)) {
+        return true;
+    }
+
+    /* Metadata definitions can type metadata usages and references */
+    if (def_kind == SYSML_KIND_METADATA_DEF) {
+        return true;
+    }
+
+    /* KerML features can be typed by any definition per KerML spec. */
+    if (SYSML_KIND_IS_KERML_FEATURE(usage_kind) && SYSML_KIND_IS_DEFINITION(def_kind)) {
+        return true;
+    }
+
+    /* Parameters can be typed by any definition - they represent part params,
+     * item params, attribute params, etc. depending on their type. */
+    if (usage_kind == SYSML_KIND_PARAMETER && SYSML_KIND_IS_DEFINITION(def_kind)) {
+        return true;
+    }
+
+    /* Reference usages can reference any definition */
+    if (usage_kind == SYSML_KIND_REFERENCE_USAGE && SYSML_KIND_IS_DEFINITION(def_kind)) {
+        return true;
+    }
+
+    /* Usages can also be typed by KerML features (redefining/subsetting) */
+    if (SYSML_KIND_IS_USAGE(usage_kind) && SYSML_KIND_IS_KERML_FEATURE(def_kind)) {
+        return true;
+    }
+
     /* Map usage kinds to compatible definition kinds */
     switch (usage_kind) {
         case SYSML_KIND_PART_USAGE:
@@ -26,10 +58,12 @@ bool sysml2_is_type_compatible(SysmlNodeKind usage_kind, SysmlNodeKind def_kind)
                    def_kind == SYSML_KIND_OCCURRENCE_DEF;
 
         case SYSML_KIND_ACTION_USAGE:
-            return def_kind == SYSML_KIND_ACTION_DEF;
+            return def_kind == SYSML_KIND_ACTION_DEF ||
+                   def_kind == SYSML_KIND_CALC_DEF;
 
         case SYSML_KIND_STATE_USAGE:
-            return def_kind == SYSML_KIND_STATE_DEF;
+            return def_kind == SYSML_KIND_STATE_DEF ||
+                   def_kind == SYSML_KIND_ACTION_DEF;
 
         case SYSML_KIND_PORT_USAGE:
             return def_kind == SYSML_KIND_PORT_DEF;
@@ -39,24 +73,26 @@ bool sysml2_is_type_compatible(SysmlNodeKind usage_kind, SysmlNodeKind def_kind)
                    def_kind == SYSML_KIND_ENUMERATION_DEF ||
                    def_kind == SYSML_KIND_DATATYPE;
 
-        case SYSML_KIND_PARAMETER:
-            /* Constraint/action/calc parameters can be typed like attributes */
-            return def_kind == SYSML_KIND_ATTRIBUTE_DEF ||
-                   def_kind == SYSML_KIND_ENUMERATION_DEF ||
-                   def_kind == SYSML_KIND_DATATYPE;
-
         case SYSML_KIND_REQUIREMENT_USAGE:
-            return def_kind == SYSML_KIND_REQUIREMENT_DEF;
+            return def_kind == SYSML_KIND_REQUIREMENT_DEF ||
+                   def_kind == SYSML_KIND_CONCERN_DEF;
 
         case SYSML_KIND_CONSTRAINT_USAGE:
             return def_kind == SYSML_KIND_CONSTRAINT_DEF;
 
         case SYSML_KIND_ITEM_USAGE:
             return def_kind == SYSML_KIND_ITEM_DEF ||
+                   def_kind == SYSML_KIND_PART_DEF ||
                    def_kind == SYSML_KIND_OCCURRENCE_DEF;
 
+        case SYSML_KIND_OCCURRENCE_USAGE:
+            return def_kind == SYSML_KIND_OCCURRENCE_DEF ||
+                   def_kind == SYSML_KIND_ITEM_DEF ||
+                   def_kind == SYSML_KIND_PART_DEF;
+
         case SYSML_KIND_CONNECTION_USAGE:
-            return def_kind == SYSML_KIND_CONNECTION_DEF;
+            return def_kind == SYSML_KIND_CONNECTION_DEF ||
+                   def_kind == SYSML_KIND_INTERFACE_DEF;
 
         case SYSML_KIND_FLOW_USAGE:
             return def_kind == SYSML_KIND_FLOW_DEF;
@@ -68,19 +104,24 @@ bool sysml2_is_type_compatible(SysmlNodeKind usage_kind, SysmlNodeKind def_kind)
             return def_kind == SYSML_KIND_ALLOCATION_DEF;
 
         case SYSML_KIND_CALC_USAGE:
-            return def_kind == SYSML_KIND_CALC_DEF;
+            return def_kind == SYSML_KIND_CALC_DEF ||
+                   def_kind == SYSML_KIND_ACTION_DEF;
 
         case SYSML_KIND_CASE_USAGE:
-            return def_kind == SYSML_KIND_CASE_DEF;
+            return def_kind == SYSML_KIND_CASE_DEF ||
+                   def_kind == SYSML_KIND_CALC_DEF;
 
         case SYSML_KIND_ANALYSIS_USAGE:
-            return def_kind == SYSML_KIND_ANALYSIS_DEF;
+            return def_kind == SYSML_KIND_ANALYSIS_DEF ||
+                   def_kind == SYSML_KIND_CASE_DEF;
 
         case SYSML_KIND_VERIFICATION_USAGE:
-            return def_kind == SYSML_KIND_VERIFICATION_DEF;
+            return def_kind == SYSML_KIND_VERIFICATION_DEF ||
+                   def_kind == SYSML_KIND_CASE_DEF;
 
         case SYSML_KIND_USE_CASE_USAGE:
-            return def_kind == SYSML_KIND_USE_CASE_DEF;
+            return def_kind == SYSML_KIND_USE_CASE_DEF ||
+                   def_kind == SYSML_KIND_CASE_DEF;
 
         case SYSML_KIND_VIEW_USAGE:
             return def_kind == SYSML_KIND_VIEW_DEF;
@@ -92,7 +133,13 @@ bool sysml2_is_type_compatible(SysmlNodeKind usage_kind, SysmlNodeKind def_kind)
             return def_kind == SYSML_KIND_RENDERING_DEF;
 
         case SYSML_KIND_CONCERN_USAGE:
-            return def_kind == SYSML_KIND_CONCERN_DEF;
+            return def_kind == SYSML_KIND_CONCERN_DEF ||
+                   def_kind == SYSML_KIND_REQUIREMENT_DEF;
+
+        case SYSML_KIND_EVENT_USAGE:
+            return def_kind == SYSML_KIND_OCCURRENCE_DEF ||
+                   def_kind == SYSML_KIND_ITEM_DEF ||
+                   def_kind == SYSML_KIND_PART_DEF;
 
         default:
             /* For definitions specializing other definitions, check same category */

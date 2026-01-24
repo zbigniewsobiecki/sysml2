@@ -265,7 +265,8 @@ TEST(type_compat_action_def) {
 
 TEST(type_compat_state_def) {
     ASSERT(sysml2_is_type_compatible(SYSML_KIND_STATE_USAGE, SYSML_KIND_STATE_DEF));
-    ASSERT(!sysml2_is_type_compatible(SYSML_KIND_STATE_USAGE, SYSML_KIND_ACTION_DEF));
+    /* State usages can also be typed by action defs (for StateAction patterns) */
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_STATE_USAGE, SYSML_KIND_ACTION_DEF));
 }
 
 TEST(type_compat_port_def) {
@@ -281,6 +282,71 @@ TEST(type_compat_requirement_def) {
 TEST(type_compat_package_allows_all) {
     ASSERT(sysml2_is_type_compatible(SYSML_KIND_PART_USAGE, SYSML_KIND_PACKAGE));
     ASSERT(sysml2_is_type_compatible(SYSML_KIND_ACTION_USAGE, SYSML_KIND_PACKAGE));
+}
+
+/* KerML type compatibility - features can be typed by KerML classifiers */
+TEST(type_compat_kerml_class) {
+    /* Feature typed by Class should be valid */
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_FEATURE, SYSML_KIND_CLASS));
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_PART_USAGE, SYSML_KIND_CLASS));
+}
+
+TEST(type_compat_kerml_structure) {
+    /* Feature typed by Structure should be valid */
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_FEATURE, SYSML_KIND_STRUCTURE));
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_PART_USAGE, SYSML_KIND_STRUCTURE));
+}
+
+TEST(type_compat_kerml_behavior) {
+    /* Feature typed by Behavior should be valid */
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_FEATURE, SYSML_KIND_BEHAVIOR));
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_STEP, SYSML_KIND_BEHAVIOR));
+}
+
+TEST(type_compat_kerml_type) {
+    /* Feature typed by generic Type should be valid */
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_FEATURE, SYSML_KIND_TYPE));
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_PART_USAGE, SYSML_KIND_TYPE));
+}
+
+TEST(type_compat_kerml_classifier) {
+    /* Feature typed by Classifier should be valid */
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_FEATURE, SYSML_KIND_CLASSIFIER));
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_PART_USAGE, SYSML_KIND_CLASSIFIER));
+}
+
+TEST(type_compat_kerml_association) {
+    /* Connector typed by Association should be valid */
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_CONNECTOR, SYSML_KIND_ASSOCIATION));
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_CONNECTOR, SYSML_KIND_ASSOC_STRUCT));
+}
+
+TEST(type_compat_kerml_interaction) {
+    /* Feature typed by Interaction should be valid */
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_FEATURE, SYSML_KIND_INTERACTION));
+}
+
+TEST(type_compat_kerml_function) {
+    /* Expression typed by Function should be valid */
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_EXPRESSION, SYSML_KIND_FUNCTION));
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_BOOL_EXPRESSION, SYSML_KIND_PREDICATE));
+}
+
+TEST(type_compat_kerml_feature_by_definition) {
+    /* KerML features can be typed by any SysML definition */
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_FEATURE, SYSML_KIND_ATTRIBUTE_DEF));
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_FEATURE, SYSML_KIND_PART_DEF));
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_STEP, SYSML_KIND_ACTION_DEF));
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_CONNECTOR, SYSML_KIND_CONNECTION_DEF));
+}
+
+TEST(type_compat_parameter_flexible) {
+    /* Parameters can be typed by any definition (part params, item params, etc.) */
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_PARAMETER, SYSML_KIND_PART_DEF));
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_PARAMETER, SYSML_KIND_ITEM_DEF));
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_PARAMETER, SYSML_KIND_ATTRIBUTE_DEF));
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_PARAMETER, SYSML_KIND_ACTION_DEF));
+    ASSERT(sysml2_is_type_compatible(SYSML_KIND_PARAMETER, SYSML_KIND_OCCURRENCE_DEF));
 }
 
 /* ========== Validation Tests ========== */
@@ -576,6 +642,19 @@ int main(void) {
     RUN_TEST(type_compat_port_def);
     RUN_TEST(type_compat_requirement_def);
     RUN_TEST(type_compat_package_allows_all);
+
+    /* KerML Type Compatibility tests */
+    printf("\n  KerML Type Compatibility tests:\n");
+    RUN_TEST(type_compat_kerml_class);
+    RUN_TEST(type_compat_kerml_structure);
+    RUN_TEST(type_compat_kerml_behavior);
+    RUN_TEST(type_compat_kerml_type);
+    RUN_TEST(type_compat_kerml_classifier);
+    RUN_TEST(type_compat_kerml_association);
+    RUN_TEST(type_compat_kerml_interaction);
+    RUN_TEST(type_compat_kerml_function);
+    RUN_TEST(type_compat_kerml_feature_by_definition);
+    RUN_TEST(type_compat_parameter_flexible);
 
     /* Validation tests */
     printf("\n  Validation tests:\n");

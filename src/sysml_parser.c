@@ -138,11 +138,20 @@ static SysmlTypeRefResult sysml2_extract_next_type_ref(SysmlParserContext *ctx, 
     if (!ctx->build_ctx || !text || len == 0) return result;
 
     size_t i = *pos;
-    int in_quote = 0;
+    int in_single_quote = 0;
+    int in_double_quote = 0;
 
     while (i < len) {
-        if (text[i] == '\'') in_quote = !in_quote;
-        if (!in_quote && text[i] == ':') {
+        /* Handle escape sequences in strings */
+        if ((in_single_quote || in_double_quote) && text[i] == '\\' && i + 1 < len) {
+            i += 2;  /* Skip escaped character */
+            continue;
+        }
+        /* Track single-quoted strings (unrestricted names) */
+        if (text[i] == '\'' && !in_double_quote) in_single_quote = !in_single_quote;
+        /* Track double-quoted strings (string literals) */
+        if (text[i] == '"' && !in_single_quote) in_double_quote = !in_double_quote;
+        if (!in_single_quote && !in_double_quote && text[i] == ':') {
             SysmlOperatorKind op = SYSML_OP_NONE;
             size_t op_end = i;
 
@@ -462,6 +471,61 @@ static void sysml2_capture_metadata_feature(SysmlParserContext *ctx, const char 
 
     const char *name = sysml2_intern_n(ctx->build_ctx->intern, name_text, name_len);
     const char *value = sysml2_extract_feature_value(ctx, value_text, value_len);
+
+    sysml2_build_metadata_add_feature(ctx->build_ctx, ctx->build_ctx->current_metadata, name, value);
+
+    /* Clear pending_default_value since it was consumed by the metadata feature */
+    ctx->build_ctx->pending_default_value = NULL;
+    ctx->build_ctx->pending_has_default_keyword = false;
+}
+
+/* Capture metadata shorthand feature assignment (:>> name = value or :> name = value) */
+static void sysml2_capture_metadata_shorthand_feature(SysmlParserContext *ctx, const char *text, size_t len) {
+    if (!ctx->build_ctx || !ctx->build_ctx->current_metadata) return;
+    if (!text || len == 0) return;
+
+    /* Skip leading whitespace */
+    while (len > 0 && (*text == ' ' || *text == '\t' || *text == '\n' || *text == '\r')) { text++; len--; }
+
+    /* Skip :>> or :> prefix */
+    if (len > 2 && text[0] == ':' && text[1] == '>' && text[2] == '>') {
+        text += 3; len -= 3;
+    } else if (len > 1 && text[0] == ':' && text[1] == '>') {
+        text += 2; len -= 2;
+    } else {
+        return; /* Not a shorthand feature */
+    }
+
+    /* Skip whitespace after prefix */
+    while (len > 0 && (*text == ' ' || *text == '\t')) { text++; len--; }
+
+    /* Find the name (up to = or whitespace) */
+    const char *name_start = text;
+    size_t name_len = 0;
+    while (name_len < len && text[name_len] != '=' && text[name_len] != ' ' &&
+           text[name_len] != '\t' && text[name_len] != ':' && text[name_len] != ';') {
+        name_len++;
+    }
+    if (name_len == 0) return;
+
+    /* Find the value (after =) */
+    const char *value_text = text + name_len;
+    size_t remaining = len - name_len;
+
+    /* Skip whitespace and = */
+    while (remaining > 0 && (*value_text == ' ' || *value_text == '\t')) { value_text++; remaining--; }
+    if (remaining > 0 && *value_text == '=') { value_text++; remaining--; }
+    while (remaining > 0 && (*value_text == ' ' || *value_text == '\t')) { value_text++; remaining--; }
+
+    /* Trim trailing ; and whitespace */
+    while (remaining > 0 && (value_text[remaining-1] == ';' || value_text[remaining-1] == ' ' ||
+                             value_text[remaining-1] == '\t' || value_text[remaining-1] == '\n' ||
+                             value_text[remaining-1] == '\r' || value_text[remaining-1] == '}')) {
+        remaining--;
+    }
+
+    const char *name = sysml2_intern_n(ctx->build_ctx->intern, name_start, name_len);
+    const char *value = (remaining > 0) ? sysml2_intern_n(ctx->build_ctx->intern, value_text, remaining) : NULL;
 
     sysml2_build_metadata_add_feature(ctx->build_ctx, ctx->build_ctx->current_metadata, name, value);
 
@@ -2956,6 +3020,26 @@ static void pcc_action_MetadataBodyFeature_0(sysml2_context_t *__pcc_ctx, pcc_th
 #undef _2e
 #undef _2s
 #undef _2
+#undef _1e
+#undef _1s
+#undef _1
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
+static void pcc_action_MetadataBodyShorthandFeature_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+#define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
+#define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
+#define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
+    sysml2_capture_metadata_shorthand_feature(auxil, _1, _1e - _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -6497,6 +6581,7 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_KerMLBehaviorBodyElement(pcc_context
 static pcc_thunk_chunk_t *pcc_evaluate_rule_FunctionDefinition(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_KerMLFunctionBody(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_KerMLFunctionBodyElement(pcc_context_t *ctx);
+static pcc_thunk_chunk_t *pcc_evaluate_rule_FunctionBodyShorthand(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_ReturnFeatureMember(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_ReturnNamedPart(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_ReturnTypePart(pcc_context_t *ctx);
@@ -6549,6 +6634,7 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_MetadataUsageTail(pcc_context_t *ctx
 static pcc_thunk_chunk_t *pcc_evaluate_rule_MetadataBody(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_MetadataBodyElement(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_MetadataBodyFeature(pcc_context_t *ctx);
+static pcc_thunk_chunk_t *pcc_evaluate_rule_MetadataBodyShorthandFeature(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_AnnotatingElement(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_Comment(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_Documentation(pcc_context_t *ctx);
@@ -6834,6 +6920,7 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_SequenceExpression(pcc_context_t *ct
 static pcc_thunk_chunk_t *pcc_evaluate_rule_SequenceTail(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_BracketExpression(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_SelectOperator(pcc_context_t *ctx);
+static pcc_thunk_chunk_t *pcc_evaluate_rule_CollectOperator(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_IndexExpression(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_CollectionOperator(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_FunctionReferenceArg(pcc_context_t *ctx);
@@ -16145,27 +16232,27 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_PackageBodyElement(pcc_context_t *ct
     L0005:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ShorthandFeatureMember, &chunk->thunks, NULL)) goto L0006;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FilterPackageMember, &chunk->thunks, NULL)) goto L0006;
         goto L0001;
     L0006:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_UsageElement, &chunk->thunks, NULL)) goto L0007;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ShorthandFeatureMember, &chunk->thunks, NULL)) goto L0007;
         goto L0001;
     L0007:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_Import, &chunk->thunks, NULL)) goto L0008;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_UsageElement, &chunk->thunks, NULL)) goto L0008;
         goto L0001;
     L0008:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_Alias, &chunk->thunks, NULL)) goto L0009;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_Import, &chunk->thunks, NULL)) goto L0009;
         goto L0001;
     L0009:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FilterPackageMember, &chunk->thunks, NULL)) goto L0010;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_Alias, &chunk->thunks, NULL)) goto L0010;
         goto L0001;
     L0010:;
         ctx->cur = p;
@@ -16623,6 +16710,16 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_MetadataFilterElement(pcc_context_t 
     ctx->level++;
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_AT, &chunk->thunks, NULL)) goto L0000;
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0000;
+    {
+        const size_t p = ctx->cur;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACKET, &chunk->thunks, NULL)) goto L0001;
+        ctx->cur = p;
+        goto L0002;
+    L0001:;
+        ctx->cur = p;
+        goto L0000;
+    L0002:;
+    }
     ctx->level--;
     PCC_DEBUG(ctx->auxil, PCC_DBG_MATCH, "MetadataFilterElement", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
     return chunk;
@@ -17452,14 +17549,38 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_UnioningPart(pcc_context_t *ctx) {
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_UNIONS, &chunk->thunks, NULL)) goto L0000;
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0000;
     {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0001;
+        goto L0002;
+    L0001:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+    L0002:;
+    }
+    {
         for (;;) {
             const size_t p = ctx->cur;
             const size_t n = chunk->thunks.len;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_COMMA, &chunk->thunks, NULL)) goto L0001;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0001;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_COMMA, &chunk->thunks, NULL)) goto L0003;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0003;
+            {
+                MARK_VAR_AS_USED
+                const size_t p = ctx->cur;
+                MARK_VAR_AS_USED
+                const size_t n = chunk->thunks.len;
+                if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0004;
+                goto L0005;
+            L0004:;
+                ctx->cur = p;
+                pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+            L0005:;
+            }
             if (ctx->cur == p) break;
             continue;
-        L0001:;
+        L0003:;
             ctx->cur = p;
             pcc_thunk_array__revert(ctx, &chunk->thunks, n);
             break;
@@ -17483,14 +17604,38 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_IntersectingPart(pcc_context_t *ctx)
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_INTERSECTS, &chunk->thunks, NULL)) goto L0000;
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0000;
     {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0001;
+        goto L0002;
+    L0001:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+    L0002:;
+    }
+    {
         for (;;) {
             const size_t p = ctx->cur;
             const size_t n = chunk->thunks.len;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_COMMA, &chunk->thunks, NULL)) goto L0001;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0001;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_COMMA, &chunk->thunks, NULL)) goto L0003;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0003;
+            {
+                MARK_VAR_AS_USED
+                const size_t p = ctx->cur;
+                MARK_VAR_AS_USED
+                const size_t n = chunk->thunks.len;
+                if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0004;
+                goto L0005;
+            L0004:;
+                ctx->cur = p;
+                pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+            L0005:;
+            }
             if (ctx->cur == p) break;
             continue;
-        L0001:;
+        L0003:;
             ctx->cur = p;
             pcc_thunk_array__revert(ctx, &chunk->thunks, n);
             break;
@@ -17514,14 +17659,38 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_DifferencingPart(pcc_context_t *ctx)
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_DIFFERENCES, &chunk->thunks, NULL)) goto L0000;
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0000;
     {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0001;
+        goto L0002;
+    L0001:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+    L0002:;
+    }
+    {
         for (;;) {
             const size_t p = ctx->cur;
             const size_t n = chunk->thunks.len;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_COMMA, &chunk->thunks, NULL)) goto L0001;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0001;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_COMMA, &chunk->thunks, NULL)) goto L0003;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0003;
+            {
+                MARK_VAR_AS_USED
+                const size_t p = ctx->cur;
+                MARK_VAR_AS_USED
+                const size_t n = chunk->thunks.len;
+                if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0004;
+                goto L0005;
+            L0004:;
+                ctx->cur = p;
+                pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+            L0005:;
+            }
             if (ctx->cur == p) break;
             continue;
-        L0001:;
+        L0003:;
             ctx->cur = p;
             pcc_thunk_array__revert(ctx, &chunk->thunks, n);
             break;
@@ -17653,12 +17822,24 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ShorthandNamedFeature(pcc_context_t 
     chunk->pos = ctx->cur;
     PCC_DEBUG(ctx->auxil, PCC_DBG_EVALUATE, "ShorthandNamedFeature", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->buffer.len - chunk->pos));
     ctx->level++;
-    pcc_capture_table__resize(ctx->auxil, &chunk->capts, 2);
+    pcc_capture_table__resize(ctx->auxil, &chunk->capts, 3);
     {
         MARK_VAR_AS_USED
         const size_t p = ctx->cur;
         MARK_VAR_AS_USED
         const size_t n = chunk->thunks.len;
+        {
+            MARK_VAR_AS_USED
+            const size_t p = ctx->cur;
+            MARK_VAR_AS_USED
+            const size_t n = chunk->thunks.len;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_VAR, &chunk->thunks, NULL)) goto L0003;
+            goto L0004;
+        L0003:;
+            ctx->cur = p;
+            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        L0004:;
+        }
         {
             const size_t p = ctx->cur;
             size_t q;
@@ -17673,10 +17854,10 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ShorthandNamedFeature(pcc_context_t 
             for (;;) {
                 const size_t p = ctx->cur;
                 const size_t n = chunk->thunks.len;
-                if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureRelationshipPart, &chunk->thunks, NULL)) goto L0003;
+                if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureRelationshipPart, &chunk->thunks, NULL)) goto L0005;
                 if (ctx->cur == p) break;
                 continue;
-            L0003:;
+            L0005:;
                 ctx->cur = p;
                 pcc_thunk_array__revert(ctx, &chunk->thunks, n);
                 break;
@@ -17687,31 +17868,47 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ShorthandNamedFeature(pcc_context_t 
             const size_t p = ctx->cur;
             MARK_VAR_AS_USED
             const size_t n = chunk->thunks.len;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureValue, &chunk->thunks, NULL)) goto L0004;
-            goto L0005;
-        L0004:;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureValue, &chunk->thunks, NULL)) goto L0006;
+            goto L0007;
+        L0006:;
             ctx->cur = p;
             pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        L0005:;
+        L0007:;
         }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_UsageBody, &chunk->thunks, NULL)) goto L0002;
         goto L0001;
     L0002:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_VAR, &chunk->thunks, NULL)) goto L0008;
         {
             const size_t p = ctx->cur;
             size_t q;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_Identification, &chunk->thunks, NULL)) goto L0006;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_Identification, &chunk->thunks, NULL)) goto L0008;
             q = ctx->cur;
             chunk->capts.buf[1].range.start = p;
             chunk->capts.buf[1].range.end = q;
             pcc_char_array__resize(ctx->auxil, &chunk->capts.buf[1].string, 0);
         }
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureValue, &chunk->thunks, NULL)) goto L0006;
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_UsageBody, &chunk->thunks, NULL)) goto L0006;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureValue, &chunk->thunks, NULL)) goto L0008;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_UsageBody, &chunk->thunks, NULL)) goto L0008;
         goto L0001;
-    L0006:;
+    L0008:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        {
+            const size_t p = ctx->cur;
+            size_t q;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_Identification, &chunk->thunks, NULL)) goto L0009;
+            q = ctx->cur;
+            chunk->capts.buf[2].range.start = p;
+            chunk->capts.buf[2].range.end = q;
+            pcc_char_array__resize(ctx->auxil, &chunk->capts.buf[2].string, 0);
+        }
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureValue, &chunk->thunks, NULL)) goto L0009;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_UsageBody, &chunk->thunks, NULL)) goto L0009;
+        goto L0001;
+    L0009:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
         goto L0000;
@@ -18564,19 +18761,29 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_KerMLFunctionBodyElement(pcc_context
     L0005:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_Import, &chunk->thunks, NULL)) goto L0006;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FunctionBodyShorthand, &chunk->thunks, NULL)) goto L0006;
         goto L0001;
     L0006:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_Alias, &chunk->thunks, NULL)) goto L0007;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_BindUsage, &chunk->thunks, NULL)) goto L0007;
         goto L0001;
     L0007:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_AnnotatingElement, &chunk->thunks, NULL)) goto L0008;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_Import, &chunk->thunks, NULL)) goto L0008;
         goto L0001;
     L0008:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_Alias, &chunk->thunks, NULL)) goto L0009;
+        goto L0001;
+    L0009:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_AnnotatingElement, &chunk->thunks, NULL)) goto L0010;
+        goto L0001;
+    L0010:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
         goto L0000;
@@ -18588,6 +18795,116 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_KerMLFunctionBodyElement(pcc_context
 L0000:;
     ctx->level--;
     PCC_DEBUG(ctx->auxil, PCC_DBG_NOMATCH, "KerMLFunctionBodyElement", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
+    pcc_thunk_chunk__destroy(ctx, chunk);
+    return NULL;
+}
+
+static pcc_thunk_chunk_t *pcc_evaluate_rule_FunctionBodyShorthand(pcc_context_t *ctx) {
+    pcc_thunk_chunk_t *const chunk = pcc_thunk_chunk__create(ctx);
+    chunk->pos = ctx->cur;
+    PCC_DEBUG(ctx->auxil, PCC_DBG_EVALUATE, "FunctionBodyShorthand", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->buffer.len - chunk->pos));
+    ctx->level++;
+    {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_COLONGTGT, &chunk->thunks, NULL)) goto L0002;
+        goto L0001;
+    L0002:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_COLONGT, &chunk->thunks, NULL)) goto L0003;
+        goto L0001;
+    L0003:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        goto L0000;
+    L0001:;
+    }
+    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0000;
+    {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0004;
+        goto L0005;
+    L0004:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+    L0005:;
+    }
+    {
+        for (;;) {
+            const size_t p = ctx->cur;
+            const size_t n = chunk->thunks.len;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_COMMA, &chunk->thunks, NULL)) goto L0006;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0006;
+            {
+                MARK_VAR_AS_USED
+                const size_t p = ctx->cur;
+                MARK_VAR_AS_USED
+                const size_t n = chunk->thunks.len;
+                if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0007;
+                goto L0008;
+            L0007:;
+                ctx->cur = p;
+                pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+            L0008:;
+            }
+            if (ctx->cur == p) break;
+            continue;
+        L0006:;
+            ctx->cur = p;
+            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+            break;
+        }
+    }
+    {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_COLON, &chunk->thunks, NULL)) goto L0009;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0009;
+        {
+            MARK_VAR_AS_USED
+            const size_t p = ctx->cur;
+            MARK_VAR_AS_USED
+            const size_t n = chunk->thunks.len;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_Multiplicity, &chunk->thunks, NULL)) goto L0010;
+            goto L0011;
+        L0010:;
+            ctx->cur = p;
+            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        L0011:;
+        }
+        goto L0012;
+    L0009:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+    L0012:;
+    }
+    {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureValue, &chunk->thunks, NULL)) goto L0013;
+        goto L0014;
+    L0013:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+    L0014:;
+    }
+    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_UsageBody, &chunk->thunks, NULL)) goto L0000;
+    ctx->level--;
+    PCC_DEBUG(ctx->auxil, PCC_DBG_MATCH, "FunctionBodyShorthand", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
+    return chunk;
+L0000:;
+    ctx->level--;
+    PCC_DEBUG(ctx->auxil, PCC_DBG_NOMATCH, "FunctionBodyShorthand", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
     pcc_thunk_chunk__destroy(ctx, chunk);
     return NULL;
 }
@@ -18970,8 +19287,32 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_SpecializationRelationship(pcc_conte
     }
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_SUBTYPE, &chunk->thunks, NULL)) goto L0000;
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0000;
+    {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0005;
+        goto L0006;
+    L0005:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+    L0006:;
+    }
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_SPECIALIZES, &chunk->thunks, NULL)) goto L0000;
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0000;
+    {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0007;
+        goto L0008;
+    L0007:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+    L0008:;
+    }
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RelationshipBody, &chunk->thunks, NULL)) goto L0000;
     ctx->level--;
     PCC_DEBUG(ctx->auxil, PCC_DBG_MATCH, "SpecializationRelationship", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
@@ -19350,8 +19691,32 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_RedefinitionRelationship(pcc_context
     }
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_REDEFINITION, &chunk->thunks, NULL)) goto L0000;
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0000;
+    {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0005;
+        goto L0006;
+    L0005:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+    L0006:;
+    }
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_REDEFINES, &chunk->thunks, NULL)) goto L0000;
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0000;
+    {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0007;
+        goto L0008;
+    L0007:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+    L0008:;
+    }
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RelationshipBody, &chunk->thunks, NULL)) goto L0000;
     ctx->level--;
     PCC_DEBUG(ctx->auxil, PCC_DBG_MATCH, "RedefinitionRelationship", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
@@ -20035,7 +20400,6 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_FeatureDefinition(pcc_context_t *ctx
     PCC_DEBUG(ctx->auxil, PCC_DBG_EVALUATE, "FeatureDefinition", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->buffer.len - chunk->pos));
     ctx->level++;
     pcc_capture_table__resize(ctx->auxil, &chunk->capts, 1);
-    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLFeaturePrefix, &chunk->thunks, NULL)) goto L0000;
     {
         MARK_VAR_AS_USED
         const size_t p = ctx->cur;
@@ -20048,18 +20412,31 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_FeatureDefinition(pcc_context_t *ctx
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
     L0002:;
     }
+    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLFeaturePrefix, &chunk->thunks, NULL)) goto L0000;
+    {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_MEMBER, &chunk->thunks, NULL)) goto L0003;
+        goto L0004;
+    L0003:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+    L0004:;
+    }
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_FEATURE, &chunk->thunks, NULL)) goto L0000;
     {
         MARK_VAR_AS_USED
         const size_t p = ctx->cur;
         MARK_VAR_AS_USED
         const size_t n = chunk->thunks.len;
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_ALL, &chunk->thunks, NULL)) goto L0003;
-        goto L0004;
-    L0003:;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_ALL, &chunk->thunks, NULL)) goto L0005;
+        goto L0006;
+    L0005:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-    L0004:;
+    L0006:;
     }
     {
         const size_t p = ctx->cur;
@@ -20069,12 +20446,12 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_FeatureDefinition(pcc_context_t *ctx
             const size_t p = ctx->cur;
             MARK_VAR_AS_USED
             const size_t n = chunk->thunks.len;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLFeatureDeclaration, &chunk->thunks, NULL)) goto L0005;
-            goto L0006;
-        L0005:;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLFeatureDeclaration, &chunk->thunks, NULL)) goto L0007;
+            goto L0008;
+        L0007:;
             ctx->cur = p;
             pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        L0006:;
+        L0008:;
         }
         q = ctx->cur;
         chunk->capts.buf[0].range.start = p;
@@ -20094,12 +20471,12 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_FeatureDefinition(pcc_context_t *ctx
         const size_t p = ctx->cur;
         MARK_VAR_AS_USED
         const size_t n = chunk->thunks.len;
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureValue, &chunk->thunks, NULL)) goto L0007;
-        goto L0008;
-    L0007:;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureValue, &chunk->thunks, NULL)) goto L0009;
+        goto L0010;
+    L0009:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-    L0008:;
+    L0010:;
     }
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLTypeBody, &chunk->thunks, NULL)) goto L0000;
     {
@@ -20430,6 +20807,18 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_StepDefinition(pcc_context_t *ctx) {
     PCC_DEBUG(ctx->auxil, PCC_DBG_EVALUATE, "StepDefinition", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->buffer.len - chunk->pos));
     ctx->level++;
     pcc_capture_table__resize(ctx->auxil, &chunk->capts, 1);
+    {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_MEMBER, &chunk->thunks, NULL)) goto L0001;
+        goto L0002;
+    L0001:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+    L0002:;
+    }
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLFeaturePrefix, &chunk->thunks, NULL)) goto L0000;
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_STEP, &chunk->thunks, NULL)) goto L0000;
     {
@@ -20440,12 +20829,12 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_StepDefinition(pcc_context_t *ctx) {
             const size_t p = ctx->cur;
             MARK_VAR_AS_USED
             const size_t n = chunk->thunks.len;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLFeatureDeclaration, &chunk->thunks, NULL)) goto L0001;
-            goto L0002;
-        L0001:;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLFeatureDeclaration, &chunk->thunks, NULL)) goto L0003;
+            goto L0004;
+        L0003:;
             ctx->cur = p;
             pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        L0002:;
+        L0004:;
         }
         q = ctx->cur;
         chunk->capts.buf[0].range.start = p;
@@ -20465,12 +20854,12 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_StepDefinition(pcc_context_t *ctx) {
         const size_t p = ctx->cur;
         MARK_VAR_AS_USED
         const size_t n = chunk->thunks.len;
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureValue, &chunk->thunks, NULL)) goto L0003;
-        goto L0004;
-    L0003:;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureValue, &chunk->thunks, NULL)) goto L0005;
+        goto L0006;
+    L0005:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-    L0004:;
+    L0006:;
     }
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLTypeBody, &chunk->thunks, NULL)) goto L0000;
     {
@@ -20727,6 +21116,18 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ConnectorDefinition(pcc_context_t *c
     PCC_DEBUG(ctx->auxil, PCC_DBG_EVALUATE, "ConnectorDefinition", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->buffer.len - chunk->pos));
     ctx->level++;
     pcc_capture_table__resize(ctx->auxil, &chunk->capts, 1);
+    {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_MEMBER, &chunk->thunks, NULL)) goto L0001;
+        goto L0002;
+    L0001:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+    L0002:;
+    }
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLFeaturePrefix, &chunk->thunks, NULL)) goto L0000;
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_CONNECTOR, &chunk->thunks, NULL)) goto L0000;
     {
@@ -20734,12 +21135,12 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ConnectorDefinition(pcc_context_t *c
         const size_t p = ctx->cur;
         MARK_VAR_AS_USED
         const size_t n = chunk->thunks.len;
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_ALL, &chunk->thunks, NULL)) goto L0001;
-        goto L0002;
-    L0001:;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_ALL, &chunk->thunks, NULL)) goto L0003;
+        goto L0004;
+    L0003:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-    L0002:;
+    L0004:;
     }
     {
         const size_t p = ctx->cur;
@@ -20749,12 +21150,12 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ConnectorDefinition(pcc_context_t *c
             const size_t p = ctx->cur;
             MARK_VAR_AS_USED
             const size_t n = chunk->thunks.len;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLConnectorDeclaration, &chunk->thunks, NULL)) goto L0003;
-            goto L0004;
-        L0003:;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLConnectorDeclaration, &chunk->thunks, NULL)) goto L0005;
+            goto L0006;
+        L0005:;
             ctx->cur = p;
             pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        L0004:;
+        L0006:;
         }
         q = ctx->cur;
         chunk->capts.buf[0].range.start = p;
@@ -21244,44 +21645,106 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_KerMLFlowDeclaration(pcc_context_t *
         const size_t p = ctx->cur;
         MARK_VAR_AS_USED
         const size_t n = chunk->thunks.len;
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLFeatureDeclaration, &chunk->thunks, NULL)) goto L0001;
-        goto L0002;
-    L0001:;
-        ctx->cur = p;
-        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLFeatureDeclaration, &chunk->thunks, NULL)) goto L0002;
+        {
+            MARK_VAR_AS_USED
+            const size_t p = ctx->cur;
+            MARK_VAR_AS_USED
+            const size_t n = chunk->thunks.len;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_OF, &chunk->thunks, NULL)) goto L0003;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0003;
+            goto L0004;
+        L0003:;
+            ctx->cur = p;
+            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        L0004:;
+        }
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_FROM, &chunk->thunks, NULL)) goto L0002;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ConnectorEndMember, &chunk->thunks, NULL)) goto L0002;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_TO, &chunk->thunks, NULL)) goto L0002;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ConnectorEndMember, &chunk->thunks, NULL)) goto L0002;
+        goto L0001;
     L0002:;
-    }
-    {
-        MARK_VAR_AS_USED
-        const size_t p = ctx->cur;
-        MARK_VAR_AS_USED
-        const size_t n = chunk->thunks.len;
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_OF, &chunk->thunks, NULL)) goto L0003;
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0003;
-        goto L0004;
-    L0003:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-    L0004:;
-    }
-    {
-        MARK_VAR_AS_USED
-        const size_t p = ctx->cur;
-        MARK_VAR_AS_USED
-        const size_t n = chunk->thunks.len;
+        {
+            MARK_VAR_AS_USED
+            const size_t p = ctx->cur;
+            MARK_VAR_AS_USED
+            const size_t n = chunk->thunks.len;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_OF, &chunk->thunks, NULL)) goto L0006;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0006;
+            goto L0007;
+        L0006:;
+            ctx->cur = p;
+            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        L0007:;
+        }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_FROM, &chunk->thunks, NULL)) goto L0005;
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ConnectorEndMember, &chunk->thunks, NULL)) goto L0005;
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_TO, &chunk->thunks, NULL)) goto L0005;
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ConnectorEndMember, &chunk->thunks, NULL)) goto L0005;
-        goto L0006;
+        goto L0001;
     L0005:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-    L0006:;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLFeatureDeclaration, &chunk->thunks, NULL)) goto L0008;
+        {
+            MARK_VAR_AS_USED
+            const size_t p = ctx->cur;
+            MARK_VAR_AS_USED
+            const size_t n = chunk->thunks.len;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_OF, &chunk->thunks, NULL)) goto L0009;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0009;
+            goto L0010;
+        L0009:;
+            ctx->cur = p;
+            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        L0010:;
+        }
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ConnectorEndMember, &chunk->thunks, NULL)) goto L0008;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_TO, &chunk->thunks, NULL)) goto L0008;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ConnectorEndMember, &chunk->thunks, NULL)) goto L0008;
+        goto L0001;
+    L0008:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ConnectorEndMember, &chunk->thunks, NULL)) goto L0011;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_TO, &chunk->thunks, NULL)) goto L0011;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ConnectorEndMember, &chunk->thunks, NULL)) goto L0011;
+        goto L0001;
+    L0011:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLFeatureDeclaration, &chunk->thunks, NULL)) goto L0012;
+        {
+            MARK_VAR_AS_USED
+            const size_t p = ctx->cur;
+            MARK_VAR_AS_USED
+            const size_t n = chunk->thunks.len;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_OF, &chunk->thunks, NULL)) goto L0013;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0013;
+            goto L0014;
+        L0013:;
+            ctx->cur = p;
+            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        L0014:;
+        }
+        goto L0001;
+    L0012:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        goto L0000;
+    L0001:;
     }
     ctx->level--;
     PCC_DEBUG(ctx->auxil, PCC_DBG_MATCH, "KerMLFlowDeclaration", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
     return chunk;
+L0000:;
+    ctx->level--;
+    PCC_DEBUG(ctx->auxil, PCC_DBG_NOMATCH, "KerMLFlowDeclaration", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
+    pcc_thunk_chunk__destroy(ctx, chunk);
+    return NULL;
 }
 
 static pcc_thunk_chunk_t *pcc_evaluate_rule_SuccessionFlowDefinition(pcc_context_t *ctx) {
@@ -21637,7 +22100,7 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_MetadataBodyElement(pcc_context_t *c
     L0002:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ShorthandFeatureMember, &chunk->thunks, NULL)) goto L0003;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_MetadataBodyShorthandFeature, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
     L0003:;
         ctx->cur = p;
@@ -21741,6 +22204,70 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_MetadataBodyFeature(pcc_context_t *c
 L0000:;
     ctx->level--;
     PCC_DEBUG(ctx->auxil, PCC_DBG_NOMATCH, "MetadataBodyFeature", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
+    pcc_thunk_chunk__destroy(ctx, chunk);
+    return NULL;
+}
+
+static pcc_thunk_chunk_t *pcc_evaluate_rule_MetadataBodyShorthandFeature(pcc_context_t *ctx) {
+    pcc_thunk_chunk_t *const chunk = pcc_thunk_chunk__create(ctx);
+    chunk->pos = ctx->cur;
+    PCC_DEBUG(ctx->auxil, PCC_DBG_EVALUATE, "MetadataBodyShorthandFeature", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->buffer.len - chunk->pos));
+    ctx->level++;
+    pcc_capture_table__resize(ctx->auxil, &chunk->capts, 1);
+    {
+        const size_t p = ctx->cur;
+        size_t q;
+        {
+            MARK_VAR_AS_USED
+            const size_t p = ctx->cur;
+            MARK_VAR_AS_USED
+            const size_t n = chunk->thunks.len;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_COLONGTGT, &chunk->thunks, NULL)) goto L0002;
+            goto L0001;
+        L0002:;
+            ctx->cur = p;
+            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_COLONGT, &chunk->thunks, NULL)) goto L0003;
+            goto L0001;
+        L0003:;
+            ctx->cur = p;
+            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+            goto L0000;
+        L0001:;
+        }
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0000;
+        {
+            MARK_VAR_AS_USED
+            const size_t p = ctx->cur;
+            MARK_VAR_AS_USED
+            const size_t n = chunk->thunks.len;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureValue, &chunk->thunks, NULL)) goto L0004;
+            goto L0005;
+        L0004:;
+            ctx->cur = p;
+            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        L0005:;
+        }
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_SEMICOLON, &chunk->thunks, NULL)) goto L0000;
+        q = ctx->cur;
+        chunk->capts.buf[0].range.start = p;
+        chunk->capts.buf[0].range.end = q;
+        pcc_char_array__resize(ctx->auxil, &chunk->capts.buf[0].string, 0);
+    }
+    {
+        pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_MetadataBodyShorthandFeature_0, 0, 1);
+        thunk->data.leaf.capts.buf[0] = &(chunk->capts.buf[0]);
+        thunk->data.leaf.capt0.range.start = chunk->pos;
+        thunk->data.leaf.capt0.range.end = ctx->cur;
+        pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+        pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
+    }
+    ctx->level--;
+    PCC_DEBUG(ctx->auxil, PCC_DBG_MATCH, "MetadataBodyShorthandFeature", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
+    return chunk;
+L0000:;
+    ctx->level--;
+    PCC_DEBUG(ctx->auxil, PCC_DBG_NOMATCH, "MetadataBodyShorthandFeature", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
     pcc_thunk_chunk__destroy(ctx, chunk);
     return NULL;
 }
@@ -35425,23 +35952,36 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ShorthandFeatureMember(pcc_context_t
                     pcc_thunk_array__revert(ctx, &chunk->thunks, n);
                 L0013:;
                 }
-                goto L0014;
+                {
+                    for (;;) {
+                        const size_t p = ctx->cur;
+                        const size_t n = chunk->thunks.len;
+                        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLFeatureSpecialization, &chunk->thunks, NULL)) goto L0014;
+                        if (ctx->cur == p) break;
+                        continue;
+                    L0014:;
+                        ctx->cur = p;
+                        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+                        break;
+                    }
+                }
+                goto L0015;
             L0011:;
                 ctx->cur = p;
                 pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-            L0014:;
+            L0015:;
             }
             {
                 MARK_VAR_AS_USED
                 const size_t p = ctx->cur;
                 MARK_VAR_AS_USED
                 const size_t n = chunk->thunks.len;
-                if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureValue, &chunk->thunks, NULL)) goto L0015;
-                goto L0016;
-            L0015:;
+                if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureValue, &chunk->thunks, NULL)) goto L0016;
+                goto L0017;
+            L0016:;
                 ctx->cur = p;
                 pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-            L0016:;
+            L0017:;
             }
             if (!pcc_apply_rule(ctx, pcc_evaluate_rule_UsageBody, &chunk->thunks, NULL)) goto L0002;
             q = ctx->cur;
@@ -35464,41 +36004,41 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ShorthandFeatureMember(pcc_context_t
         {
             const size_t p = ctx->cur;
             size_t q;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_REDEFINES, &chunk->thunks, NULL)) goto L0017;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0017;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_REDEFINES, &chunk->thunks, NULL)) goto L0018;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0018;
             {
                 MARK_VAR_AS_USED
                 const size_t p = ctx->cur;
                 MARK_VAR_AS_USED
                 const size_t n = chunk->thunks.len;
-                if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0018;
-                goto L0019;
-            L0018:;
+                if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0019;
+                goto L0020;
+            L0019:;
                 ctx->cur = p;
                 pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-            L0019:;
+            L0020:;
             }
             {
                 for (;;) {
                     const size_t p = ctx->cur;
                     const size_t n = chunk->thunks.len;
-                    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_COMMA, &chunk->thunks, NULL)) goto L0020;
-                    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0020;
+                    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_COMMA, &chunk->thunks, NULL)) goto L0021;
+                    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0021;
                     {
                         MARK_VAR_AS_USED
                         const size_t p = ctx->cur;
                         MARK_VAR_AS_USED
                         const size_t n = chunk->thunks.len;
-                        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0021;
-                        goto L0022;
-                    L0021:;
+                        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0022;
+                        goto L0023;
+                    L0022:;
                         ctx->cur = p;
                         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-                    L0022:;
+                    L0023:;
                     }
                     if (ctx->cur == p) break;
                     continue;
-                L0020:;
+                L0021:;
                     ctx->cur = p;
                     pcc_thunk_array__revert(ctx, &chunk->thunks, n);
                     break;
@@ -35509,39 +36049,52 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ShorthandFeatureMember(pcc_context_t
                 const size_t p = ctx->cur;
                 MARK_VAR_AS_USED
                 const size_t n = chunk->thunks.len;
-                if (!pcc_apply_rule(ctx, pcc_evaluate_rule_COLON, &chunk->thunks, NULL)) goto L0023;
-                if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0023;
+                if (!pcc_apply_rule(ctx, pcc_evaluate_rule_COLON, &chunk->thunks, NULL)) goto L0024;
+                if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0024;
                 {
                     MARK_VAR_AS_USED
                     const size_t p = ctx->cur;
                     MARK_VAR_AS_USED
                     const size_t n = chunk->thunks.len;
-                    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_Multiplicity, &chunk->thunks, NULL)) goto L0024;
-                    goto L0025;
-                L0024:;
+                    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_Multiplicity, &chunk->thunks, NULL)) goto L0025;
+                    goto L0026;
+                L0025:;
                     ctx->cur = p;
                     pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-                L0025:;
+                L0026:;
                 }
-                goto L0026;
-            L0023:;
+                {
+                    for (;;) {
+                        const size_t p = ctx->cur;
+                        const size_t n = chunk->thunks.len;
+                        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KerMLFeatureSpecialization, &chunk->thunks, NULL)) goto L0027;
+                        if (ctx->cur == p) break;
+                        continue;
+                    L0027:;
+                        ctx->cur = p;
+                        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+                        break;
+                    }
+                }
+                goto L0028;
+            L0024:;
                 ctx->cur = p;
                 pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-            L0026:;
+            L0028:;
             }
             {
                 MARK_VAR_AS_USED
                 const size_t p = ctx->cur;
                 MARK_VAR_AS_USED
                 const size_t n = chunk->thunks.len;
-                if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureValue, &chunk->thunks, NULL)) goto L0027;
-                goto L0028;
-            L0027:;
+                if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureValue, &chunk->thunks, NULL)) goto L0029;
+                goto L0030;
+            L0029:;
                 ctx->cur = p;
                 pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-            L0028:;
+            L0030:;
             }
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_UsageBody, &chunk->thunks, NULL)) goto L0017;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_UsageBody, &chunk->thunks, NULL)) goto L0018;
             q = ctx->cur;
             chunk->capts.buf[1].range.start = p;
             chunk->capts.buf[1].range.end = q;
@@ -35556,17 +36109,17 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ShorthandFeatureMember(pcc_context_t
             pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
         }
         goto L0001;
-    L0017:;
+    L0018:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ImplicitInvocation, &chunk->thunks, NULL)) goto L0029;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ImplicitInvocation, &chunk->thunks, NULL)) goto L0031;
         goto L0001;
-    L0029:;
+    L0031:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ImplicitShorthand, &chunk->thunks, NULL)) goto L0030;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ImplicitShorthand, &chunk->thunks, NULL)) goto L0032;
         goto L0001;
-    L0030:;
+    L0032:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
         goto L0000;
@@ -37251,7 +37804,24 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_XorOperator(pcc_context_t *ctx) {
     chunk->pos = ctx->cur;
     PCC_DEBUG(ctx->auxil, PCC_DBG_EVALUATE, "XorOperator", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->buffer.len - chunk->pos));
     ctx->level++;
-    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_XOR, &chunk->thunks, NULL)) goto L0000;
+    {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_CARET, &chunk->thunks, NULL)) goto L0002;
+        goto L0001;
+    L0002:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_XOR, &chunk->thunks, NULL)) goto L0003;
+        goto L0001;
+    L0003:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        goto L0000;
+    L0001:;
+    }
     ctx->level--;
     PCC_DEBUG(ctx->auxil, PCC_DBG_MATCH, "XorOperator", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
     return chunk;
@@ -37712,30 +38282,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ExponentiationExpression(pcc_context
         const size_t p = ctx->cur;
         MARK_VAR_AS_USED
         const size_t n = chunk->thunks.len;
-        {
-            MARK_VAR_AS_USED
-            const size_t p = ctx->cur;
-            MARK_VAR_AS_USED
-            const size_t n = chunk->thunks.len;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_STARSTAR, &chunk->thunks, NULL)) goto L0003;
-            goto L0002;
-        L0003:;
-            ctx->cur = p;
-            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_CARET, &chunk->thunks, NULL)) goto L0004;
-            goto L0002;
-        L0004:;
-            ctx->cur = p;
-            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-            goto L0001;
-        L0002:;
-        }
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_STARSTAR, &chunk->thunks, NULL)) goto L0001;
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_UnaryExpression, &chunk->thunks, NULL)) goto L0001;
-        goto L0005;
+        goto L0002;
     L0001:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-    L0005:;
+    L0002:;
     }
     ctx->level--;
     PCC_DEBUG(ctx->auxil, PCC_DBG_MATCH, "ExponentiationExpression", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
@@ -37962,7 +38515,7 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_BracketExpression(pcc_context_t *ctx
         const size_t p = ctx->cur;
         MARK_VAR_AS_USED
         const size_t n = chunk->thunks.len;
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_IndexExpression, &chunk->thunks, NULL)) goto L0009;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_CollectOperator, &chunk->thunks, NULL)) goto L0009;
         goto L0010;
     L0009:;
         ctx->cur = p;
@@ -37974,46 +38527,58 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_BracketExpression(pcc_context_t *ctx
         const size_t p = ctx->cur;
         MARK_VAR_AS_USED
         const size_t n = chunk->thunks.len;
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_LBRACKET, &chunk->thunks, NULL)) goto L0011;
-        {
-            MARK_VAR_AS_USED
-            const size_t p = ctx->cur;
-            MARK_VAR_AS_USED
-            const size_t n = chunk->thunks.len;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_OwnedExpression, &chunk->thunks, NULL)) goto L0012;
-            goto L0013;
-        L0012:;
-            ctx->cur = p;
-            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        L0013:;
-        }
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACKET, &chunk->thunks, NULL)) goto L0011;
-        goto L0014;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_IndexExpression, &chunk->thunks, NULL)) goto L0011;
+        goto L0012;
     L0011:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-    L0014:;
+    L0012:;
     }
     {
         MARK_VAR_AS_USED
         const size_t p = ctx->cur;
         MARK_VAR_AS_USED
         const size_t n = chunk->thunks.len;
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0015;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_LBRACKET, &chunk->thunks, NULL)) goto L0013;
+        {
+            MARK_VAR_AS_USED
+            const size_t p = ctx->cur;
+            MARK_VAR_AS_USED
+            const size_t n = chunk->thunks.len;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_OwnedExpression, &chunk->thunks, NULL)) goto L0014;
+            goto L0015;
+        L0014:;
+            ctx->cur = p;
+            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        L0015:;
+        }
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACKET, &chunk->thunks, NULL)) goto L0013;
         goto L0016;
-    L0015:;
+    L0013:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
     L0016:;
     }
     {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0017;
+        goto L0018;
+    L0017:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+    L0018:;
+    }
+    {
         for (;;) {
             const size_t p = ctx->cur;
             const size_t n = chunk->thunks.len;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_CollectionOperator, &chunk->thunks, NULL)) goto L0017;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_CollectionOperator, &chunk->thunks, NULL)) goto L0019;
             if (ctx->cur == p) break;
             continue;
-        L0017:;
+        L0019:;
             ctx->cur = p;
             pcc_thunk_array__revert(ctx, &chunk->thunks, n);
             break;
@@ -38024,12 +38589,12 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_BracketExpression(pcc_context_t *ctx
         const size_t p = ctx->cur;
         MARK_VAR_AS_USED
         const size_t n = chunk->thunks.len;
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_IndexExpression, &chunk->thunks, NULL)) goto L0018;
-        goto L0019;
-    L0018:;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_IndexExpression, &chunk->thunks, NULL)) goto L0020;
+        goto L0021;
+    L0020:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-    L0019:;
+    L0021:;
     }
     ctx->level--;
     PCC_DEBUG(ctx->auxil, PCC_DBG_MATCH, "BracketExpression", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
@@ -38054,6 +38619,23 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_SelectOperator(pcc_context_t *ctx) {
 L0000:;
     ctx->level--;
     PCC_DEBUG(ctx->auxil, PCC_DBG_NOMATCH, "SelectOperator", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
+    pcc_thunk_chunk__destroy(ctx, chunk);
+    return NULL;
+}
+
+static pcc_thunk_chunk_t *pcc_evaluate_rule_CollectOperator(pcc_context_t *ctx) {
+    pcc_thunk_chunk_t *const chunk = pcc_thunk_chunk__create(ctx);
+    chunk->pos = ctx->cur;
+    PCC_DEBUG(ctx->auxil, PCC_DBG_EVALUATE, "CollectOperator", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->buffer.len - chunk->pos));
+    ctx->level++;
+    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_DOT, &chunk->thunks, NULL)) goto L0000;
+    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_CollectionBody, &chunk->thunks, NULL)) goto L0000;
+    ctx->level--;
+    PCC_DEBUG(ctx->auxil, PCC_DBG_MATCH, "CollectOperator", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
+    return chunk;
+L0000:;
+    ctx->level--;
+    PCC_DEBUG(ctx->auxil, PCC_DBG_NOMATCH, "CollectOperator", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
     pcc_thunk_chunk__destroy(ctx, chunk);
     return NULL;
 }
@@ -39193,30 +39775,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ExponentiationArgumentExpression(pcc
         const size_t p = ctx->cur;
         MARK_VAR_AS_USED
         const size_t n = chunk->thunks.len;
-        {
-            MARK_VAR_AS_USED
-            const size_t p = ctx->cur;
-            MARK_VAR_AS_USED
-            const size_t n = chunk->thunks.len;
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_STARSTAR, &chunk->thunks, NULL)) goto L0003;
-            goto L0002;
-        L0003:;
-            ctx->cur = p;
-            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_CARET, &chunk->thunks, NULL)) goto L0004;
-            goto L0002;
-        L0004:;
-            ctx->cur = p;
-            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-            goto L0001;
-        L0002:;
-        }
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_STARSTAR, &chunk->thunks, NULL)) goto L0001;
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_UnaryArgumentExpression, &chunk->thunks, NULL)) goto L0001;
-        goto L0005;
+        goto L0002;
     L0001:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-    L0005:;
+    L0002:;
     }
     ctx->level--;
     PCC_DEBUG(ctx->auxil, PCC_DBG_MATCH, "ExponentiationArgumentExpression", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));

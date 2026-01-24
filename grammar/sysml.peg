@@ -448,11 +448,20 @@ static SysmlTypeRefResult sysml2_extract_next_type_ref(SysmlParserContext *ctx, 
     if (!ctx->build_ctx || !text || len == 0) return result;
 
     size_t i = *pos;
-    int in_quote = 0;
+    int in_single_quote = 0;
+    int in_double_quote = 0;
 
     while (i < len) {
-        if (text[i] == '\'') in_quote = !in_quote;
-        if (!in_quote && text[i] == ':') {
+        /* Handle escape sequences in strings */
+        if ((in_single_quote || in_double_quote) && text[i] == '\\' && i + 1 < len) {
+            i += 2;  /* Skip escaped character */
+            continue;
+        }
+        /* Track single-quoted strings (unrestricted names) */
+        if (text[i] == '\'' && !in_double_quote) in_single_quote = !in_single_quote;
+        /* Track double-quoted strings (string literals) */
+        if (text[i] == '"' && !in_single_quote) in_double_quote = !in_double_quote;
+        if (!in_single_quote && !in_double_quote && text[i] == ':') {
             SysmlOperatorKind op = SYSML_OP_NONE;
             size_t op_end = i;
 
@@ -779,6 +788,61 @@ static void sysml2_capture_metadata_feature(SysmlParserContext *ctx, const char 
     ctx->build_ctx->pending_default_value = NULL;
     ctx->build_ctx->pending_has_default_keyword = false;
 }
+
+/* Capture metadata shorthand feature assignment (:>> name = value or :> name = value) */
+static void sysml2_capture_metadata_shorthand_feature(SysmlParserContext *ctx, const char *text, size_t len) {
+    if (!ctx->build_ctx || !ctx->build_ctx->current_metadata) return;
+    if (!text || len == 0) return;
+
+    /* Skip leading whitespace */
+    while (len > 0 && (*text == ' ' || *text == '\t' || *text == '\n' || *text == '\r')) { text++; len--; }
+
+    /* Skip :>> or :> prefix */
+    if (len > 2 && text[0] == ':' && text[1] == '>' && text[2] == '>') {
+        text += 3; len -= 3;
+    } else if (len > 1 && text[0] == ':' && text[1] == '>') {
+        text += 2; len -= 2;
+    } else {
+        return; /* Not a shorthand feature */
+    }
+
+    /* Skip whitespace after prefix */
+    while (len > 0 && (*text == ' ' || *text == '\t')) { text++; len--; }
+
+    /* Find the name (up to = or whitespace) */
+    const char *name_start = text;
+    size_t name_len = 0;
+    while (name_len < len && text[name_len] != '=' && text[name_len] != ' ' &&
+           text[name_len] != '\t' && text[name_len] != ':' && text[name_len] != ';') {
+        name_len++;
+    }
+    if (name_len == 0) return;
+
+    /* Find the value (after =) */
+    const char *value_text = text + name_len;
+    size_t remaining = len - name_len;
+
+    /* Skip whitespace and = */
+    while (remaining > 0 && (*value_text == ' ' || *value_text == '\t')) { value_text++; remaining--; }
+    if (remaining > 0 && *value_text == '=') { value_text++; remaining--; }
+    while (remaining > 0 && (*value_text == ' ' || *value_text == '\t')) { value_text++; remaining--; }
+
+    /* Trim trailing ; and whitespace */
+    while (remaining > 0 && (value_text[remaining-1] == ';' || value_text[remaining-1] == ' ' ||
+                             value_text[remaining-1] == '\t' || value_text[remaining-1] == '\n' ||
+                             value_text[remaining-1] == '\r' || value_text[remaining-1] == '}')) {
+        remaining--;
+    }
+
+    const char *name = sysml2_intern_n(ctx->build_ctx->intern, name_start, name_len);
+    const char *value = (remaining > 0) ? sysml2_intern_n(ctx->build_ctx->intern, value_text, remaining) : NULL;
+
+    sysml2_build_metadata_add_feature(ctx->build_ctx, ctx->build_ctx->current_metadata, name, value);
+
+    /* Clear pending_default_value since it was consumed by the metadata feature */
+    ctx->build_ctx->pending_default_value = NULL;
+    ctx->build_ctx->pending_has_default_keyword = false;
+}
 }
 
 %auxil "SysmlParserContext *"
@@ -1079,7 +1143,8 @@ MemberPrefix <- PrefixMetadata* VisibilityIndicator?
 RelationshipBody <- SEMICOLON / LBRACE AnnotatingElement* RBRACE
 
 # Package Body Elements
-PackageBodyElement <- _ MemberPrefix (DefinitionElement / KerMLFeatureElement / AssertConstraintUsage / BindUsage / ShorthandFeatureMember / UsageElement / Import / Alias / FilterPackageMember / AnnotatingElement)
+# Note: FilterPackageMember must come before ShorthandFeatureMember to prevent 'filter' being parsed as a name
+PackageBodyElement <- _ MemberPrefix (DefinitionElement / KerMLFeatureElement / AssertConstraintUsage / BindUsage / FilterPackageMember / ShorthandFeatureMember / UsageElement / Import / Alias / AnnotatingElement)
 FilterPackageMember <- KW_FILTER OwnedExpression SEMICOLON
 
 # Packages
@@ -1094,9 +1159,10 @@ ImportDeclaration <- NamespaceImport / MembershipImport
 MembershipImport <- QualifiedName (COLONCOLON STARSTAR)?
 NamespaceImport <- QualifiedName (COLONCOLON_STAR COLONCOLON_STARSTAR? / COLONCOLON_STARSTAR)
 # ImportFilter supports multiple filters: [expr][expr]... and metadata filters [@Type]
+# MetadataFilterElement is only used when @ is immediately followed by type name and ]
 ImportFilter <- ImportFilterElement+
 ImportFilterElement <- LBRACKET (MetadataFilterElement / OwnedExpression) RBRACKET
-MetadataFilterElement <- AT QualifiedName
+MetadataFilterElement <- AT QualifiedName &RBRACKET
 
 # Alias
 Alias <- KW_ALIAS < (ShortName NAME / ShortName / NAME) > KW_FOR < QualifiedName > { if (auxil->build_ctx) sysml2_build_alias(auxil->build_ctx, $1, $1e - $1s, $2, $2e - $2s); } RelationshipBody
@@ -1138,16 +1204,17 @@ TypeDeclarationPart <- Multiplicity? (KerMLSpecializationPart / KerMLConjugation
 KerMLSpecializationPart <- SPECIALIZES QualifiedName (COMMA QualifiedName)*
 KerMLConjugationPart <- CONJUGATES QualifiedName
 TypeRelationshipPart <- DisjoiningPart / UnioningPart / IntersectingPart / DifferencingPart
-# Support feature chains like 'disjoint x.y from z.w'
+# Support feature chains like 'disjoint x.y from z.w', 'unions a.b, c.d'
 DisjoiningPart <- KW_DISJOINT KW_FROM QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)*
-UnioningPart <- KW_UNIONS QualifiedName (COMMA QualifiedName)*
-IntersectingPart <- KW_INTERSECTS QualifiedName (COMMA QualifiedName)*
-DifferencingPart <- KW_DIFFERENCES QualifiedName (COMMA QualifiedName)*
+UnioningPart <- KW_UNIONS QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)*
+IntersectingPart <- KW_INTERSECTS QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)*
+DifferencingPart <- KW_DIFFERENCES QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)*
 KerMLTypeBody <- SEMICOLON / LBRACE KerMLTypeBodyElement* RBRACE
 KerMLTypeBodyElement <- MemberPrefix (KerMLDefinitionElement / KerMLParameterMember / KerMLFeatureElement
                                 / ShorthandNamedFeature / Package / Import / Alias / AnnotatingElement)
-# Shorthand named feature: name : Type :>> target; or name = value; (feature keyword implied)
-ShorthandNamedFeature <- < Identification KerMLFeatureSpecializationPart > FeatureRelationshipPart* FeatureValue? UsageBody
+# Shorthand named feature: name : Type :>> target; or name = value; or var name = value; (feature keyword implied)
+ShorthandNamedFeature <- KW_VAR? < Identification KerMLFeatureSpecializationPart > FeatureRelationshipPart* FeatureValue? UsageBody
+                       / KW_VAR < Identification > FeatureValue UsageBody
                        / < Identification > FeatureValue UsageBody
 CONJUGATES <- TILDE / KW_CONJUGATES
 
@@ -1201,7 +1268,8 @@ FunctionDefinition <- KerMLTypePrefix KW_FUNCTION < Identification ClassifierDec
     KerMLFunctionBody { sysml2_pop(auxil); }
 KerMLFunctionBody <- SEMICOLON / LBRACE KerMLFunctionBodyElement* ResultExpression? RBRACE
 KerMLFunctionBodyElement <- MemberPrefix (ReturnFeatureMember / KerMLParameterMember / KerMLDefinitionElement
-                                    / KerMLFeatureElement / Import / Alias / AnnotatingElement)
+                                    / KerMLFeatureElement / FunctionBodyShorthand / BindUsage / Import / Alias / AnnotatingElement)
+FunctionBodyShorthand <- (COLONGTGT / COLONGT) QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)* (COLON QualifiedName Multiplicity?)? FeatureValue? UsageBody
 ReturnFeatureMember <- KW_RETURN (FeatureDefinition / KerMLParameterMember / ReturnNamedPart / ReturnTypePart)
 ReturnNamedPart <- Identification KerMLFeatureSpecializationPart? FeatureValue? UsageBody
 ReturnTypePart <- TypedBy FeatureValue? UsageBody
@@ -1219,9 +1287,9 @@ MultiplicityDefinition <- KW_MULTIPLICITY < Identification? (KW_SUBSETS Qualifie
     KerMLTypeBody { sysml2_pop(auxil); }
 
 # ===== KerML Relationship Elements =====
-# Specialization: specialization [name] subtype Specific :> General;
+# Specialization: specialization [name] subtype Specific.chain :> General.chain;
 SpecializationRelationship <- (KW_SPECIALIZATION Identification?)? KW_SUBTYPE
-    QualifiedName SPECIALIZES QualifiedName RelationshipBody
+    QualifiedName FeatureChain? SPECIALIZES QualifiedName FeatureChain? RelationshipBody
 
 # Conjugation: conjugation [name] conjugate Conjugated ~ Original;
 ConjugationRelationship <- (KW_CONJUGATION Identification?)? KW_CONJUGATE
@@ -1247,9 +1315,9 @@ FeatureTypingRelationship <- (KW_SPECIALIZATION Identification?)? KW_TYPING
 SubsettingRelationship <- (KW_SPECIALIZATION Identification?)? KW_SUBSET
     QualifiedName FeatureChain? SUBSETS QualifiedName FeatureChain? RelationshipBody
 
-# Redefinition: specialization [name] redefinition Specific :>> General;
+# Redefinition: specialization [name] redefinition Specific.chain :>> General.chain;
 RedefinitionRelationship <- (KW_SPECIALIZATION Identification?)? KW_REDEFINITION
-    QualifiedName REDEFINES QualifiedName RelationshipBody
+    QualifiedName FeatureChain? REDEFINES QualifiedName FeatureChain? RelationshipBody
 
 # TypeFeaturing: featuring [name] of Feature by Type;
 TypeFeaturingRelationship <- KW_FEATURING (Identification KW_OF)?
@@ -1295,8 +1363,8 @@ EndCrossFeature <- NAME Multiplicity? KerMLFeatureSpecializationPart? / Multipli
 KerMLFeaturePrefix <- Direction? KW_DERIVED? AbstractModifier? (KW_COMPOSITE / KW_PORTION)?
                  (KW_VAR / KW_READONLY / KW_CONSTANT)? KW_END? PrefixMetadata*
 
-# Feature: [direction] [abstract] [member] feature [all] Name : Type [mult] = value { ... }
-FeatureDefinition <- KerMLFeaturePrefix KW_MEMBER? KW_FEATURE KW_ALL? < KerMLFeatureDeclaration? >
+# Feature: [member] [direction] [abstract] feature [all] Name : Type [mult] = value { ... }
+FeatureDefinition <- KW_MEMBER? KerMLFeaturePrefix KW_MEMBER? KW_FEATURE KW_ALL? < KerMLFeatureDeclaration? >
     { sysml2_build_push(auxil, SYSML_KIND_FEATURE, $1, $1e - $1s); }
     FeatureValue? KerMLTypeBody { sysml2_pop(auxil); }
 KerMLFeatureDeclaration <- Identification? KerMLFeatureSpecializationPart? FeatureRelationshipPart*
@@ -1310,7 +1378,7 @@ InvertingFeaturePart <- KW_INVERSE KW_OF QualifiedName FeatureChain?
 TypeFeaturingPart <- KW_FEATURED KW_BY QualifiedName (COMMA QualifiedName)*
 
 # Step: step Name : Type { ... }
-StepDefinition <- KerMLFeaturePrefix KW_STEP < KerMLFeatureDeclaration? >
+StepDefinition <- KW_MEMBER? KerMLFeaturePrefix KW_STEP < KerMLFeatureDeclaration? >
     { sysml2_build_push(auxil, SYSML_KIND_STEP, $1, $1e - $1s); }
     FeatureValue? KerMLTypeBody { sysml2_pop(auxil); }
 
@@ -1330,8 +1398,8 @@ InvariantDefinition <- KerMLFeaturePrefix KW_INV (KW_TRUE / KW_FALSE)? < KerMLFe
     FeatureValue? KerMLFunctionBody { sysml2_pop(auxil); }
 
 # Connector: [all] connector Name from A to B { ... }
-# Supports: connector = c1; connector f.a to a.g; connector :> a.c1 from x to y;
-ConnectorDefinition <- KerMLFeaturePrefix KW_CONNECTOR KW_ALL? < KerMLConnectorDeclaration? >
+# Supports: connector = c1; connector f.a to a.g; member connector :> a.c1 from x to y;
+ConnectorDefinition <- KW_MEMBER? KerMLFeaturePrefix KW_CONNECTOR KW_ALL? < KerMLConnectorDeclaration? >
     { sysml2_build_push(auxil, SYSML_KIND_CONNECTOR, $1, $1e - $1s); }
     KerMLTypeBody { sysml2_pop(auxil); }
 # Order matters: try patterns with explicit 'from' first, then n-ary, then implicit first end, then declaration only
@@ -1365,12 +1433,16 @@ KerMLSuccessionDeclaration <- KerMLFeatureDeclaration? KW_FIRST SuccessionConnec
                             / KerMLFeatureDeclaration
 SuccessionConnectorEnd <- Multiplicity? ConnectorEndMember
 
-# Flow: flow Name of Payload from A to B { ... }
+# Flow: flow Name of Payload from A to B { ... } or flow A to B { ... }
 KerMLFlowDefinition <- KerMLFeaturePrefix KW_FLOW < KerMLFlowDeclaration? >
     { sysml2_build_push(auxil, SYSML_KIND_KERML_FLOW, $1, $1e - $1s); }
     KerMLTypeBody { sysml2_pop(auxil); }
-KerMLFlowDeclaration <- KerMLFeatureDeclaration? (KW_OF QualifiedName)?
-                   (KW_FROM ConnectorEndMember KW_TO ConnectorEndMember)?
+# Order matters: try explicit 'from' patterns first, then implicit first endpoint, then declaration-only
+KerMLFlowDeclaration <- KerMLFeatureDeclaration (KW_OF QualifiedName)? KW_FROM ConnectorEndMember KW_TO ConnectorEndMember
+                      / (KW_OF QualifiedName)? KW_FROM ConnectorEndMember KW_TO ConnectorEndMember
+                      / KerMLFeatureDeclaration (KW_OF QualifiedName)? ConnectorEndMember KW_TO ConnectorEndMember
+                      / ConnectorEndMember KW_TO ConnectorEndMember
+                      / KerMLFeatureDeclaration (KW_OF QualifiedName)?
 
 # SuccessionFlow: succession flow Name of Payload from A to B { ... }
 SuccessionFlowDefinition <- KerMLFeaturePrefix KW_SUCCESSION KW_FLOW < KerMLFlowDeclaration? >
@@ -1383,8 +1455,10 @@ MetadataUsage <- AT < QualifiedName > { sysml2_capture_start_metadata(auxil, $1,
               / < AT? KW_METADATA Identification? (COLON QualifiedName)? (KW_ABOUT QualifiedName (COMMA QualifiedName)*)? > { if (auxil->build_ctx) sysml2_capture_metadata_usage(auxil->build_ctx, $2, $2e - $2s); } MetadataBody
 MetadataUsageTail <- (KW_ABOUT QualifiedName (COMMA QualifiedName)*)? (MetadataBody / SEMICOLON)
 MetadataBody <- SEMICOLON / LBRACE MetadataBodyElement* RBRACE
-MetadataBodyElement <- MetadataBodyFeature / ShorthandFeatureMember / AnnotatingElement
+MetadataBodyElement <- MetadataBodyFeature / MetadataBodyShorthandFeature / AnnotatingElement
 MetadataBodyFeature <- MemberPrefix KW_REF? < NAME > < FeatureValue? > (SEMICOLON / MetadataBody) { sysml2_capture_metadata_feature(auxil, $1, $1e - $1s, $2, $2e - $2s); }
+# Shorthand features inside metadata body: :>> name = value; or :> name = value;
+MetadataBodyShorthandFeature <- < (COLONGTGT / COLONGT) QualifiedName FeatureValue? SEMICOLON > { sysml2_capture_metadata_shorthand_feature(auxil, $1, $1e - $1s); }
 
 # Annotating Elements
 AnnotatingElement <- Comment / Documentation / TextualRepresentation / MetadataUsage
@@ -1711,8 +1785,8 @@ UsageBodyItem <- MemberPrefix (DefinitionElement / AssertConstraintUsage / BindU
 # Shorthand feature member like :>> name = value; or :> name = value; or :>> name : Type { }
 # Also supports comma-separated targets: :>> a, b;
 # And redefines with optional type: redefines name : Type { }
-ShorthandFeatureMember <- < (COLONGTGT / COLONGT) QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)* (COLON QualifiedName Multiplicity?)? FeatureValue? UsageBody > { if (auxil->build_ctx) sysml2_capture_shorthand_feature(auxil->build_ctx, $1, $1e - $1s); }
-                        / < KW_REDEFINES QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)* (COLON QualifiedName Multiplicity?)? FeatureValue? UsageBody > { if (auxil->build_ctx) sysml2_capture_shorthand_feature(auxil->build_ctx, $2, $2e - $2s); }
+ShorthandFeatureMember <- < (COLONGTGT / COLONGT) QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)* (COLON QualifiedName Multiplicity? KerMLFeatureSpecialization*)? FeatureValue? UsageBody > { if (auxil->build_ctx) sysml2_capture_shorthand_feature(auxil->build_ctx, $1, $1e - $1s); }
+                        / < KW_REDEFINES QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)* (COLON QualifiedName Multiplicity? KerMLFeatureSpecialization*)? FeatureValue? UsageBody > { if (auxil->build_ctx) sysml2_capture_shorthand_feature(auxil->build_ctx, $2, $2e - $2s); }
                         / ImplicitInvocation
                         / ImplicitShorthand
 # Implicit invocation like P::Q(args) as a body element
@@ -1777,7 +1851,7 @@ NullCoalescingExpression <- OrExpression (QMARKQMARK OrExpression)?
 OrExpression <- XorExpression (OrOperator XorExpression)*
 OrOperator <- PIPE / KW_OR
 XorExpression <- AndExpression (XorOperator AndExpression)*
-XorOperator <- KW_XOR
+XorOperator <- CARET / KW_XOR
 AndExpression <- EqualityExpression (AndOperator EqualityExpression)*
 AndOperator <- AMP / KW_AND
 EqualityExpression <- ClassificationExpression (EqualityOperator ClassificationExpression)?
@@ -1791,7 +1865,7 @@ AdditiveExpression <- MultiplicativeExpression (AdditiveOperator MultiplicativeE
 AdditiveOperator <- PLUS / MINUS
 MultiplicativeExpression <- ExponentiationExpression (MultiplicativeOperator ExponentiationExpression)*
 MultiplicativeOperator <- STAR / SLASH / PERCENT
-ExponentiationExpression <- UnaryExpression ((STARSTAR / CARET) UnaryExpression)?
+ExponentiationExpression <- UnaryExpression (STARSTAR UnaryExpression)?
 UnaryExpression <- UnaryOperator? ExtentExpression
 UnaryOperator <- PLUS / MINUS / BANG / KW_NOT / TILDE
 ExtentExpression <- (KW_ALL ExtentExpression) / SequenceExpression
@@ -1800,8 +1874,10 @@ SequenceTail <- COMMA UnaryExpression
 # BracketExpression with optional collection operators like ->forAll {} and index operator #() and select .?{}
 # Note: Inside brackets we use OwnedExpression to support unit expressions like [N * m]
 # FeatureChain can be followed by ArgumentList for method calls like a.b(args)
-BracketExpression <- PrimaryExpression FeatureChain? ArgumentList? QMARK? SelectOperator? IndexExpression? (LBRACKET OwnedExpression? RBRACKET)? FeatureChain? CollectionOperator* IndexExpression?
+# Support shorthand collect: x.{body} for x->collect {body}
+BracketExpression <- PrimaryExpression FeatureChain? ArgumentList? QMARK? SelectOperator? CollectOperator? IndexExpression? (LBRACKET OwnedExpression? RBRACKET)? FeatureChain? CollectionOperator* IndexExpression?
 SelectOperator <- DOTQ CollectionBody
+CollectOperator <- DOT CollectionBody
 IndexExpression <- HASH LPAREN OwnedExpression RPAREN
 # Support function reference args like ->reduce '+' or ->reduce min
 CollectionOperator <- ARROW NAME (CollectionBody / FunctionReferenceArg / ArgumentList)?
@@ -1836,7 +1912,7 @@ RelationalArgumentExpression <- RangeArgumentExpression (RelationalOperator Rang
 RangeArgumentExpression <- AdditiveArgumentExpression (DOTDOT AdditiveArgumentExpression)?
 AdditiveArgumentExpression <- MultiplicativeArgumentExpression (AdditiveOperator MultiplicativeArgumentExpression)*
 MultiplicativeArgumentExpression <- ExponentiationArgumentExpression (MultiplicativeOperator ExponentiationArgumentExpression)*
-ExponentiationArgumentExpression <- UnaryArgumentExpression ((STARSTAR / CARET) UnaryArgumentExpression)?
+ExponentiationArgumentExpression <- UnaryArgumentExpression (STARSTAR UnaryArgumentExpression)?
 UnaryArgumentExpression <- UnaryOperator? ExtentArgumentExpression
 ExtentArgumentExpression <- (KW_ALL ExtentArgumentExpression) / BracketExpression
 NameExpression <- QualifiedName FeatureChain?

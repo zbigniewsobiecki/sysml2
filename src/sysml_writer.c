@@ -877,6 +877,8 @@ static void write_applied_metadata(Sysml2Writer *w, const SysmlNode *node) {
                 SysmlMetadataFeature *f = m->features[j];
                 if (!f) continue;
                 write_indent(w);
+                /* Use :>> syntax for metadata attribute redefinitions */
+                fputs(":>> ", w->out);
                 fputs(f->name, w->out);
                 if (f->value) {
                     fputs(" = ", w->out);
@@ -924,6 +926,8 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
                 SysmlMetadataFeature *f = m->features[j];
                 if (!f) continue;
                 write_indent(w);
+                /* Use :>> syntax for metadata attribute redefinitions */
+                fputs(":>> ", w->out);
                 fputs(f->name, w->out);
                 if (f->value) {
                     fputs(" = ", w->out);
