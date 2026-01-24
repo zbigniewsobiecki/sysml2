@@ -276,7 +276,9 @@ static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
     const SysmlNode **children = NULL;
     size_t child_count = get_children(model, node->id, &children);
 
-    if (import_count == 0 && child_count == 0 && node->metadata_count == 0) {
+    bool has_doc = (node->documentation != NULL);
+
+    if (import_count == 0 && child_count == 0 && node->metadata_count == 0 && !has_doc) {
         /* Empty body: use semicolon */
         fputc(';', w->out);
         if (node->trailing_trivia) {
@@ -293,7 +295,18 @@ static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
 
         w->indent_level++;
 
-        /* Write applied metadata first (inside the body) */
+        /* Write documentation first if present */
+        if (has_doc) {
+            write_indent(w);
+            fputs("doc ", w->out);
+            fputs(node->documentation, w->out);
+            write_newline(w);
+            if (node->metadata_count > 0 || import_count > 0 || child_count > 0) {
+                write_newline(w);
+            }
+        }
+
+        /* Write applied metadata (inside the body) */
         if (node->metadata_count > 0) {
             write_applied_metadata(w, node);
             if (import_count > 0 || child_count > 0) {
@@ -378,7 +391,41 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
 
     write_indent(w);
 
-    /* Write prefix metadata before keyword */
+    /* Write prefix applied metadata (@Type {...}) before element */
+    for (size_t i = 0; i < node->prefix_applied_metadata_count; i++) {
+        SysmlMetadataUsage *m = node->prefix_applied_metadata[i];
+        if (!m) continue;
+
+        fputc('@', w->out);
+        fputs(m->type_ref, w->out);
+
+        if (m->feature_count > 0) {
+            fputs(" {", w->out);
+            write_newline(w);
+            w->indent_level++;
+            for (size_t j = 0; j < m->feature_count; j++) {
+                SysmlMetadataFeature *f = m->features[j];
+                if (!f) continue;
+                write_indent(w);
+                fputs(f->name, w->out);
+                if (f->value) {
+                    fputs(" = ", w->out);
+                    fputs(f->value, w->out);
+                }
+                fputc(';', w->out);
+                write_newline(w);
+            }
+            w->indent_level--;
+            write_indent(w);
+            fputc('}', w->out);
+        } else {
+            fputc(';', w->out);
+        }
+        write_newline(w);
+        write_indent(w);
+    }
+
+    /* Write prefix metadata before keyword (#Type) */
     for (size_t i = 0; i < node->prefix_metadata_count; i++) {
         fputc('#', w->out);
         fputs(node->prefix_metadata[i], w->out);

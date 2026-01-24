@@ -58,6 +58,11 @@ SysmlBuildContext *sysml2_build_context_create(
     ctx->pending_prefix_metadata = SYSML2_ARENA_NEW_ARRAY(arena, const char *, ctx->pending_prefix_metadata_capacity);
     ctx->pending_prefix_metadata_count = 0;
 
+    /* Initialize pending applied metadata */
+    ctx->pending_metadata_capacity = 8;
+    ctx->pending_metadata = SYSML2_ARENA_NEW_ARRAY(arena, SysmlMetadataUsage *, ctx->pending_metadata_capacity);
+    ctx->pending_metadata_count = 0;
+
     /* Initialize current metadata */
     ctx->current_metadata = NULL;
 
@@ -194,10 +199,13 @@ SysmlNode *sysml2_build_node(
     node->references = NULL;
     node->references_count = 0;
     node->loc = SYSML2_LOC_INVALID;
+    node->documentation = NULL;
     node->metadata = NULL;
     node->metadata_count = 0;
     node->prefix_metadata = NULL;
     node->prefix_metadata_count = 0;
+    node->prefix_applied_metadata = NULL;
+    node->prefix_applied_metadata_count = 0;
     node->leading_trivia = NULL;
     node->trailing_trivia = NULL;
 
@@ -213,6 +221,17 @@ SysmlNode *sysml2_build_node(
             node->prefix_metadata_count = ctx->pending_prefix_metadata_count;
         }
         ctx->pending_prefix_metadata_count = 0;
+    }
+
+    /* Attach any pending applied metadata (@Type {...}) - goes in prefix position */
+    if (ctx->pending_metadata_count > 0) {
+        node->prefix_applied_metadata = SYSML2_ARENA_NEW_ARRAY(ctx->arena, SysmlMetadataUsage *, ctx->pending_metadata_count);
+        if (node->prefix_applied_metadata) {
+            memcpy(node->prefix_applied_metadata, ctx->pending_metadata,
+                   ctx->pending_metadata_count * sizeof(SysmlMetadataUsage *));
+            node->prefix_applied_metadata_count = ctx->pending_metadata_count;
+        }
+        ctx->pending_metadata_count = 0;
     }
 
     return node;
@@ -696,22 +715,53 @@ SysmlMetadataUsage *sysml2_build_start_metadata(
 }
 
 /*
+ * Add a pending metadata usage that will be attached to the next node
+ */
+static void add_pending_metadata(SysmlBuildContext *ctx, SysmlMetadataUsage *meta) {
+    if (!ctx || !meta) return;
+
+    /* Grow array if needed */
+    if (ctx->pending_metadata_count >= ctx->pending_metadata_capacity) {
+        size_t new_capacity = ctx->pending_metadata_capacity * 2;
+        SysmlMetadataUsage **new_pending = SYSML2_ARENA_NEW_ARRAY(ctx->arena, SysmlMetadataUsage *, new_capacity);
+        if (!new_pending) return;
+        if (ctx->pending_metadata) {
+            memcpy(new_pending, ctx->pending_metadata,
+                   ctx->pending_metadata_count * sizeof(SysmlMetadataUsage *));
+        }
+        ctx->pending_metadata = new_pending;
+        ctx->pending_metadata_capacity = new_capacity;
+    }
+
+    ctx->pending_metadata[ctx->pending_metadata_count++] = meta;
+}
+
+/*
  * Finish building a metadata usage and attach to current scope's node
+ * or add to pending if no node exists yet
  */
 void sysml2_build_end_metadata(SysmlBuildContext *ctx) {
     if (!ctx || !ctx->current_metadata) return;
 
     /* Find the current scope's node (most recently added element in current scope) */
     const char *current_scope = sysml2_build_current_scope(ctx);
+    bool attached = false;
+
     if (current_scope) {
         /* Find the node with this ID */
         for (size_t i = ctx->element_count; i > 0; i--) {
             SysmlNode *node = ctx->elements[i - 1];
             if (node->id == current_scope) {
                 sysml2_build_add_metadata(ctx, node, ctx->current_metadata);
+                attached = true;
                 break;
             }
         }
+    }
+
+    /* If no node to attach to, add to pending for next node */
+    if (!attached) {
+        add_pending_metadata(ctx, ctx->current_metadata);
     }
 
     ctx->current_metadata = NULL;
@@ -872,5 +922,51 @@ void sysml2_capture_blank_lines(struct Sysml2ParserContext *pctx, size_t start_o
     SysmlTrivia *trivia = sysml2_build_trivia(build_ctx, SYSML_TRIVIA_BLANK_LINE, NULL, SYSML2_LOC_INVALID);
     if (trivia) {
         sysml2_build_add_pending_trivia(build_ctx, trivia);
+    }
+}
+
+void sysml2_capture_documentation(struct Sysml2ParserContext *pctx, size_t start_offset, size_t end_offset) {
+    if (!pctx) return;
+
+    typedef struct {
+        const char *filename;
+        const char *input;
+        size_t input_len;
+        size_t input_pos;
+        int error_count;
+        int line;
+        int col;
+        size_t furthest_pos;
+        int furthest_line;
+        int furthest_col;
+        const char *failed_rules[16];
+        int failed_rule_count;
+        const char *context_rule;
+        const char *last_keyword;
+        size_t last_keyword_pos;
+        SysmlBuildContext *build_ctx;
+    } ParserCtx;
+
+    ParserCtx *ctx = (ParserCtx *)pctx;
+    SysmlBuildContext *build_ctx = ctx->build_ctx;
+    if (!build_ctx) return;
+
+    /* Get the documentation text */
+    const char *start = ctx->input + start_offset;
+    size_t len = end_offset - start_offset;
+
+    /* Intern the documentation text (includes delimiters) */
+    const char *interned_text = len > 0 ? sysml2_intern_n(build_ctx->intern, start, len) : NULL;
+
+    /* Find the current scope's node and attach documentation */
+    const char *current_scope = sysml2_build_current_scope(build_ctx);
+    if (current_scope) {
+        for (size_t i = build_ctx->element_count; i > 0; i--) {
+            SysmlNode *node = build_ctx->elements[i - 1];
+            if (node->id == current_scope) {
+                node->documentation = interned_text;
+                break;
+            }
+        }
     }
 }

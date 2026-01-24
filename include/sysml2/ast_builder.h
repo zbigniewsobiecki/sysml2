@@ -64,6 +64,11 @@ typedef struct SysmlBuildContext {
     size_t pending_prefix_metadata_count;
     size_t pending_prefix_metadata_capacity;
 
+    /* Pending applied metadata (@Type {...}) for attachment to next node */
+    SysmlMetadataUsage **pending_metadata;
+    size_t pending_metadata_count;
+    size_t pending_metadata_capacity;
+
     /* Current metadata usage being built */
     SysmlMetadataUsage *current_metadata;
 } SysmlBuildContext;

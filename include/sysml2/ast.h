@@ -222,6 +222,9 @@ typedef struct SysmlNode {
     /* Source location for debugging */
     Sysml2SourceLoc loc;
 
+    /* Documentation comment (doc comment text) */
+    const char *documentation;
+
     /* Applied metadata inside element body (@Metadata { ... }) */
     SysmlMetadataUsage **metadata;
     size_t metadata_count;
@@ -229,6 +232,10 @@ typedef struct SysmlNode {
     /* Prefix metadata before element (#Metadata) */
     const char **prefix_metadata;
     size_t prefix_metadata_count;
+
+    /* Prefix applied metadata before element (@Metadata {...}) */
+    SysmlMetadataUsage **prefix_applied_metadata;
+    size_t prefix_applied_metadata_count;
 
     /* Trivia for pretty printing */
     SysmlTrivia *leading_trivia;   /* Comments before node */

@@ -328,6 +328,7 @@ static inline void sysml2_error(SysmlParserContext *ctx) {
 void sysml2_capture_line_comment(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
 void sysml2_capture_block_comment(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
 void sysml2_capture_blank_lines(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
+void sysml2_capture_documentation(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
 
 /* Helper: check if character is a type/specialization marker */
 static int sysml2_is_marker(char c, char next) {
@@ -665,6 +666,9 @@ File <- _ (Package / LibraryPackage / PackageBodyElement)* EOF
 # Whitespace and Comments (trivia capture for pretty printing)
 _   <- TriviaCapture*
 
+# Whitespace that excludes doc block comments (for use after 'doc' keyword)
+_NoDocBlock <- (LineCommentCapture / BlankLineCapture / WS)*
+
 TriviaCapture
     <- LineCommentCapture
      / DocBlockCommentCapture
@@ -738,7 +742,7 @@ KW_DEFINED     <- 'defined'     !IdentCont _
 KW_DEPENDENCY  <- 'dependency'  !IdentCont _
 KW_DERIVED     <- 'derived'     !IdentCont _
 KW_DO          <- 'do'          !IdentCont _
-KW_DOC         <- 'doc'         !IdentCont _
+KW_DOC         <- 'doc'         !IdentCont _NoDocBlock
 KW_ELSE        <- 'else'        !IdentCont _
 KW_END         <- 'end'         !IdentCont _
 KW_ENTRY       <- 'entry'       !IdentCont _
@@ -1222,7 +1226,7 @@ MetadataBodyFeature <- MemberPrefix KW_REF? < NAME > < FeatureValue? > (SEMICOLO
 # Annotating Elements
 AnnotatingElement <- Comment / Documentation / TextualRepresentation / MetadataUsage
 Comment <- (KW_COMMENT Identification (KW_ABOUT QualifiedName (COMMA QualifiedName)*)?)? (KW_LOCALE STRING_VALUE)? DocOrRegularComment
-Documentation <- KW_DOC Identification? (KW_LOCALE STRING_VALUE)? DocOrRegularComment
+Documentation <- KW_DOC Identification? (KW_LOCALE STRING_VALUE)? < DocOrRegularComment > { sysml2_capture_documentation(auxil, $1s, $1e); }
 TextualRepresentation <- (KW_REP Identification)? KW_LANGUAGE STRING_VALUE DocOrRegularComment
 
 # Definitions
@@ -1242,7 +1246,8 @@ EnumerationDefinition <- DefinitionPrefix* KW_ENUM KW_DEF < Identification Defin
 DatatypeDefinition <- DefinitionPrefix* KW_DATATYPE < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_DATATYPE, $1, $1e - $1s); } DefinitionBody { sysml2_pop(auxil); }
 EnumerationBody <- SEMICOLON / LBRACE (EnumeratedValue / AnnotatingElement)* RBRACE
 EnumeratedValue <- _ MemberPrefix EnumeratedValueVariant
-EnumeratedValueVariant <- KW_ENUM? UsageDeclaration UsageBody / KW_VARIANT UsageElement
+EnumeratedValueVariant <- KW_ENUM? < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_ENUMERATION_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
+                        / KW_VARIANT UsageElement
 OccurrenceDefinition <- DefinitionPrefix* KW_OCCURRENCE KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_OCCURRENCE_DEF, $1, $1e - $1s); } OccurrenceDefinitionBody { sysml2_pop(auxil); }
                       / DefinitionPrefix* KW_DEF Identification DefinitionSpecializations? OccurrenceDefinitionBody
 OccurrenceDefinitionBody <- SEMICOLON / LBRACE OccurrenceDefinitionMember* RBRACE
