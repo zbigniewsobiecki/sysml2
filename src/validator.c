@@ -39,6 +39,12 @@ bool sysml2_is_type_compatible(SysmlNodeKind usage_kind, SysmlNodeKind def_kind)
                    def_kind == SYSML_KIND_ENUMERATION_DEF ||
                    def_kind == SYSML_KIND_DATATYPE;
 
+        case SYSML_KIND_PARAMETER:
+            /* Constraint/action/calc parameters can be typed like attributes */
+            return def_kind == SYSML_KIND_ATTRIBUTE_DEF ||
+                   def_kind == SYSML_KIND_ENUMERATION_DEF ||
+                   def_kind == SYSML_KIND_DATATYPE;
+
         case SYSML_KIND_REQUIREMENT_USAGE:
             return def_kind == SYSML_KIND_REQUIREMENT_DEF;
 
