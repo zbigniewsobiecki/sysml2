@@ -544,6 +544,34 @@ static void write_statement(Sysml2Writer *w, const SysmlStatement *stmt) {
             }
             break;
 
+        case SYSML_STMT_ACTOR:
+            fputs("actor ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_STAKEHOLDER:
+            fputs("stakeholder ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_OBJECTIVE:
+            fputs("objective ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_FRAME:
+            fputs("frame ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
         default:
             /* Unknown statement - write raw_text if available */
             if (stmt->raw_text) {

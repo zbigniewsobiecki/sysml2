@@ -1820,6 +1820,7 @@ void sysml2_capture_require_constraint(SysmlBuildContext *ctx, const char *text,
     stmt->raw_text = trim_and_intern(ctx, text, len);
 
     add_pending_stmt(ctx, stmt);
+    sysml2_build_clear_pending_modifiers(ctx);
 }
 
 /*
@@ -1834,6 +1835,7 @@ void sysml2_capture_assume_constraint(SysmlBuildContext *ctx, const char *text, 
     stmt->raw_text = trim_and_intern(ctx, text, len);
 
     add_pending_stmt(ctx, stmt);
+    sysml2_build_clear_pending_modifiers(ctx);
 }
 
 /*
@@ -1848,6 +1850,7 @@ void sysml2_capture_subject(SysmlBuildContext *ctx, const char *text, size_t len
     stmt->raw_text = trim_and_intern(ctx, text, len);
 
     add_pending_stmt(ctx, stmt);
+    sysml2_build_clear_pending_modifiers(ctx);
 }
 
 /*
@@ -1862,6 +1865,7 @@ void sysml2_capture_end_member(SysmlBuildContext *ctx, const char *text, size_t 
     stmt->raw_text = trim_and_intern(ctx, text, len);
 
     add_pending_stmt(ctx, stmt);
+    sysml2_build_clear_pending_modifiers(ctx);
 }
 
 /*
@@ -1876,6 +1880,7 @@ void sysml2_capture_return_usage(SysmlBuildContext *ctx, const char *text, size_
     stmt->raw_text = trim_and_intern(ctx, text, len);
 
     add_pending_stmt(ctx, stmt);
+    sysml2_build_clear_pending_modifiers(ctx);
 }
 
 /*
@@ -1894,4 +1899,64 @@ void sysml2_capture_flow_payload(SysmlBuildContext *ctx, const char *text, size_
     if (!ctx || !text || len == 0) return;
 
     ctx->pending_flow_payload = trim_and_intern(ctx, text, len);
+}
+
+/*
+ * Capture an actor usage statement
+ */
+void sysml2_capture_actor(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_ACTOR);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+    sysml2_build_clear_pending_modifiers(ctx);
+}
+
+/*
+ * Capture a stakeholder usage statement
+ */
+void sysml2_capture_stakeholder(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_STAKEHOLDER);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+    sysml2_build_clear_pending_modifiers(ctx);
+}
+
+/*
+ * Capture an objective usage statement
+ */
+void sysml2_capture_objective(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_OBJECTIVE);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+    sysml2_build_clear_pending_modifiers(ctx);
+}
+
+/*
+ * Capture a frame usage statement
+ */
+void sysml2_capture_frame(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_FRAME);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+    sysml2_build_clear_pending_modifiers(ctx);
 }

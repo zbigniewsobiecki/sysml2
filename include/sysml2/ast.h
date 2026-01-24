@@ -231,6 +231,10 @@ typedef enum {
     SYSML_STMT_REQUIRE_CONSTRAINT, /* require constraint {...} */
     SYSML_STMT_ASSUME_CONSTRAINT,  /* assume constraint {...} */
     SYSML_STMT_SUBJECT,            /* subject x : Type; */
+    SYSML_STMT_ACTOR,              /* actor a : Type; */
+    SYSML_STMT_STAKEHOLDER,        /* stakeholder s : Type; */
+    SYSML_STMT_OBJECTIVE,          /* objective o {...} */
+    SYSML_STMT_FRAME,              /* frame requirement r {...} */
 
     /* Connection/interface body statements */
     SYSML_STMT_END_MEMBER,         /* end port x : Type; */

@@ -896,4 +896,40 @@ void sysml2_capture_action_params(SysmlBuildContext *ctx, const char *text, size
  */
 void sysml2_capture_flow_payload(SysmlBuildContext *ctx, const char *text, size_t len);
 
+/*
+ * Capture an actor usage statement
+ *
+ * @param ctx Build context
+ * @param text Raw text of the actor usage
+ * @param len Length of text
+ */
+void sysml2_capture_actor(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture a stakeholder usage statement
+ *
+ * @param ctx Build context
+ * @param text Raw text of the stakeholder usage
+ * @param len Length of text
+ */
+void sysml2_capture_stakeholder(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture an objective usage statement
+ *
+ * @param ctx Build context
+ * @param text Raw text of the objective usage
+ * @param len Length of text
+ */
+void sysml2_capture_objective(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture a frame usage statement
+ *
+ * @param ctx Build context
+ * @param text Raw text of the frame usage
+ * @param len Length of text
+ */
+void sysml2_capture_frame(SysmlBuildContext *ctx, const char *text, size_t len);
+
 #endif /* SYSML2_AST_BUILDER_H */

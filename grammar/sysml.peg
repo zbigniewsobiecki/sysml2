@@ -1578,10 +1578,10 @@ Direction <- KW_INOUT { if (auxil->build_ctx) sysml2_capture_direction(auxil->bu
            / KW_OUT { if (auxil->build_ctx) sysml2_capture_direction(auxil->build_ctx, SYSML_DIR_OUT); }
            / KW_IN { if (auxil->build_ctx) sysml2_capture_direction(auxil->build_ctx, SYSML_DIR_IN); }
 SubjectUsage <- KW_SUBJECT < (UsageDeclaration UsageBody / FeatureValue SEMICOLON) > { if (auxil->build_ctx) sysml2_capture_subject(auxil->build_ctx, $1, $1e - $1s); }
-ActorUsage <- KW_ACTOR (UsageDeclaration UsageBody / FeatureValue SEMICOLON)
-StakeholderUsage <- KW_STAKEHOLDER (UsageDeclaration UsageBody / FeatureValue SEMICOLON)
-ObjectiveUsage <- KW_OBJECTIVE UsageDeclaration RequirementBody
-FrameUsage <- KW_FRAME (KW_CONCERN / KW_REQUIREMENT)? UsageDeclaration RequirementBody
+ActorUsage <- KW_ACTOR < (UsageDeclaration UsageBody / FeatureValue SEMICOLON) > { if (auxil->build_ctx) sysml2_capture_actor(auxil->build_ctx, $1, $1e - $1s); }
+StakeholderUsage <- KW_STAKEHOLDER < (UsageDeclaration UsageBody / FeatureValue SEMICOLON) > { if (auxil->build_ctx) sysml2_capture_stakeholder(auxil->build_ctx, $1, $1e - $1s); }
+ObjectiveUsage <- KW_OBJECTIVE < UsageDeclaration RequirementBody > { if (auxil->build_ctx) sysml2_capture_objective(auxil->build_ctx, $1, $1e - $1s); }
+FrameUsage <- KW_FRAME < (KW_CONCERN / KW_REQUIREMENT)? UsageDeclaration RequirementBody > { if (auxil->build_ctx) sysml2_capture_frame(auxil->build_ctx, $1, $1e - $1s); }
 RequirementReference <- RequirementConstraintKind UsageDeclaration? UsageBody
 RequirementConstraintKind <- KW_ASSUME KW_CONSTRAINT? / KW_REQUIRE KW_CONSTRAINT?
 VerifyRequirementUsage <- KW_VERIFY KW_REQUIREMENT? UsageDeclaration? UsageBody
