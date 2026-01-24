@@ -503,7 +503,7 @@ Import <- KW_IMPORT KW_ALL? ImportDeclaration ImportFilter? RelationshipBody
 ImportDeclaration <- NamespaceImport / MembershipImport
 MembershipImport <- QualifiedName (COLONCOLON STARSTAR)?
 NamespaceImport <- QualifiedName (COLONCOLON_STAR COLONCOLON_STARSTAR? / COLONCOLON_STARSTAR)
-ImportFilter <- LBRACKET AT OwnedExpression RBRACKET
+ImportFilter <- LBRACKET OwnedExpression RBRACKET
 
 # Alias
 Alias <- KW_ALIAS (ShortName NAME / ShortName / NAME) KW_FOR QualifiedName RelationshipBody
@@ -547,7 +547,7 @@ OccurrenceDefinition <- DefinitionPrefix* KW_OCCURRENCE KW_DEF Identification De
 OccurrenceDefinitionBody <- SEMICOLON / LBRACE OccurrenceDefinitionMember* RBRACE
 # ThenMessageUsage for 'then message x of T' syntax in occurrences
 ThenMessageUsage <- KW_THEN MessageUsage
-OccurrenceDefinitionMember <- MemberPrefix (OccurrenceDefinitionElement / PortionUsage / ThenMessageUsage / MessageUsage / BindUsage / EventOccurrenceUsage / EventUsage / SuccessionMember / StructureUsageElement / OccurrenceUsage / Import / Alias / AnnotatingElement)
+OccurrenceDefinitionMember <- MemberPrefix (OccurrenceDefinitionElement / PortionUsage / ThenMessageUsage / MessageUsage / BindUsage / EventOccurrenceUsage / EventUsage / ShorthandFeatureMember / SuccessionMember / StructureUsageElement / OccurrenceUsage / Import / Alias / AnnotatingElement)
 OccurrenceDefinitionElement <- DefinitionElement / BehaviorUsageElement
 ItemDefinition <- DefinitionPrefix* KW_ITEM KW_DEF Identification DefinitionSpecializations? DefinitionBody
 PartDefinition <- DefinitionPrefix* KW_PART KW_DEF Identification DefinitionSpecializations? DefinitionBody
@@ -574,8 +574,8 @@ StateBodyItem <- MemberPrefix StateBodyElement
 StateBodyElement <- DefinitionElement / AssertConstraintUsage / StateUsageElement / AnnotatingElement / Import / Alias
 StateUsageElement <- EntryAction / ExitAction / DoAction / EntryTransition / AcceptTransition / StateUsage / ExhibitStateUsage / TransitionUsage / SuccessionUsage / SuccessionMember / ConstraintUsage / ActionUsageElement
 AcceptTransition <- KW_ACCEPT TriggerActionBody? EffectAction? TransitionEndAction
-EntryAction <- KW_ENTRY (KW_ACTION UsageDeclaration ActionBody / KW_ACTION? UsageDeclaration SEMICOLON / AssignmentAction / SendAction / PerformActionUsage / ActionBody)
-ExitAction <- KW_EXIT (KW_ACTION UsageDeclaration ActionBody / KW_ACTION? UsageDeclaration SEMICOLON / AssignmentAction / SendAction / PerformActionUsage / ActionBody)
+EntryAction <- KW_ENTRY (KW_ACTION UsageDeclaration ActionBody / KW_ACTION? UsageDeclaration SEMICOLON / AssignmentAction / SendAction / PerformActionUsage / QualifiedName FeatureChain? ActionBody / ActionBody)
+ExitAction <- KW_EXIT (KW_ACTION UsageDeclaration ActionBody / KW_ACTION? UsageDeclaration SEMICOLON / AssignmentAction / SendAction / PerformActionUsage / QualifiedName FeatureChain? ActionBody / ActionBody)
 DoAction <- KW_DO (KW_ACTION UsageDeclaration ActionBody / AssignmentAction / SendAction / PerformActionUsage / QualifiedName FeatureChain? (SEMICOLON / ActionBody) / ActionBody)
 # perform action name; OR perform name;
 # perform action name { } OR perform name.feature { } OR perform name; OR perform name redefines other;
@@ -641,7 +641,7 @@ StructureUsageElement <- AttributeUsage / ItemUsage / PartUsage / PortUsage / Co
 BehaviorUsageElement <- ActionUsage / StateUsage / ConstraintUsage / CalcUsage
 ActionUsageElement <- ParameterUsage / ActionUsage / PerformActionUsage / SendAction / AcceptAction / AssignmentAction / IfAction / WhileLoop / ForLoop / ControlNode / SuccessionMember
 ConstraintUsageElement <- ParameterUsage / ReturnUsage / ConstraintUsage
-RequirementUsageElement <- SubjectUsage / ActorUsage / StakeholderUsage / AssumeConstraint / RequireConstraint / AssertSatisfyUsage / SatisfyUsage / RequirementUsage / ConcernUsage / ConstraintUsage / ObjectiveUsage / FrameUsage / VerifyRequirementUsage / RequirementReference / VerificationUsage / CalcUsage / ActionUsage / AllocationUsage / StructureUsageElement
+RequirementUsageElement <- SubjectUsage / ActorUsage / StakeholderUsage / AssumeConstraint / RequireConstraint / AssertSatisfyUsage / SatisfyUsage / RequirementUsage / ConcernUsage / ConstraintUsage / ObjectiveUsage / FrameUsage / VerifyRequirementUsage / RequirementReference / VerificationUsage / CalcUsage / ActionUsage / AllocationUsage / ParameterUsage / StructureUsageElement
 CalcUsageElement <- CalcUsage / ReturnUsage / ActionUsageElement / ConstraintUsage / StructureUsageElement
 CaseUsageElement <- SubjectUsage / ActorUsage / StakeholderUsage / ObjectiveUsage / IncludeUseCaseUsage / UseCaseUsage / AnalysisUsage / VerificationUsage / AssertConstraintUsage / CalcUsageElement
 IncludeUseCaseUsage <- KW_INCLUDE (KW_USE KW_CASE UsageDeclaration / QualifiedName FeatureChain? Multiplicity?) UsageBody
@@ -659,6 +659,7 @@ EventOccurrenceUsage <- UsagePrefix* KW_EVENT KW_OCCURRENCE UsageDeclaration Occ
 EventUsage <- UsagePrefix* KW_EVENT QualifiedName FeatureChain? Multiplicity? REDEFINES QualifiedName SEMICOLON
             / UsagePrefix* KW_EVENT QualifiedName FeatureChain? Multiplicity SEMICOLON
             / UsagePrefix* KW_EVENT QualifiedName FeatureChain SEMICOLON
+            / UsagePrefix* KW_EVENT QualifiedName SEMICOLON
             / UsagePrefix* KW_EVENT UsageDeclaration UsageBody
 OccurrenceUsageBody <- SEMICOLON / LBRACE OccurrenceUsageMember* RBRACE
 OccurrenceUsageMember <- MemberPrefix (OccurrenceDefinitionElement / AssertConstraintUsage / PortionUsage / EventOccurrenceUsage / EventUsage / OccurrenceUsage / MessageUsage / BindUsage / ShorthandFeatureMember / SuccessionMember / StructureUsageElement / AnnotatingElement)
@@ -690,7 +691,7 @@ ActionUsage <- UsagePrefix* KW_ACTION ActionDeclaration ActionUsageBody
 ActionDeclaration <- Identification? ActionParameterList? UsageSpecializations? FeatureValue?
 ActionParameterList <- LPAREN ActionParameter (COMMA ActionParameter)* RPAREN
 ActionParameter <- Direction? KW_REF? KW_ITEM? NAME (TypedBy / Subsets)? (EQ OwnedExpression)?
-ActionUsageBody <- KW_SEND SendActionTail / KW_ACCEPT AcceptActionTail / ActionAssignBody / ActionWhileBody / ActionForBody / ActionBody
+ActionUsageBody <- KW_TERMINATE SEMICOLON / KW_SEND SendActionTail / KW_ACCEPT AcceptActionTail / ActionAssignBody / ActionWhileBody / ActionForBody / ActionBody
 ActionAssignBody <- KW_ASSIGN QualifiedName FeatureChain? COLONEQ OwnedExpression SEMICOLON
 AcceptActionTail <- QualifiedName (COLON QualifiedName)? (KW_VIA QualifiedName FeatureChain?)? (ActionBody / SEMICOLON)
 # Send can have expression or not: send expr via/to...; OR send via/to...;
@@ -854,11 +855,12 @@ EndMember <- KW_END Identification? Multiplicity? KW_REF? (KW_PORT / KW_ITEM / K
 # === MESSAGE USAGE ===
 # Message can have 'of' for payload type: message name of Type from x to y;
 # Also supports typed-only: message : Type from x to y;
-MessageUsage <- UsagePrefix* KW_MESSAGE (TypedBy / Identification? UsageSpecializations? (KW_OF NAME (COLON QualifiedName)? Multiplicity?)?) MessageFlowPart? UsageBody
+MessageUsage <- UsagePrefix* KW_MESSAGE (TypedBy / Identification? UsageSpecializations? (KW_OF NAME (COLON QualifiedName)? Multiplicity?)? FeatureValue?) MessageFlowPart? UsageBody
 MessageFlowPart <- KW_FROM FlowEndMember KW_TO FlowEndMember / FlowConnectionPart
 
 # === TERMINATE ACTION ===
-TerminateAction <- KW_TERMINATE QualifiedName? SEMICOLON
+TerminateAction <- KW_TERMINATE QualifiedName FeatureChain? SEMICOLON
+                 / KW_TERMINATE SEMICOLON
 
 # === RESULT EXPRESSION (bare expression in bodies) ===
 ResultExpression <- OwnedExpression
