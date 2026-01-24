@@ -46,8 +46,6 @@ set(SYSML2_SOURCES
     src/keywords.c
     src/lexer.c
     src/sysml_parser.c   # packcc-generated parser
-    src/ast.c
-    src/symbol.c
     src/diagnostic.c
     src/main.c
 )
