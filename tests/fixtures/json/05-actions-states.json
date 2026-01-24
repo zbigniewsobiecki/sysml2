@@ -16,10 +16,34 @@
       "parent": "Behavioral"
     },
     {
+      "id": "Behavioral::DriveAction::accelerate",
+      "name": "accelerate",
+      "type": "Action",
+      "parent": "Behavioral::DriveAction"
+    },
+    {
+      "id": "Behavioral::DriveAction::brake",
+      "name": "brake",
+      "type": "Action",
+      "parent": "Behavioral::DriveAction"
+    },
+    {
       "id": "Behavioral::VehicleStates",
       "name": "VehicleStates",
       "type": "StateDef",
       "parent": "Behavioral"
+    },
+    {
+      "id": "Behavioral::VehicleStates::parked",
+      "name": "parked",
+      "type": "State",
+      "parent": "Behavioral::VehicleStates"
+    },
+    {
+      "id": "Behavioral::VehicleStates::moving",
+      "name": "moving",
+      "type": "State",
+      "parent": "Behavioral::VehicleStates"
     }
   ],
   "relationships": [

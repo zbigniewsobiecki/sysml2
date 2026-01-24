@@ -177,6 +177,112 @@ typedef enum {
 #define SYSML_KIND_IS_PACKAGE(k) ((k) >= 0x0100 && (k) < 0x0200)
 
 /*
+ * Statement Kind Enumeration
+ *
+ * Types of body statements that can appear within definitions/usages.
+ * These are statements that don't create new named elements but express
+ * relationships, control flow, or other behavioral content.
+ */
+typedef enum {
+    SYSML_STMT_NONE = 0,
+
+    /* Relationship statements */
+    SYSML_STMT_BIND,           /* bind x = y; */
+    SYSML_STMT_CONNECT,        /* connect x to y; */
+    SYSML_STMT_FLOW,           /* flow from x to y; */
+    SYSML_STMT_ALLOCATE,       /* allocate x to y; */
+    SYSML_STMT_SUCCESSION,     /* first x then y; */
+
+    /* State body statements */
+    SYSML_STMT_ENTRY,          /* entry action {...} */
+    SYSML_STMT_EXIT,           /* exit action {...} */
+    SYSML_STMT_DO,             /* do action {...} */
+    SYSML_STMT_TRANSITION,     /* transition first X then Y; */
+    SYSML_STMT_ACCEPT,         /* accept sig : T do {...} then S; */
+
+    /* Action body statements */
+    SYSML_STMT_SEND,           /* send expr via port to target; */
+    SYSML_STMT_ACCEPT_ACTION,  /* accept payload via port; */
+    SYSML_STMT_ASSIGN,         /* assign x := expr; */
+    SYSML_STMT_IF,             /* if cond {...} else {...} */
+    SYSML_STMT_WHILE,          /* while cond {...} */
+    SYSML_STMT_FOR,            /* for x in expr {...} */
+    SYSML_STMT_LOOP,           /* loop {...} until cond; */
+    SYSML_STMT_TERMINATE,      /* terminate; */
+
+    /* Control nodes */
+    SYSML_STMT_MERGE,          /* merge node */
+    SYSML_STMT_DECIDE,         /* decide node */
+    SYSML_STMT_JOIN,           /* join node */
+    SYSML_STMT_FORK,           /* fork node */
+
+    /* Succession members */
+    SYSML_STMT_FIRST,          /* first x then y; */
+    SYSML_STMT_THEN,           /* then x; */
+
+    /* Other */
+    SYSML_STMT_RESULT_EXPR,    /* bare expression at end of calc/constraint */
+} SysmlStatementKind;
+
+/*
+ * Connector Endpoint - for relationship statements
+ *
+ * Represents one end of a connection/flow/bind/etc.
+ */
+typedef struct SysmlConnectorEnd {
+    const char *target;           /* Qualified name */
+    const char *feature_chain;    /* Optional .x.y chain */
+    const char *multiplicity;     /* Optional [mult] */
+} SysmlConnectorEnd;
+
+/*
+ * Body Statement - generic container for body content
+ *
+ * Used for relationship statements, control flow, state actions, etc.
+ * Uses raw_text for complex nested content to preserve formatting.
+ */
+typedef struct SysmlStatement {
+    SysmlStatementKind kind;
+    Sysml2SourceLoc loc;
+    const char *raw_text;         /* Verbatim captured text */
+    SysmlConnectorEnd source;     /* For relationships */
+    SysmlConnectorEnd target;     /* For relationships */
+    const char *name;             /* Optional statement name */
+    const char *guard;            /* For guarded succession/if */
+    const char *payload;          /* For flow/message payload */
+    struct SysmlStatement **nested; /* For control structures */
+    size_t nested_count;
+} SysmlStatement;
+
+/*
+ * Named Comment - comment annotation with name and target
+ *
+ * Represents: comment name about X { text }
+ */
+typedef struct SysmlNamedComment {
+    const char *id;
+    const char *name;
+    const char **about;           /* Target elements */
+    size_t about_count;
+    const char *locale;           /* Optional locale */
+    const char *text;             /* Includes block comment delimiters */
+    Sysml2SourceLoc loc;
+} SysmlNamedComment;
+
+/*
+ * Textual Representation - rep language annotation
+ *
+ * Represents: rep language "python" { code }
+ */
+typedef struct SysmlTextualRep {
+    const char *id;
+    const char *name;
+    const char *language;         /* Language name including quotes */
+    const char *text;             /* Includes block comment delimiters */
+    Sysml2SourceLoc loc;
+} SysmlTextualRep;
+
+/*
  * Metadata Feature - attribute assignment within a metadata usage
  */
 typedef struct SysmlMetadataFeature {
@@ -279,6 +385,21 @@ typedef struct SysmlNode {
     /* Trivia for pretty printing */
     SysmlTrivia *leading_trivia;   /* Comments before node */
     SysmlTrivia *trailing_trivia;  /* Same-line comment after */
+
+    /* Body statements (relationship statements, control flow, etc.) */
+    SysmlStatement **body_stmts;
+    size_t body_stmt_count;
+
+    /* Named comments within body */
+    SysmlNamedComment **comments;
+    size_t comment_count;
+
+    /* Textual representations within body */
+    SysmlTextualRep **textual_reps;
+    size_t textual_rep_count;
+
+    /* Result expression (for calc/constraint bodies) */
+    const char *result_expression;
 } SysmlNode;
 
 /*

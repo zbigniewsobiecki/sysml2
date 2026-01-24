@@ -90,6 +90,25 @@ SysmlBuildContext *sysml2_build_context_create(
     /* Initialize current metadata */
     ctx->current_metadata = NULL;
 
+    /* Initialize pending body statements */
+    ctx->pending_stmt_capacity = 16;
+    ctx->pending_stmts = SYSML2_ARENA_NEW_ARRAY(arena, SysmlStatement *, ctx->pending_stmt_capacity);
+    ctx->pending_stmt_count = 0;
+
+    /* Initialize pending named comments */
+    ctx->pending_comment_capacity = 8;
+    ctx->pending_comments = SYSML2_ARENA_NEW_ARRAY(arena, SysmlNamedComment *, ctx->pending_comment_capacity);
+    ctx->pending_comment_count = 0;
+
+    /* Initialize pending textual representations */
+    ctx->pending_rep_capacity = 8;
+    ctx->pending_reps = SYSML2_ARENA_NEW_ARRAY(arena, SysmlTextualRep *, ctx->pending_rep_capacity);
+    ctx->pending_rep_count = 0;
+
+    /* Initialize counters */
+    ctx->comment_counter = 0;
+    ctx->rep_counter = 0;
+
     return ctx;
 }
 
@@ -263,6 +282,15 @@ SysmlNode *sysml2_build_node(
     node->prefix_applied_metadata_count = 0;
     node->leading_trivia = NULL;
     node->trailing_trivia = NULL;
+
+    /* Initialize body statement arrays */
+    node->body_stmts = NULL;
+    node->body_stmt_count = 0;
+    node->comments = NULL;
+    node->comment_count = 0;
+    node->textual_reps = NULL;
+    node->textual_rep_count = 0;
+    node->result_expression = NULL;
 
     /* Attach any pending trivia as leading trivia */
     sysml2_build_attach_pending_trivia(ctx, node);
@@ -1191,4 +1219,522 @@ void sysml2_build_clear_pending_modifiers(SysmlBuildContext *ctx) {
     ctx->pending_multiplicity_upper = NULL;
     ctx->pending_default_value = NULL;
     ctx->pending_has_default_keyword = false;
+}
+
+/*
+ * Helper: Trim whitespace from a string
+ */
+static const char *trim_and_intern(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!text || len == 0) return NULL;
+
+    /* Trim leading whitespace */
+    while (len > 0 && (*text == ' ' || *text == '\t' || *text == '\n' || *text == '\r')) {
+        text++;
+        len--;
+    }
+
+    /* Trim trailing whitespace */
+    while (len > 0 && (text[len-1] == ' ' || text[len-1] == '\t' || text[len-1] == '\n' || text[len-1] == '\r')) {
+        len--;
+    }
+
+    if (len == 0) return NULL;
+    return sysml2_intern_n(ctx->intern, text, len);
+}
+
+/*
+ * Helper: Ensure pending statement array has capacity
+ */
+static void ensure_pending_stmt_capacity(SysmlBuildContext *ctx) {
+    if (ctx->pending_stmt_count >= ctx->pending_stmt_capacity) {
+        size_t new_capacity = ctx->pending_stmt_capacity * 2;
+        SysmlStatement **new_stmts = SYSML2_ARENA_NEW_ARRAY(ctx->arena, SysmlStatement *, new_capacity);
+        if (!new_stmts) return;
+        if (ctx->pending_stmts) {
+            memcpy(new_stmts, ctx->pending_stmts, ctx->pending_stmt_count * sizeof(SysmlStatement *));
+        }
+        ctx->pending_stmts = new_stmts;
+        ctx->pending_stmt_capacity = new_capacity;
+    }
+}
+
+/*
+ * Helper: Create a new statement
+ */
+static SysmlStatement *create_statement(SysmlBuildContext *ctx, SysmlStatementKind kind) {
+    SysmlStatement *stmt = SYSML2_ARENA_NEW(ctx->arena, SysmlStatement);
+    if (!stmt) return NULL;
+
+    stmt->kind = kind;
+    stmt->loc = SYSML2_LOC_INVALID;
+    stmt->raw_text = NULL;
+    stmt->source.target = NULL;
+    stmt->source.feature_chain = NULL;
+    stmt->source.multiplicity = NULL;
+    stmt->target.target = NULL;
+    stmt->target.feature_chain = NULL;
+    stmt->target.multiplicity = NULL;
+    stmt->name = NULL;
+    stmt->guard = NULL;
+    stmt->payload = NULL;
+    stmt->nested = NULL;
+    stmt->nested_count = 0;
+
+    return stmt;
+}
+
+/*
+ * Helper: Add statement to pending list
+ */
+static void add_pending_stmt(SysmlBuildContext *ctx, SysmlStatement *stmt) {
+    if (!ctx || !stmt) return;
+    ensure_pending_stmt_capacity(ctx);
+    ctx->pending_stmts[ctx->pending_stmt_count++] = stmt;
+}
+
+/*
+ * Capture a bind statement
+ */
+void sysml2_capture_bind(
+    SysmlBuildContext *ctx,
+    const char *source, size_t source_len,
+    const char *target, size_t target_len
+) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_BIND);
+    if (!stmt) return;
+
+    stmt->source.target = trim_and_intern(ctx, source, source_len);
+    stmt->target.target = trim_and_intern(ctx, target, target_len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture a connect statement
+ */
+void sysml2_capture_connect(
+    SysmlBuildContext *ctx,
+    const char *source, size_t source_len,
+    const char *target, size_t target_len
+) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_CONNECT);
+    if (!stmt) return;
+
+    stmt->source.target = trim_and_intern(ctx, source, source_len);
+    stmt->target.target = trim_and_intern(ctx, target, target_len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture a flow statement
+ */
+void sysml2_capture_flow(
+    SysmlBuildContext *ctx,
+    const char *payload, size_t payload_len,
+    const char *source, size_t source_len,
+    const char *target, size_t target_len
+) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_FLOW);
+    if (!stmt) return;
+
+    stmt->payload = trim_and_intern(ctx, payload, payload_len);
+    stmt->source.target = trim_and_intern(ctx, source, source_len);
+    stmt->target.target = trim_and_intern(ctx, target, target_len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture a succession statement
+ */
+void sysml2_capture_succession(
+    SysmlBuildContext *ctx,
+    const char *source, size_t source_len,
+    const char *target, size_t target_len,
+    const char *guard, size_t guard_len
+) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_SUCCESSION);
+    if (!stmt) return;
+
+    stmt->source.target = trim_and_intern(ctx, source, source_len);
+    stmt->target.target = trim_and_intern(ctx, target, target_len);
+    stmt->guard = trim_and_intern(ctx, guard, guard_len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture an entry action
+ */
+void sysml2_capture_entry(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_ENTRY);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture an exit action
+ */
+void sysml2_capture_exit(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_EXIT);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture a do action
+ */
+void sysml2_capture_do(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_DO);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture a transition
+ */
+void sysml2_capture_transition(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_TRANSITION);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture an entry transition (then X; without entry keyword)
+ * Uses SYSML_STMT_THEN which outputs raw text without prefix
+ */
+void sysml2_capture_entry_transition(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_THEN);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture a send action
+ */
+void sysml2_capture_send(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_SEND);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture an accept action
+ */
+void sysml2_capture_accept_action(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_ACCEPT_ACTION);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture an assignment action
+ */
+void sysml2_capture_assign(
+    SysmlBuildContext *ctx,
+    const char *target, size_t target_len,
+    const char *expr, size_t expr_len
+) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_ASSIGN);
+    if (!stmt) return;
+
+    stmt->target.target = trim_and_intern(ctx, target, target_len);
+    stmt->raw_text = trim_and_intern(ctx, expr, expr_len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture an if action
+ */
+void sysml2_capture_if(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_IF);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture a while/loop
+ */
+void sysml2_capture_while(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_WHILE);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture a for loop
+ */
+void sysml2_capture_for(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_FOR);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture a control node
+ */
+void sysml2_capture_control_node(
+    SysmlBuildContext *ctx,
+    SysmlStatementKind kind,
+    const char *text, size_t len
+) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, kind);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture a terminate action
+ */
+void sysml2_capture_terminate(SysmlBuildContext *ctx) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_TERMINATE);
+    if (!stmt) return;
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Helper: Ensure pending comment array has capacity
+ */
+static void ensure_pending_comment_capacity(SysmlBuildContext *ctx) {
+    if (ctx->pending_comment_count >= ctx->pending_comment_capacity) {
+        size_t new_capacity = ctx->pending_comment_capacity * 2;
+        SysmlNamedComment **new_comments = SYSML2_ARENA_NEW_ARRAY(ctx->arena, SysmlNamedComment *, new_capacity);
+        if (!new_comments) return;
+        if (ctx->pending_comments) {
+            memcpy(new_comments, ctx->pending_comments, ctx->pending_comment_count * sizeof(SysmlNamedComment *));
+        }
+        ctx->pending_comments = new_comments;
+        ctx->pending_comment_capacity = new_capacity;
+    }
+}
+
+/*
+ * Capture a named comment
+ */
+void sysml2_capture_named_comment(
+    SysmlBuildContext *ctx,
+    const char *name, size_t name_len,
+    const char *about, size_t about_len,
+    const char *text, size_t text_len
+) {
+    if (!ctx) return;
+
+    ensure_pending_comment_capacity(ctx);
+
+    SysmlNamedComment *comment = SYSML2_ARENA_NEW(ctx->arena, SysmlNamedComment);
+    if (!comment) return;
+
+    /* Generate unique ID */
+    char id_buf[64];
+    snprintf(id_buf, sizeof(id_buf), "_comment_%zu", ++ctx->comment_counter);
+    comment->id = sysml2_intern(ctx->intern, id_buf);
+
+    comment->name = trim_and_intern(ctx, name, name_len);
+    comment->locale = NULL;
+    comment->text = trim_and_intern(ctx, text, text_len);
+    comment->loc = SYSML2_LOC_INVALID;
+
+    /* Parse about targets */
+    comment->about = NULL;
+    comment->about_count = 0;
+    if (about && about_len > 0) {
+        const char *trimmed_about = trim_and_intern(ctx, about, about_len);
+        if (trimmed_about) {
+            comment->about = SYSML2_ARENA_NEW_ARRAY(ctx->arena, const char *, 1);
+            if (comment->about) {
+                comment->about[0] = trimmed_about;
+                comment->about_count = 1;
+            }
+        }
+    }
+
+    ctx->pending_comments[ctx->pending_comment_count++] = comment;
+}
+
+/*
+ * Helper: Ensure pending rep array has capacity
+ */
+static void ensure_pending_rep_capacity(SysmlBuildContext *ctx) {
+    if (ctx->pending_rep_count >= ctx->pending_rep_capacity) {
+        size_t new_capacity = ctx->pending_rep_capacity * 2;
+        SysmlTextualRep **new_reps = SYSML2_ARENA_NEW_ARRAY(ctx->arena, SysmlTextualRep *, new_capacity);
+        if (!new_reps) return;
+        if (ctx->pending_reps) {
+            memcpy(new_reps, ctx->pending_reps, ctx->pending_rep_count * sizeof(SysmlTextualRep *));
+        }
+        ctx->pending_reps = new_reps;
+        ctx->pending_rep_capacity = new_capacity;
+    }
+}
+
+/*
+ * Capture a textual representation
+ */
+void sysml2_capture_textual_rep(
+    SysmlBuildContext *ctx,
+    const char *name, size_t name_len,
+    const char *lang, size_t lang_len,
+    const char *text, size_t text_len
+) {
+    if (!ctx) return;
+
+    ensure_pending_rep_capacity(ctx);
+
+    SysmlTextualRep *rep = SYSML2_ARENA_NEW(ctx->arena, SysmlTextualRep);
+    if (!rep) return;
+
+    /* Generate unique ID */
+    char id_buf[64];
+    snprintf(id_buf, sizeof(id_buf), "_rep_%zu", ++ctx->rep_counter);
+    rep->id = sysml2_intern(ctx->intern, id_buf);
+
+    rep->name = trim_and_intern(ctx, name, name_len);
+    rep->language = trim_and_intern(ctx, lang, lang_len);
+    rep->text = trim_and_intern(ctx, text, text_len);
+    rep->loc = SYSML2_LOC_INVALID;
+
+    ctx->pending_reps[ctx->pending_rep_count++] = rep;
+}
+
+/*
+ * Capture a result expression
+ */
+void sysml2_capture_result_expr(SysmlBuildContext *ctx, const char *expr, size_t len) {
+    if (!ctx || !expr || len == 0) return;
+
+    /* Find the current scope's node and attach result expression */
+    const char *current_scope = sysml2_build_current_scope(ctx);
+    if (current_scope) {
+        for (size_t i = ctx->element_count; i > 0; i--) {
+            SysmlNode *node = ctx->elements[i - 1];
+            if (node->id == current_scope) {
+                node->result_expression = trim_and_intern(ctx, expr, len);
+                break;
+            }
+        }
+    }
+}
+
+/*
+ * Attach pending body statements to a node (appends to existing)
+ */
+void sysml2_attach_pending_stmts(SysmlBuildContext *ctx, SysmlNode *node) {
+    if (!ctx || !node) return;
+
+    /* Append pending statements to existing */
+    if (ctx->pending_stmt_count > 0) {
+        size_t new_count = node->body_stmt_count + ctx->pending_stmt_count;
+        SysmlStatement **new_stmts = SYSML2_ARENA_NEW_ARRAY(ctx->arena, SysmlStatement *, new_count);
+        if (new_stmts) {
+            /* Copy existing statements first */
+            if (node->body_stmts && node->body_stmt_count > 0) {
+                memcpy(new_stmts, node->body_stmts, node->body_stmt_count * sizeof(SysmlStatement *));
+            }
+            /* Append pending statements */
+            memcpy(new_stmts + node->body_stmt_count, ctx->pending_stmts, ctx->pending_stmt_count * sizeof(SysmlStatement *));
+            node->body_stmts = new_stmts;
+            node->body_stmt_count = new_count;
+        }
+        ctx->pending_stmt_count = 0;
+    }
+
+    /* Append pending comments to existing */
+    if (ctx->pending_comment_count > 0) {
+        size_t new_count = node->comment_count + ctx->pending_comment_count;
+        SysmlNamedComment **new_comments = SYSML2_ARENA_NEW_ARRAY(ctx->arena, SysmlNamedComment *, new_count);
+        if (new_comments) {
+            if (node->comments && node->comment_count > 0) {
+                memcpy(new_comments, node->comments, node->comment_count * sizeof(SysmlNamedComment *));
+            }
+            memcpy(new_comments + node->comment_count, ctx->pending_comments, ctx->pending_comment_count * sizeof(SysmlNamedComment *));
+            node->comments = new_comments;
+            node->comment_count = new_count;
+        }
+        ctx->pending_comment_count = 0;
+    }
+
+    /* Append pending textual reps to existing */
+    if (ctx->pending_rep_count > 0) {
+        size_t new_count = node->textual_rep_count + ctx->pending_rep_count;
+        SysmlTextualRep **new_reps = SYSML2_ARENA_NEW_ARRAY(ctx->arena, SysmlTextualRep *, new_count);
+        if (new_reps) {
+            if (node->textual_reps && node->textual_rep_count > 0) {
+                memcpy(new_reps, node->textual_reps, node->textual_rep_count * sizeof(SysmlTextualRep *));
+            }
+            memcpy(new_reps + node->textual_rep_count, ctx->pending_reps, ctx->pending_rep_count * sizeof(SysmlTextualRep *));
+            node->textual_reps = new_reps;
+            node->textual_rep_count = new_count;
+        }
+        ctx->pending_rep_count = 0;
+    }
 }

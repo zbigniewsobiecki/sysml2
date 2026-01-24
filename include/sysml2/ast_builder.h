@@ -96,6 +96,25 @@ typedef struct SysmlBuildContext {
 
     /* Current metadata usage being built */
     SysmlMetadataUsage *current_metadata;
+
+    /* Pending body statements for attachment to current scope */
+    SysmlStatement **pending_stmts;
+    size_t pending_stmt_count;
+    size_t pending_stmt_capacity;
+
+    /* Pending named comments for attachment to current scope */
+    SysmlNamedComment **pending_comments;
+    size_t pending_comment_count;
+    size_t pending_comment_capacity;
+
+    /* Pending textual representations for attachment to current scope */
+    SysmlTextualRep **pending_reps;
+    size_t pending_rep_count;
+    size_t pending_rep_capacity;
+
+    /* Counter for generating unique comment/rep IDs */
+    size_t comment_counter;
+    size_t rep_counter;
 } SysmlBuildContext;
 
 /*
@@ -518,5 +537,250 @@ void sysml2_capture_import_visibility(SysmlBuildContext *ctx, bool is_private);
  * @param ctx Build context
  */
 void sysml2_build_clear_pending_modifiers(SysmlBuildContext *ctx);
+
+/*
+ * Capture a bind statement
+ *
+ * @param ctx Build context
+ * @param source Source qualified name
+ * @param source_len Length of source
+ * @param target Target qualified name
+ * @param target_len Length of target
+ */
+void sysml2_capture_bind(
+    SysmlBuildContext *ctx,
+    const char *source, size_t source_len,
+    const char *target, size_t target_len
+);
+
+/*
+ * Capture a connect statement
+ *
+ * @param ctx Build context
+ * @param source Source qualified name
+ * @param source_len Length of source
+ * @param target Target qualified name
+ * @param target_len Length of target
+ */
+void sysml2_capture_connect(
+    SysmlBuildContext *ctx,
+    const char *source, size_t source_len,
+    const char *target, size_t target_len
+);
+
+/*
+ * Capture a flow statement
+ *
+ * @param ctx Build context
+ * @param payload Payload type name (can be NULL)
+ * @param payload_len Length of payload
+ * @param source Source qualified name
+ * @param source_len Length of source
+ * @param target Target qualified name
+ * @param target_len Length of target
+ */
+void sysml2_capture_flow(
+    SysmlBuildContext *ctx,
+    const char *payload, size_t payload_len,
+    const char *source, size_t source_len,
+    const char *target, size_t target_len
+);
+
+/*
+ * Capture a succession statement (first x then y)
+ *
+ * @param ctx Build context
+ * @param source Source qualified name
+ * @param source_len Length of source
+ * @param target Target qualified name
+ * @param target_len Length of target
+ * @param guard Guard expression (can be NULL)
+ * @param guard_len Length of guard
+ */
+void sysml2_capture_succession(
+    SysmlBuildContext *ctx,
+    const char *source, size_t source_len,
+    const char *target, size_t target_len,
+    const char *guard, size_t guard_len
+);
+
+/*
+ * Capture an entry action
+ *
+ * @param ctx Build context
+ * @param text Raw text of the entry action body
+ * @param len Length of text
+ */
+void sysml2_capture_entry(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture an exit action
+ *
+ * @param ctx Build context
+ * @param text Raw text of the exit action body
+ * @param len Length of text
+ */
+void sysml2_capture_exit(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture a do action
+ *
+ * @param ctx Build context
+ * @param text Raw text of the do action body
+ * @param len Length of text
+ */
+void sysml2_capture_do(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture a transition
+ *
+ * @param ctx Build context
+ * @param text Raw text of the transition
+ * @param len Length of text
+ */
+void sysml2_capture_transition(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture an entry transition (then X; without entry keyword)
+ *
+ * @param ctx Build context
+ * @param text Raw text of the transition
+ * @param len Length of text
+ */
+void sysml2_capture_entry_transition(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture a send action
+ *
+ * @param ctx Build context
+ * @param text Raw text of the send action
+ * @param len Length of text
+ */
+void sysml2_capture_send(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture an accept action
+ *
+ * @param ctx Build context
+ * @param text Raw text of the accept action
+ * @param len Length of text
+ */
+void sysml2_capture_accept_action(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture an assignment action
+ *
+ * @param ctx Build context
+ * @param target Target variable
+ * @param target_len Length of target
+ * @param expr Expression to assign
+ * @param expr_len Length of expression
+ */
+void sysml2_capture_assign(
+    SysmlBuildContext *ctx,
+    const char *target, size_t target_len,
+    const char *expr, size_t expr_len
+);
+
+/*
+ * Capture an if action
+ *
+ * @param ctx Build context
+ * @param text Raw text of the if action
+ * @param len Length of text
+ */
+void sysml2_capture_if(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture a while/loop
+ *
+ * @param ctx Build context
+ * @param text Raw text of the while/loop
+ * @param len Length of text
+ */
+void sysml2_capture_while(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture a for loop
+ *
+ * @param ctx Build context
+ * @param text Raw text of the for loop
+ * @param len Length of text
+ */
+void sysml2_capture_for(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture a control node (merge, decide, join, fork)
+ *
+ * @param ctx Build context
+ * @param kind Statement kind (SYSML_STMT_MERGE, etc.)
+ * @param text Raw text of the control node
+ * @param len Length of text
+ */
+void sysml2_capture_control_node(
+    SysmlBuildContext *ctx,
+    SysmlStatementKind kind,
+    const char *text, size_t len
+);
+
+/*
+ * Capture a terminate action
+ *
+ * @param ctx Build context
+ */
+void sysml2_capture_terminate(SysmlBuildContext *ctx);
+
+/*
+ * Capture a named comment
+ *
+ * @param ctx Build context
+ * @param name Comment name (can be NULL)
+ * @param name_len Length of name
+ * @param about Target reference (can be NULL)
+ * @param about_len Length of about
+ * @param text Comment text including delimiters
+ * @param text_len Length of text
+ */
+void sysml2_capture_named_comment(
+    SysmlBuildContext *ctx,
+    const char *name, size_t name_len,
+    const char *about, size_t about_len,
+    const char *text, size_t text_len
+);
+
+/*
+ * Capture a textual representation
+ *
+ * @param ctx Build context
+ * @param name Rep name (can be NULL)
+ * @param name_len Length of name
+ * @param lang Language string including quotes
+ * @param lang_len Length of lang
+ * @param text Content text including delimiters
+ * @param text_len Length of text
+ */
+void sysml2_capture_textual_rep(
+    SysmlBuildContext *ctx,
+    const char *name, size_t name_len,
+    const char *lang, size_t lang_len,
+    const char *text, size_t text_len
+);
+
+/*
+ * Capture a result expression (bare expression at end of calc/constraint body)
+ *
+ * @param ctx Build context
+ * @param expr Expression text
+ * @param len Length of expression
+ */
+void sysml2_capture_result_expr(SysmlBuildContext *ctx, const char *expr, size_t len);
+
+/*
+ * Attach pending body statements to a node
+ *
+ * @param ctx Build context
+ * @param node Node to attach statements to
+ */
+void sysml2_attach_pending_stmts(SysmlBuildContext *ctx, SysmlNode *node);
 
 #endif /* SYSML2_AST_BUILDER_H */

@@ -339,6 +339,29 @@ void sysml2_capture_direction(SysmlBuildContext *ctx, SysmlDirection dir);
 void sysml2_capture_import_visibility(SysmlBuildContext *ctx, bool is_private);
 void sysml2_build_alias(SysmlBuildContext *ctx, const char *name, size_t name_len, const char *target, size_t target_len);
 
+/* Forward declarations for body statement capture functions */
+void sysml2_capture_bind(SysmlBuildContext *ctx, const char *source, size_t source_len, const char *target, size_t target_len);
+void sysml2_capture_connect(SysmlBuildContext *ctx, const char *source, size_t source_len, const char *target, size_t target_len);
+void sysml2_capture_flow(SysmlBuildContext *ctx, const char *payload, size_t payload_len, const char *source, size_t source_len, const char *target, size_t target_len);
+void sysml2_capture_succession(SysmlBuildContext *ctx, const char *source, size_t source_len, const char *target, size_t target_len, const char *guard, size_t guard_len);
+void sysml2_capture_entry(SysmlBuildContext *ctx, const char *text, size_t len);
+void sysml2_capture_exit(SysmlBuildContext *ctx, const char *text, size_t len);
+void sysml2_capture_do(SysmlBuildContext *ctx, const char *text, size_t len);
+void sysml2_capture_transition(SysmlBuildContext *ctx, const char *text, size_t len);
+void sysml2_capture_entry_transition(SysmlBuildContext *ctx, const char *text, size_t len);
+void sysml2_capture_send(SysmlBuildContext *ctx, const char *text, size_t len);
+void sysml2_capture_accept_action(SysmlBuildContext *ctx, const char *text, size_t len);
+void sysml2_capture_assign(SysmlBuildContext *ctx, const char *target, size_t target_len, const char *expr, size_t expr_len);
+void sysml2_capture_if(SysmlBuildContext *ctx, const char *text, size_t len);
+void sysml2_capture_while(SysmlBuildContext *ctx, const char *text, size_t len);
+void sysml2_capture_for(SysmlBuildContext *ctx, const char *text, size_t len);
+void sysml2_capture_control_node(SysmlBuildContext *ctx, SysmlStatementKind kind, const char *text, size_t len);
+void sysml2_capture_terminate(SysmlBuildContext *ctx);
+void sysml2_capture_named_comment(SysmlBuildContext *ctx, const char *name, size_t name_len, const char *about, size_t about_len, const char *text, size_t text_len);
+void sysml2_capture_textual_rep(SysmlBuildContext *ctx, const char *name, size_t name_len, const char *lang, size_t lang_len, const char *text, size_t text_len);
+void sysml2_capture_result_expr(SysmlBuildContext *ctx, const char *expr, size_t len);
+void sysml2_attach_pending_stmts(SysmlBuildContext *ctx, SysmlNode *node);
+
 /* Helper: check if character is a type/specialization marker */
 static int sysml2_is_marker(char c, char next) {
     if (c == '[' || c == '=' || c == '{' || c == ';') return 1;
@@ -541,6 +564,19 @@ static void sysml2_extract_all_type_refs(SysmlParserContext *ctx, SysmlNode *nod
 /* Build node, add to model, push scope */
 static void sysml2_build_push(SysmlParserContext *ctx, SysmlNodeKind kind, const char *text, size_t len) {
     if (!ctx->build_ctx) return;
+
+    /* First, attach any pending statements to the CURRENT scope (parent) before creating child */
+    const char *current_scope = sysml2_build_current_scope(ctx->build_ctx);
+    if (current_scope) {
+        for (size_t i = ctx->build_ctx->element_count; i > 0; i--) {
+            SysmlNode *parent_node = ctx->build_ctx->elements[i - 1];
+            if (parent_node->id == current_scope) {
+                sysml2_attach_pending_stmts(ctx->build_ctx, parent_node);
+                break;
+            }
+        }
+    }
+
     const char *name = sysml2_extract_name(ctx, text, len);
     SysmlNode *node = sysml2_build_node(ctx->build_ctx, kind, name);
     if (node) {
@@ -551,9 +587,23 @@ static void sysml2_build_push(SysmlParserContext *ctx, SysmlNodeKind kind, const
     }
 }
 
-/* Pop scope */
+/* Pop scope - attach pending statements to current scope node before popping */
 static void sysml2_pop(SysmlParserContext *ctx) {
-    if (ctx->build_ctx) sysml2_build_pop_scope(ctx->build_ctx);
+    if (!ctx->build_ctx) return;
+
+    /* Find the current scope's node and attach pending statements */
+    const char *current_scope = sysml2_build_current_scope(ctx->build_ctx);
+    if (current_scope) {
+        for (size_t i = ctx->build_ctx->element_count; i > 0; i--) {
+            SysmlNode *node = ctx->build_ctx->elements[i - 1];
+            if (node->id == current_scope) {
+                sysml2_attach_pending_stmts(ctx->build_ctx, node);
+                break;
+            }
+        }
+    }
+
+    sysml2_build_pop_scope(ctx->build_ctx);
 }
 
 /* Build import and add to model */
@@ -683,6 +733,10 @@ static void sysml2_capture_metadata_feature(SysmlParserContext *ctx, const char 
     const char *value = sysml2_extract_feature_value(ctx, value_text, value_len);
 
     sysml2_build_metadata_add_feature(ctx->build_ctx, ctx->build_ctx->current_metadata, name, value);
+
+    /* Clear pending_default_value since it was consumed by the metadata feature */
+    ctx->build_ctx->pending_default_value = NULL;
+    ctx->build_ctx->pending_has_default_keyword = false;
 }
 }
 
@@ -1314,14 +1368,14 @@ StateBodyItem <- MemberPrefix StateBodyElement
 StateBodyElement <- DefinitionElement / AssertConstraintUsage / StateUsageElement / AnnotatingElement / Import / Alias
 StateUsageElement <- EntryAction / ExitAction / DoAction / EntryTransition / AcceptTransition / StateUsage / ExhibitStateUsage / TransitionUsage / SuccessionUsage / SuccessionMember / ConstraintUsage / ActionUsageElement
 AcceptTransition <- KW_ACCEPT TriggerActionBody? EffectAction? TransitionEndAction
-EntryAction <- KW_ENTRY (KW_ACTION UsageDeclaration ActionBody / KW_ACTION? UsageDeclaration SEMICOLON / AssignmentAction / SendAction / PerformActionUsage / QualifiedName FeatureChain? ActionBody / ActionBody)
-ExitAction <- KW_EXIT (KW_ACTION UsageDeclaration ActionBody / KW_ACTION? UsageDeclaration SEMICOLON / AssignmentAction / SendAction / PerformActionUsage / QualifiedName FeatureChain? ActionBody / ActionBody)
-DoAction <- KW_DO (KW_ACTION UsageDeclaration ActionBody / AssignmentAction / SendAction / PerformActionUsage / QualifiedName FeatureChain? (SEMICOLON / ActionBody) / ActionBody)
+EntryAction <- KW_ENTRY < (KW_STATE UsageDeclaration SEMICOLON / KW_ACTION UsageDeclaration ActionBody / KW_ACTION? UsageDeclaration SEMICOLON / AssignmentAction / SendAction / PerformActionUsage / QualifiedName FeatureChain? ActionBody / ActionBody) > { if (auxil->build_ctx) sysml2_capture_entry(auxil->build_ctx, $1, $1e - $1s); }
+ExitAction <- KW_EXIT < (KW_ACTION UsageDeclaration ActionBody / KW_ACTION? UsageDeclaration SEMICOLON / AssignmentAction / SendAction / PerformActionUsage / QualifiedName FeatureChain? ActionBody / ActionBody) > { if (auxil->build_ctx) sysml2_capture_exit(auxil->build_ctx, $1, $1e - $1s); }
+DoAction <- KW_DO < (KW_ACTION UsageDeclaration ActionBody / AssignmentAction / SendAction / PerformActionUsage / QualifiedName FeatureChain? (SEMICOLON / ActionBody) / ActionBody) > { if (auxil->build_ctx) sysml2_capture_do(auxil->build_ctx, $1, $1e - $1s); }
 # perform action name; OR perform name;
 # perform action name { } OR perform name.feature { } OR perform name; OR perform name redefines other;
 # variation perform action doXorY { variant action doX; variant action doY; }
 PerformActionUsage <- KW_VARIATION? KW_PERFORM (KW_ACTION UsageDeclaration ActionBody / QualifiedName FeatureChain? FeatureSpecialization* ActionBody)
-EntryTransition <- KW_ENTRY? TransitionDeclaration TransitionBody
+EntryTransition <- < KW_ENTRY? TransitionDeclaration TransitionBody > { if (auxil->build_ctx) sysml2_capture_entry_transition(auxil->build_ctx, $1, $1e - $1s); }
 ConstraintDefinition <- DefinitionPrefix* KW_CONSTRAINT KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_DEF, $1, $1e - $1s); } ConstraintBody { sysml2_pop(auxil); }
 ConstraintBody <- SEMICOLON / LBRACE ConstraintBodyElement* ResultExpression? RBRACE
 ConstraintBodyElement <- MemberPrefix (DefinitionElement / ConstraintUsageElement / AnnotatingElement)
@@ -1380,7 +1434,7 @@ ReferenceUsage <- Direction? KW_REF PrefixMetadata* RefBehavioralKeyword? UsageD
                 / Direction? RefPrefix PrefixMetadata* UsageDeclaration UsageBody
 StructureUsageElement <- AttributeUsage / ItemUsage / PartUsage / PortUsage / ConnectionUsage / FlowUsage / InterfaceUsage
 BehaviorUsageElement <- ActionUsage / StateUsage / ConstraintUsage / CalcUsage
-ActionUsageElement <- ParameterUsage / ActionUsage / PerformActionUsage / SendAction / AcceptAction / AssignmentAction / IfAction / WhileLoop / ForLoop / ControlNode / SuccessionMember
+ActionUsageElement <- ActionUsage / ParameterUsage / PerformActionUsage / SendAction / AcceptAction / AssignmentAction / IfAction / WhileLoop / ForLoop / ControlNode / SuccessionMember
 ConstraintUsageElement <- ParameterUsage / ReturnUsage / ConstraintUsage
 RequirementUsageElement <- SubjectUsage / ActorUsage / StakeholderUsage / AssumeConstraint / RequireConstraint / AssertSatisfyUsage / SatisfyUsage / RequirementUsage / ConcernUsage / ConstraintUsage / ObjectiveUsage / FrameUsage / VerifyRequirementUsage / RequirementReference / VerificationUsage / CalcUsage / ActionUsage / AllocationUsage / ParameterUsage / StructureUsageElement
 CalcUsageElement <- CalcUsage / ReturnUsage / ActionUsageElement / ConstraintUsage / StructureUsageElement
@@ -1406,7 +1460,10 @@ OccurrenceUsageBody <- SEMICOLON / LBRACE OccurrenceUsageMember* RBRACE
 OccurrenceUsageMember <- MemberPrefix (OccurrenceDefinitionElement / AssertConstraintUsage / PortionUsage / EventOccurrenceUsage / EventUsage / OccurrenceUsage / MessageUsage / BindUsage / ShorthandFeatureMember / SuccessionMember / StructureUsageElement / AnnotatingElement)
 ItemUsage <- UsagePrefix* KW_ITEM < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_ITEM_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
 PartUsage <- UsagePrefix* KW_PART < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_PART_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
-ConnectionUsage <- UsagePrefix* KW_CONNECTION UsageDeclaration? (KW_CONNECT ConnectionPart)? UsageBody / UsagePrefix* KW_CONNECT ConnectionPart UsageBody
+ConnectionUsage <- ConnectionUsageNamed / ConnectionUsageAnon
+ConnectionUsageNamed <- UsagePrefix* KW_CONNECTION UsageDeclaration? (KW_CONNECT ConnectionPart)? UsageBody
+ConnectionUsageAnon <- UsagePrefix* KW_CONNECT NaryConnectorPart UsageBody
+                     / UsagePrefix* KW_CONNECT < ConnectorEndMember > KW_TO < ConnectorEndMember > UsageBody { if (auxil->build_ctx) sysml2_capture_connect(auxil->build_ctx, $1, $1e - $1s, $2, $2e - $2s); }
 ConnectionPart <- BinaryConnectorPart / NaryConnectorPart
 BinaryConnectorPart <- ConnectorEndMember KW_TO ConnectorEndMember
 NaryConnectorPart <- LPAREN ConnectorEndMember (COMMA ConnectorEndMember)+ RPAREN
@@ -1418,7 +1475,10 @@ FlowUsage <- UsagePrefix* KW_SUCCESSION? KW_FLOW FlowBody
 FlowBody <- (COLONGTGT / COLONGT) QualifiedName FlowConnectionPart UsageBody
           / FlowConnectionPart UsageBody
           / UsageDeclaration (KW_OF NAME COLON QualifiedName Multiplicity? / KW_OF QualifiedName Multiplicity?)? (FlowConnectionPart UsageBody / UsageBody)
-FlowConnectionPart <- KW_FROM FlowEndMember KW_TO FlowEndMember / FlowEndMember (KW_TO / KW_FROM) FlowEndMember
+FlowConnectionPart <- FlowConnectionPartFrom / FlowConnectionPartTo / FlowConnectionPartReverse
+FlowConnectionPartFrom <- KW_FROM < FlowEndMember > KW_TO < FlowEndMember > { if (auxil->build_ctx) sysml2_capture_flow(auxil->build_ctx, NULL, 0, $1, $1e - $1s, $2, $2e - $2s); }
+FlowConnectionPartTo <- < FlowEndMember > KW_TO < FlowEndMember > { if (auxil->build_ctx) sysml2_capture_flow(auxil->build_ctx, NULL, 0, $1, $1e - $1s, $2, $2e - $2s); }
+FlowConnectionPartReverse <- < FlowEndMember > KW_FROM < FlowEndMember > { if (auxil->build_ctx) sysml2_capture_flow(auxil->build_ctx, NULL, 0, $2, $2e - $2s, $1, $1e - $1s); }
 FlowEndMember <- QualifiedName FeatureChain?
 # Interface: anonymous connection, or named with optional connect keyword
 InterfaceUsage <- UsagePrefix* KW_INTERFACE &(ConnectorEndMember KW_TO) ConnectionPart InterfaceBody
@@ -1478,33 +1538,35 @@ ReturnUsageKind <- KW_ATTRIBUTE / KW_PART / KW_ITEM / KW_REF
 RenderUsage <- KW_RENDER KW_RENDERING? UsageDeclaration UsageBody
 
 # Action Elements
-SendAction <- KW_SEND OwnedExpression (KW_VIA QualifiedName FeatureChain?)? (KW_TO QualifiedName FeatureChain?)? SEMICOLON
-AcceptAction <- KW_ACCEPT AcceptParameterPart (ActionBody / SEMICOLON)
+SendAction <- KW_SEND < OwnedExpression (KW_VIA QualifiedName FeatureChain?)? (KW_TO QualifiedName FeatureChain?)? > SEMICOLON { if (auxil->build_ctx) sysml2_capture_send(auxil->build_ctx, $1, $1e - $1s); }
+AcceptAction <- KW_ACCEPT < AcceptParameterPart (ActionBody / SEMICOLON) > { if (auxil->build_ctx) sysml2_capture_accept_action(auxil->build_ctx, $1, $1e - $1s); }
 AcceptParameterPart <- PayloadParameter (KW_VIA QualifiedName FeatureChain?)?
 PayloadParameter <- TriggerPart / Identification? PayloadFeatureSpec? TriggerPart?
 PayloadFeatureSpec <- TypedBy
 TriggerPart <- TriggerKind OwnedExpression
 TriggerKind <- KW_AT / KW_AFTER / KW_WHEN
-AssignmentAction <- KW_ASSIGN QualifiedName FeatureChain? COLONEQ OwnedExpression SEMICOLON
-IfAction <- KW_IF OwnedExpression IfThenPart IfElsePart?
+AssignmentAction <- KW_ASSIGN < QualifiedName FeatureChain? > COLONEQ < OwnedExpression > SEMICOLON { if (auxil->build_ctx) sysml2_capture_assign(auxil->build_ctx, $1, $1e - $1s, $2, $2e - $2s); }
+IfAction <- KW_IF < OwnedExpression IfThenPart IfElsePart? > { if (auxil->build_ctx) sysml2_capture_if(auxil->build_ctx, $1, $1e - $1s); }
 IfThenPart <- KW_THEN? (ActionBodyParameter / ActionBodyElement)
 IfElsePart <- KW_ELSE (IfAction / ActionBodyParameter / ActionBodyElement)
 ActionBodyParameter <- (KW_ACTION UsageDeclaration?)? LBRACE ActionBodyItem* RBRACE
-WhileLoop <- KW_WHILE OwnedExpression (KW_UNTIL OwnedExpression)? (ActionBodyParameter / ActionBody)
-           / KW_LOOP (ActionBodyParameter / ActionBody) KW_UNTIL OwnedExpression SEMICOLON
-           / KW_LOOP (ActionBodyParameter / ActionBody)
-ForLoop <- KW_FOR NAME ForVariableSpec (ActionBodyParameter / ActionBody)
+WhileLoop <- WhileLoopWhile / WhileLoopUntil / WhileLoopPlain
+WhileLoopWhile <- KW_WHILE < OwnedExpression (KW_UNTIL OwnedExpression)? (ActionBodyParameter / ActionBody) > { if (auxil->build_ctx) sysml2_capture_while(auxil->build_ctx, $1, $1e - $1s); }
+WhileLoopUntil <- KW_LOOP < (ActionBodyParameter / ActionBody) KW_UNTIL OwnedExpression > SEMICOLON { if (auxil->build_ctx) sysml2_capture_while(auxil->build_ctx, $1, $1e - $1s); }
+WhileLoopPlain <- KW_LOOP < (ActionBodyParameter / ActionBody) > { if (auxil->build_ctx) sysml2_capture_while(auxil->build_ctx, $1, $1e - $1s); }
+ForLoop <- KW_FOR < NAME ForVariableSpec (ActionBodyParameter / ActionBody) > { if (auxil->build_ctx) sysml2_capture_for(auxil->build_ctx, $1, $1e - $1s); }
 ControlNode <- MergeNode / DecisionNode / JoinNode / ForkNode
-MergeNode <- KW_MERGE UsageDeclaration? ActionBody
-DecisionNode <- KW_DECIDE UsageDeclaration? ActionBody
-JoinNode <- KW_JOIN UsageDeclaration? ActionBody
-ForkNode <- KW_FORK UsageDeclaration? ActionBody
+MergeNode <- KW_MERGE < UsageDeclaration? ActionBody > { if (auxil->build_ctx) sysml2_capture_control_node(auxil->build_ctx, SYSML_STMT_MERGE, $1, $1e - $1s); }
+DecisionNode <- KW_DECIDE < UsageDeclaration? ActionBody > { if (auxil->build_ctx) sysml2_capture_control_node(auxil->build_ctx, SYSML_STMT_DECIDE, $1, $1e - $1s); }
+JoinNode <- KW_JOIN < UsageDeclaration? ActionBody > { if (auxil->build_ctx) sysml2_capture_control_node(auxil->build_ctx, SYSML_STMT_JOIN, $1, $1e - $1s); }
+ForkNode <- KW_FORK < UsageDeclaration? ActionBody > { if (auxil->build_ctx) sysml2_capture_control_node(auxil->build_ctx, SYSML_STMT_FORK, $1, $1e - $1s); }
 # Guarded succession: first x if cond then y;
 GuardedSuccession <- KW_IF OwnedExpression KW_THEN QualifiedName FeatureChain? SEMICOLON
-SuccessionMember <- KW_FIRST QualifiedName FeatureChain? GuardedSuccession
-                  / KW_FIRST SuccessionBody
-                  / KW_THEN ThenTarget
-                  / QualifiedName FeatureChain? KW_THEN SuccessionBody
+SuccessionMember <- SuccessionMemberGuarded / SuccessionMemberFirst / SuccessionMemberThen / SuccessionMemberChain
+SuccessionMemberGuarded <- KW_FIRST < QualifiedName FeatureChain? > GuardedSuccession { if (auxil->build_ctx) sysml2_capture_succession(auxil->build_ctx, $1, $1e - $1s, NULL, 0, NULL, 0); }
+SuccessionMemberFirst <- KW_FIRST < SuccessionBody > { if (auxil->build_ctx) sysml2_capture_succession(auxil->build_ctx, $1, $1e - $1s, NULL, 0, NULL, 0); }
+SuccessionMemberThen <- KW_THEN < ThenTarget > { if (auxil->build_ctx) sysml2_capture_succession(auxil->build_ctx, NULL, 0, $1, $1e - $1s, NULL, 0); }
+SuccessionMemberChain <- < QualifiedName FeatureChain? > KW_THEN < SuccessionBody > { if (auxil->build_ctx) sysml2_capture_succession(auxil->build_ctx, $1, $1e - $1s, $2, $2e - $2s, NULL, 0); }
 ThenTarget <- SuccessionInlineAction / QualifiedName ActionBody / QualifiedName FeatureChain? SEMICOLON / ActionBody
 # Allow visibility indicator (public/private/protected) before inline actions
 SuccessionInlineAction <- VisibilityIndicator? (AcceptActionUsage / AcceptAction / SendAction / AssignmentAction / IfAction / WhileLoop / ForLoop / ControlNode / IncludeUseCaseUsage / UseCaseUsage / PortionUsage / StateUsage / EventOccurrenceUsage / EventUsage / OccurrenceUsage / PerformActionUsage / ActionUsage)
@@ -1515,9 +1577,9 @@ SuccessionBody <- QualifiedName FeatureChain? KW_THEN QualifiedName FeatureChain
                 / QualifiedName? ActionBody
 
 # Transition Elements
-TransitionUsage <- KW_TRANSITION TransitionDeclaration? TransitionBody
+TransitionUsage <- KW_TRANSITION < TransitionDeclaration? TransitionBody > { if (auxil->build_ctx) sysml2_capture_transition(auxil->build_ctx, $1, $1e - $1s); }
 TransitionDeclaration <- KW_FIRST? TransitionName? (COLON QualifiedName)? TransitionSourceTarget?
-TransitionName <- !KW_ACCEPT !KW_FIRST !KW_THEN !KW_DO NAME
+TransitionName <- !KW_ACCEPT !KW_FIRST !KW_THEN !KW_DO !KW_STATE !KW_ACTION !KW_CONSTRAINT !KW_TRANSITION !KW_EXHIBIT NAME &(!DOT !'::')
 TransitionSourceTarget <- KW_FIRST? TransitionTarget (KW_THEN TransitionTarget)?
 TransitionTarget <- !KW_ACCEPT !KW_THEN !KW_DO QualifiedName FeatureChain?
 TransitionBody <- SEMICOLON / TransitionActionBody
@@ -1569,8 +1631,9 @@ ImplicitShorthand <- !SpecializationKeyword NAME FeatureChain? FeatureSpecializa
 
 # === BIND STATEMENT ===
 # Supports: bind x = y; or binding [mult] bind [mult] x = [mult] y;
-BindUsage <- KW_BINDING Multiplicity? KW_BIND Multiplicity? QualifiedName FeatureChain? EQ Multiplicity? QualifiedName FeatureChain? RelationshipBody
-           / KW_BIND Multiplicity? QualifiedName FeatureChain? EQ Multiplicity? QualifiedName FeatureChain? RelationshipBody
+BindUsage <- BindUsageBinding / BindUsageSimple
+BindUsageBinding <- KW_BINDING Multiplicity? KW_BIND Multiplicity? < QualifiedName FeatureChain? > EQ Multiplicity? < QualifiedName FeatureChain? > RelationshipBody { if (auxil->build_ctx) sysml2_capture_bind(auxil->build_ctx, $1, $1e - $1s, $2, $2e - $2s); }
+BindUsageSimple <- KW_BIND Multiplicity? < QualifiedName FeatureChain? > EQ Multiplicity? < QualifiedName FeatureChain? > RelationshipBody { if (auxil->build_ctx) sysml2_capture_bind(auxil->build_ctx, $1, $1e - $1s, $2, $2e - $2s); }
 
 # === ASSERT CONSTRUCTS ===
 AssertConstraintUsage <- KW_ASSERT KW_NOT? AssertConstraintBody
@@ -1604,8 +1667,9 @@ MessageUsage <- UsagePrefix* KW_MESSAGE (TypedBy / Identification? UsageSpeciali
 MessageFlowPart <- KW_FROM FlowEndMember KW_TO FlowEndMember / FlowConnectionPart
 
 # === TERMINATE ACTION ===
-TerminateAction <- KW_TERMINATE QualifiedName FeatureChain? SEMICOLON
-                 / KW_TERMINATE SEMICOLON
+TerminateAction <- TerminateActionTarget / TerminateActionSimple
+TerminateActionTarget <- KW_TERMINATE QualifiedName FeatureChain? SEMICOLON { if (auxil->build_ctx) sysml2_capture_terminate(auxil->build_ctx); }
+TerminateActionSimple <- KW_TERMINATE SEMICOLON { if (auxil->build_ctx) sysml2_capture_terminate(auxil->build_ctx); }
 
 # === RESULT EXPRESSION (bare expression in bodies) ===
 ResultExpression <- OwnedExpression

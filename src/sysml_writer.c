@@ -271,6 +271,301 @@ static void write_import(Sysml2Writer *w, const SysmlImport *imp) {
 }
 
 /*
+ * Write a body statement
+ */
+static void write_statement(Sysml2Writer *w, const SysmlStatement *stmt) {
+    if (!stmt) return;
+
+    write_indent(w);
+
+    switch (stmt->kind) {
+        case SYSML_STMT_BIND:
+            fputs("bind ", w->out);
+            if (stmt->source.target) {
+                fputs(stmt->source.target, w->out);
+            }
+            fputs(" = ", w->out);
+            if (stmt->target.target) {
+                fputs(stmt->target.target, w->out);
+            }
+            fputs(";", w->out);
+            break;
+
+        case SYSML_STMT_CONNECT:
+            fputs("connect ", w->out);
+            if (stmt->source.target) {
+                fputs(stmt->source.target, w->out);
+            }
+            fputs(" to ", w->out);
+            if (stmt->target.target) {
+                fputs(stmt->target.target, w->out);
+            }
+            fputs(";", w->out);
+            break;
+
+        case SYSML_STMT_FLOW:
+            fputs("flow ", w->out);
+            if (stmt->payload) {
+                fputs("of ", w->out);
+                fputs(stmt->payload, w->out);
+                fputc(' ', w->out);
+            }
+            fputs("from ", w->out);
+            if (stmt->source.target) {
+                fputs(stmt->source.target, w->out);
+            }
+            fputs(" to ", w->out);
+            if (stmt->target.target) {
+                fputs(stmt->target.target, w->out);
+            }
+            fputs(";", w->out);
+            break;
+
+        case SYSML_STMT_ALLOCATE:
+            fputs("allocate ", w->out);
+            if (stmt->source.target) {
+                fputs(stmt->source.target, w->out);
+            }
+            fputs(" to ", w->out);
+            if (stmt->target.target) {
+                fputs(stmt->target.target, w->out);
+            }
+            fputs(";", w->out);
+            break;
+
+        case SYSML_STMT_SUCCESSION:
+            fputs("first ", w->out);
+            if (stmt->source.target) {
+                fputs(stmt->source.target, w->out);
+            }
+            if (stmt->guard) {
+                fputs(" if ", w->out);
+                fputs(stmt->guard, w->out);
+            }
+            fputs(" then ", w->out);
+            if (stmt->target.target) {
+                fputs(stmt->target.target, w->out);
+            }
+            fputs(";", w->out);
+            break;
+
+        case SYSML_STMT_ENTRY:
+            fputs("entry ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_EXIT:
+            fputs("exit ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_DO:
+            fputs("do ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_TRANSITION:
+            fputs("transition ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_ACCEPT:
+            fputs("accept ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_SEND:
+            fputs("send ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            fputs(";", w->out);
+            break;
+
+        case SYSML_STMT_ACCEPT_ACTION:
+            fputs("accept ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_ASSIGN:
+            fputs("assign ", w->out);
+            if (stmt->target.target) {
+                fputs(stmt->target.target, w->out);
+            }
+            fputs(" := ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            fputs(";", w->out);
+            break;
+
+        case SYSML_STMT_IF:
+            fputs("if ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_WHILE:
+            fputs("while ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_FOR:
+            fputs("for ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_LOOP:
+            fputs("loop ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_TERMINATE:
+            fputs("terminate;", w->out);
+            break;
+
+        case SYSML_STMT_MERGE:
+            fputs("merge ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_DECIDE:
+            fputs("decide ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_JOIN:
+            fputs("join ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_FORK:
+            fputs("fork ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_FIRST:
+            fputs("first ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_THEN:
+            /* Raw text includes keyword, output as-is */
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_RESULT_EXPR:
+            /* Just the expression, no keyword */
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        default:
+            /* Unknown statement - write raw_text if available */
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+    }
+
+    write_newline(w);
+}
+
+/*
+ * Write a named comment
+ */
+static void write_named_comment(Sysml2Writer *w, const SysmlNamedComment *comment) {
+    if (!comment) return;
+
+    write_indent(w);
+    fputs("comment", w->out);
+
+    if (comment->name) {
+        fputc(' ', w->out);
+        write_name(w, comment->name);
+    }
+
+    if (comment->about_count > 0 && comment->about) {
+        fputs(" about ", w->out);
+        for (size_t i = 0; i < comment->about_count; i++) {
+            if (i > 0) fputs(", ", w->out);
+            fputs(comment->about[i], w->out);
+        }
+    }
+
+    if (comment->locale) {
+        fputs(" locale ", w->out);
+        fputs(comment->locale, w->out);
+    }
+
+    fputc(' ', w->out);
+    if (comment->text) {
+        fputs(comment->text, w->out);
+    }
+
+    write_newline(w);
+}
+
+/*
+ * Write a textual representation
+ */
+static void write_textual_rep(Sysml2Writer *w, const SysmlTextualRep *rep) {
+    if (!rep) return;
+
+    write_indent(w);
+    fputs("rep", w->out);
+
+    if (rep->name) {
+        fputc(' ', w->out);
+        write_name(w, rep->name);
+    }
+
+    fputs(" language ", w->out);
+    if (rep->language) {
+        fputs(rep->language, w->out);
+    }
+
+    fputc(' ', w->out);
+    if (rep->text) {
+        fputs(rep->text, w->out);
+    }
+
+    write_newline(w);
+}
+
+/*
  * Write an alias declaration
  */
 static void write_alias(Sysml2Writer *w, const SysmlAlias *alias) {
@@ -348,8 +643,14 @@ static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
     size_t child_count = get_children(model, node->id, &children);
 
     bool has_doc = (node->documentation != NULL);
+    bool has_body_stmts = (node->body_stmt_count > 0);
+    bool has_comments = (node->comment_count > 0);
+    bool has_reps = (node->textual_rep_count > 0);
+    bool has_result_expr = (node->result_expression != NULL);
 
-    if (import_count == 0 && alias_count == 0 && child_count == 0 && node->metadata_count == 0 && !has_doc) {
+    if (import_count == 0 && alias_count == 0 && child_count == 0 &&
+        node->metadata_count == 0 && !has_doc && !has_body_stmts &&
+        !has_comments && !has_reps && !has_result_expr) {
         /* Empty body: use semicolon */
         fputc(';', w->out);
         if (node->trailing_trivia) {
@@ -396,13 +697,35 @@ static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
         }
 
         /* Add blank line between imports/aliases and members if both present */
-        if ((import_count > 0 || alias_count > 0) && child_count > 0) {
+        if ((import_count > 0 || alias_count > 0) && (child_count > 0 || has_body_stmts)) {
             write_newline(w);
+        }
+
+        /* Write body statements (relationship statements, control flow, etc.) */
+        for (size_t i = 0; i < node->body_stmt_count; i++) {
+            write_statement(w, node->body_stmts[i]);
         }
 
         /* Write children */
         for (size_t i = 0; i < child_count; i++) {
             write_node(w, children[i], model);
+        }
+
+        /* Write named comments */
+        for (size_t i = 0; i < node->comment_count; i++) {
+            write_named_comment(w, node->comments[i]);
+        }
+
+        /* Write textual representations */
+        for (size_t i = 0; i < node->textual_rep_count; i++) {
+            write_textual_rep(w, node->textual_reps[i]);
+        }
+
+        /* Write result expression (at end) */
+        if (node->result_expression) {
+            write_indent(w);
+            fputs(node->result_expression, w->out);
+            write_newline(w);
         }
 
         w->indent_level--;
