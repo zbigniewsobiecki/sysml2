@@ -7,6 +7,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Forward declaration for AST builder */
+struct SysmlBuildContext;
+
 typedef struct {
     const char *filename;
     const char *input;
@@ -23,6 +26,9 @@ typedef struct {
     const char *failed_rules[16];  /* Rules that failed at furthest pos */
     int failed_rule_count;
     const char *context_rule;       /* Enclosing rule for context */
+
+    /* AST building context (optional, NULL if not building AST) */
+    struct SysmlBuildContext *build_ctx;
 } SysmlParserContext;
 
 #define PCC_GETCHAR(auxil) sysml_getchar(auxil)

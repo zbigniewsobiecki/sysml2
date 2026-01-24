@@ -46,6 +46,9 @@ add_library(sysml2_core STATIC
     src/keywords.c
     src/lexer.c
     src/diagnostic.c
+    src/ast.c
+    src/ast_builder.c
+    src/json_writer.c
 )
 
 # Link math library on Unix
@@ -76,6 +79,7 @@ add_executable(test_packcc_parser
     tests/test_packcc_parser.c
 )
 target_include_directories(test_packcc_parser PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(test_packcc_parser sysml2_core)
 
 # Add tests
 add_test(NAME lexer_tests COMMAND test_lexer)

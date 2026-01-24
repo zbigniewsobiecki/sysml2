@@ -10,6 +10,8 @@
 #include "sysml2/diagnostic.h"
 #include "sysml2/cli.h"
 #include "sysml2/lexer.h"
+#include "sysml2/ast_builder.h"
+#include "sysml2/json_writer.h"
 #include "sysml_parser.h"  /* packcc-generated parser */
 
 #include <stdio.h>
@@ -260,8 +262,6 @@ static Sysml2Result process_input(
     Sysml2Intern *intern,
     Sysml2DiagContext *diag_ctx
 ) {
-    (void)arena;  /* Unused until we add AST building */
-
     if (options->verbose) {
         fprintf(stderr, "Processing: %s\n", display_name);
     }
@@ -308,6 +308,16 @@ static Sysml2Result process_input(
         free(line_offsets);
     }
 
+    /* Create build context for JSON output */
+    SysmlBuildContext *build_ctx = NULL;
+    if (options->output_format == SYSML2_OUTPUT_JSON) {
+        build_ctx = sysml_build_context_create(arena, intern, display_name);
+        if (!build_ctx) {
+            fprintf(stderr, "error: failed to create build context\n");
+            return SYSML2_ERROR_OUT_OF_MEMORY;
+        }
+    }
+
     /* Parse input using packcc-generated parser */
     SysmlParserContext ctx = {
         .filename = display_name,
@@ -323,6 +333,8 @@ static Sysml2Result process_input(
         .furthest_col = 0,
         .failed_rule_count = 0,
         .context_rule = NULL,
+        /* AST building context */
+        .build_ctx = build_ctx,
     };
 
     sysml_context_t *parser = sysml_create(&ctx);
@@ -346,10 +358,27 @@ static Sysml2Result process_input(
         }
     }
 
-    /* JSON output - not yet implemented */
-    if (options->output_format == SYSML2_OUTPUT_JSON) {
-        if (parse_ok) {
-            fprintf(stderr, "note: JSON output not yet implemented with new parser\n");
+    /* JSON output */
+    if (options->output_format == SYSML2_OUTPUT_JSON && parse_ok && build_ctx) {
+        SysmlSemanticModel *model = sysml_build_finalize(build_ctx);
+        if (model) {
+            FILE *out = stdout;
+            if (options->output_file) {
+                out = fopen(options->output_file, "w");
+                if (!out) {
+                    fprintf(stderr, "error: cannot open output file '%s': %s\n",
+                            options->output_file, strerror(errno));
+                    sysml_destroy(parser);
+                    return SYSML2_ERROR_FILE_READ;
+                }
+            }
+
+            SysmlJsonOptions json_opts = SYSML_JSON_OPTIONS_DEFAULT;
+            sysml_json_write(model, out, &json_opts);
+
+            if (options->output_file && out != stdout) {
+                fclose(out);
+            }
         }
     }
 
