@@ -179,6 +179,12 @@ SysmlNode *sysml2_build_node(
     node->parent_id = sysml2_build_current_scope(ctx);
     node->typed_by = NULL;
     node->typed_by_count = 0;
+    node->specializes = NULL;
+    node->specializes_count = 0;
+    node->redefines = NULL;
+    node->redefines_count = 0;
+    node->references = NULL;
+    node->references_count = 0;
     node->loc = SYSML2_LOC_INVALID;
     node->leading_trivia = NULL;
     node->trailing_trivia = NULL;
@@ -261,7 +267,7 @@ void sysml2_build_add_relationship(SysmlBuildContext *ctx, SysmlRelationship *re
 }
 
 /*
- * Add a type specialization to a node
+ * Add a type reference to a node (: operator)
  */
 void sysml2_build_add_typed_by(
     SysmlBuildContext *ctx,
@@ -287,6 +293,93 @@ void sysml2_build_add_typed_by(
     new_typed_by[node->typed_by_count] = interned_ref;
     node->typed_by = new_typed_by;
     node->typed_by_count = new_count;
+}
+
+/*
+ * Add a specialization to a node (:> operator)
+ */
+void sysml2_build_add_specializes(
+    SysmlBuildContext *ctx,
+    SysmlNode *node,
+    const char *type_ref
+) {
+    if (!ctx || !node || !type_ref) return;
+
+    /* Intern the type reference */
+    const char *interned_ref = sysml2_intern(ctx->intern, type_ref);
+
+    /* Allocate or grow specializes array */
+    size_t new_count = node->specializes_count + 1;
+    const char **new_specializes = SYSML2_ARENA_NEW_ARRAY(ctx->arena, const char *, new_count);
+    if (!new_specializes) return;
+
+    /* Copy existing entries */
+    if (node->specializes && node->specializes_count > 0) {
+        memcpy(new_specializes, node->specializes, node->specializes_count * sizeof(const char *));
+    }
+
+    /* Add new entry */
+    new_specializes[node->specializes_count] = interned_ref;
+    node->specializes = new_specializes;
+    node->specializes_count = new_count;
+}
+
+/*
+ * Add a redefinition to a node (:>> operator)
+ */
+void sysml2_build_add_redefines(
+    SysmlBuildContext *ctx,
+    SysmlNode *node,
+    const char *type_ref
+) {
+    if (!ctx || !node || !type_ref) return;
+
+    /* Intern the type reference */
+    const char *interned_ref = sysml2_intern(ctx->intern, type_ref);
+
+    /* Allocate or grow redefines array */
+    size_t new_count = node->redefines_count + 1;
+    const char **new_redefines = SYSML2_ARENA_NEW_ARRAY(ctx->arena, const char *, new_count);
+    if (!new_redefines) return;
+
+    /* Copy existing entries */
+    if (node->redefines && node->redefines_count > 0) {
+        memcpy(new_redefines, node->redefines, node->redefines_count * sizeof(const char *));
+    }
+
+    /* Add new entry */
+    new_redefines[node->redefines_count] = interned_ref;
+    node->redefines = new_redefines;
+    node->redefines_count = new_count;
+}
+
+/*
+ * Add a reference to a node (::> operator)
+ */
+void sysml2_build_add_references(
+    SysmlBuildContext *ctx,
+    SysmlNode *node,
+    const char *type_ref
+) {
+    if (!ctx || !node || !type_ref) return;
+
+    /* Intern the type reference */
+    const char *interned_ref = sysml2_intern(ctx->intern, type_ref);
+
+    /* Allocate or grow references array */
+    size_t new_count = node->references_count + 1;
+    const char **new_references = SYSML2_ARENA_NEW_ARRAY(ctx->arena, const char *, new_count);
+    if (!new_references) return;
+
+    /* Copy existing entries */
+    if (node->references && node->references_count > 0) {
+        memcpy(new_references, node->references, node->references_count * sizeof(const char *));
+    }
+
+    /* Add new entry */
+    new_references[node->references_count] = interned_ref;
+    node->references = new_references;
+    node->references_count = new_count;
 }
 
 /*

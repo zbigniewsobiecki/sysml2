@@ -17,6 +17,7 @@
 #include "ast.h"
 #include "cli.h"
 #include "import_resolver.h"
+#include "query.h"
 
 /*
  * Pipeline Context - manages state for processing files
@@ -173,5 +174,47 @@ Sysml2ImportResolver *sysml2_pipeline_get_resolver(Sysml2PipelineContext *ctx);
  * @return true if errors have been recorded
  */
 bool sysml2_pipeline_has_errors(Sysml2PipelineContext *ctx);
+
+/*
+ * Get memory arena from pipeline
+ *
+ * @param ctx Pipeline context
+ * @return Memory arena
+ */
+Sysml2Arena *sysml2_pipeline_get_arena(Sysml2PipelineContext *ctx);
+
+/*
+ * Write query result as JSON to output stream
+ *
+ * @param ctx Pipeline context
+ * @param result Query result to write
+ * @param out Output stream
+ * @return SYSML2_OK on success, error code otherwise
+ */
+Sysml2Result sysml2_pipeline_write_query_json(
+    Sysml2PipelineContext *ctx,
+    const Sysml2QueryResult *result,
+    FILE *out
+);
+
+/*
+ * Write query result as SysML to output stream
+ *
+ * Includes parent package stubs for valid output.
+ *
+ * @param ctx Pipeline context
+ * @param result Query result to write
+ * @param models Source models (for looking up parent packages)
+ * @param model_count Number of models
+ * @param out Output stream
+ * @return SYSML2_OK on success, error code otherwise
+ */
+Sysml2Result sysml2_pipeline_write_query_sysml(
+    Sysml2PipelineContext *ctx,
+    const Sysml2QueryResult *result,
+    SysmlSemanticModel **models,
+    size_t model_count,
+    FILE *out
+);
 
 #endif /* SYSML2_PIPELINE_H */

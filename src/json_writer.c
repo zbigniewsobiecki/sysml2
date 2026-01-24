@@ -5,6 +5,7 @@
  */
 
 #include "sysml2/json_writer.h"
+#include "sysml2/query.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -191,6 +192,21 @@ static void write_element(JsonWriter *w, const SysmlNode *node) {
     /* parent */
     write_string_field(w, "parent", node->parent_id, true);
 
+    /* specializes (if present) */
+    if (node->specializes && node->specializes_count > 0) {
+        write_string_array_field(w, "specializes", node->specializes, node->specializes_count, true);
+    }
+
+    /* redefines (if present) */
+    if (node->redefines && node->redefines_count > 0) {
+        write_string_array_field(w, "redefines", node->redefines, node->redefines_count, true);
+    }
+
+    /* references (if present) */
+    if (node->references && node->references_count > 0) {
+        write_string_array_field(w, "references", node->references, node->references_count, true);
+    }
+
     /* typedBy (if present) */
     if (node->typed_by && node->typed_by_count > 0) {
         write_string_array_field(w, "typedBy", node->typed_by, node->typed_by_count, true);
@@ -358,4 +374,120 @@ Sysml2Result sysml2_json_write_string(
     }
 
     return result;
+}
+
+/*
+ * Write query meta section
+ */
+static void write_query_meta(JsonWriter *w) {
+    write_indent(w);
+    fputs("\"meta\": {", w->out);
+    write_newline(w);
+    w->indent_level++;
+
+    write_string_field(w, "version", SYSML_JSON_VERSION, false);
+    write_string_field(w, "type", "query_result", true);
+
+    write_newline(w);
+    w->indent_level--;
+    write_indent(w);
+    fputc('}', w->out);
+}
+
+/*
+ * Write query elements array
+ */
+static void write_query_elements(JsonWriter *w, const Sysml2QueryResult *result) {
+    write_indent(w);
+    fputs("\"elements\": [", w->out);
+    write_newline(w);
+    w->indent_level++;
+
+    for (size_t i = 0; i < result->element_count; i++) {
+        if (i > 0) {
+            fputc(',', w->out);
+            write_newline(w);
+        }
+        write_element(w, result->elements[i]);
+    }
+
+    write_newline(w);
+    w->indent_level--;
+    write_indent(w);
+    fputc(']', w->out);
+}
+
+/*
+ * Write query relationships array
+ */
+static void write_query_relationships(JsonWriter *w, const Sysml2QueryResult *result) {
+    write_indent(w);
+    fputs("\"relationships\": [", w->out);
+    write_newline(w);
+    w->indent_level++;
+
+    for (size_t i = 0; i < result->relationship_count; i++) {
+        if (i > 0) {
+            fputc(',', w->out);
+            write_newline(w);
+        }
+        write_relationship(w, result->relationships[i]);
+    }
+
+    write_newline(w);
+    w->indent_level--;
+    write_indent(w);
+    fputc(']', w->out);
+}
+
+/*
+ * Write a query result as JSON to a file
+ */
+Sysml2Result sysml2_json_write_query(
+    const Sysml2QueryResult *result,
+    FILE *out,
+    const Sysml2JsonOptions *options
+) {
+    if (!result || !out) {
+        return SYSML2_ERROR_SYNTAX;
+    }
+
+    /* Use default options if not provided */
+    Sysml2JsonOptions default_opts = SYSML_JSON_OPTIONS_DEFAULT;
+    if (!options) {
+        options = &default_opts;
+    }
+
+    JsonWriter w = {
+        .out = out,
+        .options = options,
+        .indent_level = 0
+    };
+
+    /* Write root object */
+    fputc('{', w.out);
+    write_newline(&w);
+    w.indent_level++;
+
+    /* Meta section */
+    write_query_meta(&w);
+    fputc(',', w.out);
+    write_newline(&w);
+
+    /* Elements array */
+    write_query_elements(&w, result);
+    fputc(',', w.out);
+    write_newline(&w);
+
+    /* Relationships array */
+    write_query_relationships(&w, result);
+    write_newline(&w);
+
+    /* Close root object */
+    w.indent_level--;
+    write_indent(&w);
+    fputc('}', w.out);
+    write_newline(&w);
+
+    return SYSML2_OK;
 }

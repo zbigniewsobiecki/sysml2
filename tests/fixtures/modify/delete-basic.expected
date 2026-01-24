@@ -1,0 +1,4 @@
+package DataModel {
+    part def Truck;
+    part def Motorcycle;
+}

@@ -55,6 +55,8 @@ add_library(sysml2_core STATIC
     src/utils.c
     src/pipeline.c
     src/symtab.c
+    src/query.c
+    src/modify.c
 )
 
 # Link math library on Unix
@@ -87,6 +89,14 @@ target_link_libraries(test_ast sysml2_core)
 add_executable(test_validator tests/test_validator.c)
 target_link_libraries(test_validator sysml2_core)
 
+# Query unit tests
+add_executable(test_query tests/test_query.c)
+target_link_libraries(test_query sysml2_core)
+
+# Modify unit tests
+add_executable(test_modify tests/test_modify.c)
+target_link_libraries(test_modify sysml2_core)
+
 # PackCC-generated parser test
 add_executable(test_packcc_parser
     src/sysml_parser.c
@@ -99,6 +109,8 @@ target_link_libraries(test_packcc_parser sysml2_core)
 add_test(NAME lexer_tests COMMAND test_lexer)
 add_test(NAME ast_tests COMMAND test_ast)
 add_test(NAME validator_tests COMMAND test_validator)
+add_test(NAME query_tests COMMAND test_query)
+add_test(NAME modify_tests COMMAND test_modify)
 
 # PackCC parser tests - valid syntax files
 file(GLOB PACKCC_VALID_FIXTURES
@@ -194,7 +206,7 @@ add_test(NAME format_cross_file
 # Custom target for running tests
 add_custom_target(check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS test_lexer test_ast test_validator test_packcc_parser sysml2
+    DEPENDS test_lexer test_ast test_validator test_query test_modify test_packcc_parser sysml2
 )
 
 # Print configuration summary

@@ -410,13 +410,50 @@ static bool check_cycles_from_node(
 
     cycle_push(cd, node->id);
 
-    /* Follow typed_by references */
+    /* Follow all type relationship references */
     Sysml2Scope *scope = sysml2_symtab_get_or_create_scope(
         vctx->symtab, node->parent_id);
 
+    /* Check typed_by references */
     for (size_t i = 0; i < node->typed_by_count; i++) {
         Sysml2Symbol *type_sym = sysml2_symtab_resolve(
             vctx->symtab, scope, node->typed_by[i]);
+        if (type_sym && type_sym->node) {
+            if (check_cycles_from_node(vctx, cd, type_sym->node)) {
+                cycle_pop(cd);
+                return true;
+            }
+        }
+    }
+
+    /* Check specializes references */
+    for (size_t i = 0; i < node->specializes_count; i++) {
+        Sysml2Symbol *type_sym = sysml2_symtab_resolve(
+            vctx->symtab, scope, node->specializes[i]);
+        if (type_sym && type_sym->node) {
+            if (check_cycles_from_node(vctx, cd, type_sym->node)) {
+                cycle_pop(cd);
+                return true;
+            }
+        }
+    }
+
+    /* Check redefines references */
+    for (size_t i = 0; i < node->redefines_count; i++) {
+        Sysml2Symbol *type_sym = sysml2_symtab_resolve(
+            vctx->symtab, scope, node->redefines[i]);
+        if (type_sym && type_sym->node) {
+            if (check_cycles_from_node(vctx, cd, type_sym->node)) {
+                cycle_pop(cd);
+                return true;
+            }
+        }
+    }
+
+    /* Check references references */
+    for (size_t i = 0; i < node->references_count; i++) {
+        Sysml2Symbol *type_sym = sysml2_symtab_resolve(
+            vctx->symtab, scope, node->references[i]);
         if (type_sym && type_sym->node) {
             if (check_cycles_from_node(vctx, cd, type_sym->node)) {
                 cycle_pop(cd);
@@ -440,7 +477,11 @@ static void pass3_detect_cycles(
 
     for (size_t i = 0; i < model->element_count; i++) {
         SysmlNode *node = model->elements[i];
-        if (node->typed_by_count > 0) {
+        /* Check if node has any type relationships */
+        if (node->typed_by_count > 0 ||
+            node->specializes_count > 0 ||
+            node->redefines_count > 0 ||
+            node->references_count > 0) {
             check_cycles_from_node(vctx, &cd, node);
         }
     }

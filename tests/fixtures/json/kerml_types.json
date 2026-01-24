@@ -26,7 +26,7 @@
       "name": "Derived",
       "type": "Type",
       "parent": "KerMLTypes",
-      "typedBy": ["Base"]
+      "specializes": ["Base"]
     },
     {
       "id": "KerMLTypes::MyClassifier",
@@ -39,7 +39,7 @@
       "name": "MyClass",
       "type": "Class",
       "parent": "KerMLTypes",
-      "typedBy": ["MyClassifier"]
+      "specializes": ["MyClassifier"]
     },
     {
       "id": "KerMLTypes::MyStruct",

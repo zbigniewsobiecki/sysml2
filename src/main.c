@@ -11,6 +11,8 @@
 #include "sysml2/cli.h"
 #include "sysml2/pipeline.h"
 #include "sysml2/sysml_writer.h"
+#include "sysml2/query.h"
+#include "sysml2/modify.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,23 +22,29 @@
 
 /* Long options for getopt_long */
 static const struct option long_options[] = {
-    {"output",      required_argument, 0, 'o'},
-    {"format",      required_argument, 0, 'f'},
-    {"fix",         no_argument,       0, 'F'},
-    {"color",       optional_argument, 0, 'c'},
-    {"max-errors",  required_argument, 0, 'm'},
-    {"dump-tokens", no_argument,       0, 'T'},
-    {"dump-ast",    no_argument,       0, 'A'},
-    {"verbose",     no_argument,       0, 'v'},
-    {"parse-only",  no_argument,       0, 'P'},
-    {"no-validate", no_argument,       0, 'P'},  /* alias for --parse-only */
-    {"no-resolve",  no_argument,       0, 'R'},
-    {"help",        no_argument,       0, 'h'},
-    {"version",     no_argument,       0, 'V'},
+    {"output",       required_argument, 0, 'o'},
+    {"format",       required_argument, 0, 'f'},
+    {"select",       required_argument, 0, 's'},
+    {"fix",          no_argument,       0, 'F'},
+    {"color",        optional_argument, 0, 'c'},
+    {"max-errors",   required_argument, 0, 'm'},
+    {"dump-tokens",  no_argument,       0, 'T'},
+    {"dump-ast",     no_argument,       0, 'A'},
+    {"verbose",      no_argument,       0, 'v'},
+    {"parse-only",   no_argument,       0, 'P'},
+    {"no-validate",  no_argument,       0, 'P'},  /* alias for --parse-only */
+    {"no-resolve",   no_argument,       0, 'R'},
+    {"set",          required_argument, 0, 'S'},
+    {"at",           required_argument, 0, 'a'},
+    {"delete",       required_argument, 0, 'd'},
+    {"create-scope", no_argument,       0, 'C'},
+    {"dry-run",      no_argument,       0, 'D'},
+    {"help",         no_argument,       0, 'h'},
+    {"version",      no_argument,       0, 'V'},
     {0, 0, 0, 0}
 };
 
-static const char *short_options = "o:f:W:I:hVvTAPFR";
+static const char *short_options = "o:f:s:W:I:S:a:d:hVvTAPFRCD";
 
 /* Parse color mode from string */
 static Sysml2ColorMode parse_color_mode(const char *arg) {
@@ -129,8 +137,74 @@ Sysml2Result sysml2_cli_parse(Sysml2CliOptions *options, int argc, char **argv) 
                 options->library_paths[options->library_path_count++] = optarg;
                 break;
 
+            case 's':
+                /* Add select pattern */
+                if (options->select_pattern_count >= options->select_pattern_capacity) {
+                    size_t new_cap = options->select_pattern_capacity == 0 ? 8 : options->select_pattern_capacity * 2;
+                    const char **new_patterns = realloc((void *)options->select_patterns, new_cap * sizeof(char *));
+                    if (!new_patterns) {
+                        return SYSML2_ERROR_OUT_OF_MEMORY;
+                    }
+                    options->select_patterns = new_patterns;
+                    options->select_pattern_capacity = new_cap;
+                }
+                options->select_patterns[options->select_pattern_count++] = optarg;
+                break;
+
             case 'R':
                 options->no_resolve = true;
+                break;
+
+            case 'S':
+                /* --set: Add fragment to pending set operation */
+                if (options->set_count >= options->set_capacity) {
+                    size_t new_cap = options->set_capacity == 0 ? 8 : options->set_capacity * 2;
+                    const char **new_fragments = realloc((void *)options->set_fragments, new_cap * sizeof(char *));
+                    const char **new_targets = realloc((void *)options->set_targets, new_cap * sizeof(char *));
+                    if (!new_fragments || !new_targets) {
+                        free(new_fragments);
+                        free(new_targets);
+                        return SYSML2_ERROR_OUT_OF_MEMORY;
+                    }
+                    options->set_fragments = new_fragments;
+                    options->set_targets = new_targets;
+                    options->set_capacity = new_cap;
+                }
+                options->set_fragments[options->set_count] = optarg;
+                options->set_targets[options->set_count] = NULL;  /* Will be set by --at */
+                options->set_count++;
+                break;
+
+            case 'a':
+                /* --at: Set target scope for most recent --set */
+                if (options->set_count > 0 && options->set_targets[options->set_count - 1] == NULL) {
+                    options->set_targets[options->set_count - 1] = optarg;
+                } else {
+                    fprintf(stderr, "error: --at must follow --set\n");
+                    return SYSML2_ERROR_SYNTAX;
+                }
+                break;
+
+            case 'd':
+                /* --delete: Add delete pattern */
+                if (options->delete_pattern_count >= options->delete_pattern_capacity) {
+                    size_t new_cap = options->delete_pattern_capacity == 0 ? 8 : options->delete_pattern_capacity * 2;
+                    const char **new_patterns = realloc((void *)options->delete_patterns, new_cap * sizeof(char *));
+                    if (!new_patterns) {
+                        return SYSML2_ERROR_OUT_OF_MEMORY;
+                    }
+                    options->delete_patterns = new_patterns;
+                    options->delete_pattern_capacity = new_cap;
+                }
+                options->delete_patterns[options->delete_pattern_count++] = optarg;
+                break;
+
+            case 'C':
+                options->create_scope = true;
+                break;
+
+            case 'D':
+                options->dry_run = true;
                 break;
 
             case 'h':
@@ -162,6 +236,22 @@ void sysml2_cli_cleanup(Sysml2CliOptions *options) {
         free((void *)options->library_paths);
         options->library_paths = NULL;
     }
+    if (options->select_patterns) {
+        free((void *)options->select_patterns);
+        options->select_patterns = NULL;
+    }
+    if (options->set_fragments) {
+        free((void *)options->set_fragments);
+        options->set_fragments = NULL;
+    }
+    if (options->set_targets) {
+        free((void *)options->set_targets);
+        options->set_targets = NULL;
+    }
+    if (options->delete_patterns) {
+        free((void *)options->delete_patterns);
+        options->delete_patterns = NULL;
+    }
 }
 
 void sysml2_cli_print_help(FILE *output) {
@@ -175,6 +265,7 @@ void sysml2_cli_print_help(FILE *output) {
         "Options:\n"
         "  -o, --output <file>    Write output to file\n"
         "  -f, --format <fmt>     Output format: json, xml, sysml (default: none)\n"
+        "  -s, --select <pattern> Filter output to matching elements (repeatable)\n"
         "  -I <path>              Add library search path for imports\n"
         "      --fix              Format and rewrite files in place\n"
         "  -P, --parse-only       Parse only, skip semantic validation\n"
@@ -189,6 +280,17 @@ void sysml2_cli_print_help(FILE *output) {
         "  -h, --help             Show help\n"
         "  --version              Show version\n"
         "\n"
+        "Modification options:\n"
+        "  --set <file> --at <scope>  Insert elements from file into scope\n"
+        "  --delete <pattern>         Delete elements matching pattern (repeatable)\n"
+        "  --create-scope             Create target scope if it doesn't exist\n"
+        "  --dry-run                  Preview changes without writing files\n"
+        "\n"
+        "Query/Delete patterns:\n"
+        "  Pkg::Element           Specific element (and children for delete)\n"
+        "  Pkg::*                 Direct members only\n"
+        "  Pkg::**                All descendants recursively\n"
+        "\n"
         "Environment:\n"
         "  SYSML2_LIBRARY_PATH    Colon-separated list of library search paths\n"
         "\n"
@@ -200,6 +302,13 @@ void sysml2_cli_print_help(FILE *output) {
         "  sysml2 -I /path/to/lib model.sysml  Validate with library imports\n"
         "  cat model.sysml | sysml2        Parse from stdin\n"
         "  echo 'package P;' | sysml2      Quick syntax check\n"
+        "  sysml2 --select 'DataModel::*' -f json model.sysml\n"
+        "\n"
+        "Modification examples:\n"
+        "  sysml2 --delete 'Pkg::OldElement' model.sysml\n"
+        "  sysml2 --set fragment.sysml --at 'Pkg' model.sysml\n"
+        "  echo 'part def Car;' | sysml2 --set - --at 'Vehicles' model.sysml\n"
+        "  sysml2 --delete 'Legacy::**' --dry-run model.sysml\n"
         "\n"
         "Exit codes:\n"
         "  0  Success (no errors)\n"
@@ -434,19 +543,52 @@ static int run_normal_mode(
             final_result = SYSML2_ERROR_SYNTAX;
         }
 
-        /* Output (only for first input file) */
+        /* Output */
         if (!has_parse_errors && input_models[0]) {
-            if (options->output_format == SYSML2_OUTPUT_JSON) {
-                FILE *out = options->output_file ? fopen(options->output_file, "w") : stdout;
-                if (out) {
-                    sysml2_pipeline_write_json(ctx, input_models[0], out);
-                    if (options->output_file) fclose(out);
+            /* Check if we have select patterns */
+            if (options->select_pattern_count > 0) {
+                /* Query mode: filter output using patterns */
+                Sysml2Arena *arena = sysml2_pipeline_get_arena(ctx);
+                Sysml2QueryPattern *patterns = sysml2_query_parse_multi(
+                    options->select_patterns,
+                    options->select_pattern_count,
+                    arena
+                );
+
+                if (patterns) {
+                    Sysml2QueryResult *query_result = sysml2_query_execute(
+                        patterns,
+                        input_models,
+                        options->input_file_count,
+                        arena
+                    );
+
+                    if (query_result) {
+                        FILE *out = options->output_file ? fopen(options->output_file, "w") : stdout;
+                        if (out) {
+                            if (options->output_format == SYSML2_OUTPUT_JSON) {
+                                sysml2_pipeline_write_query_json(ctx, query_result, out);
+                            } else if (options->output_format == SYSML2_OUTPUT_SYSML) {
+                                sysml2_pipeline_write_query_sysml(ctx, query_result, input_models, options->input_file_count, out);
+                            }
+                            if (options->output_file) fclose(out);
+                        }
+                    }
                 }
-            } else if (options->output_format == SYSML2_OUTPUT_SYSML) {
-                FILE *out = options->output_file ? fopen(options->output_file, "w") : stdout;
-                if (out) {
-                    sysml2_pipeline_write_sysml(ctx, input_models[0], out);
-                    if (options->output_file) fclose(out);
+            } else {
+                /* Normal mode: output first model */
+                if (options->output_format == SYSML2_OUTPUT_JSON) {
+                    FILE *out = options->output_file ? fopen(options->output_file, "w") : stdout;
+                    if (out) {
+                        sysml2_pipeline_write_json(ctx, input_models[0], out);
+                        if (options->output_file) fclose(out);
+                    }
+                } else if (options->output_format == SYSML2_OUTPUT_SYSML) {
+                    FILE *out = options->output_file ? fopen(options->output_file, "w") : stdout;
+                    if (out) {
+                        sysml2_pipeline_write_sysml(ctx, input_models[0], out);
+                        if (options->output_file) fclose(out);
+                    }
                 }
             }
         }
@@ -465,6 +607,271 @@ static int run_normal_mode(
     } else {
         return 2;
     }
+}
+
+/* Check if modification mode is requested */
+static bool has_modify_options(const Sysml2CliOptions *options) {
+    return options->delete_pattern_count > 0 || options->set_count > 0;
+}
+
+/* Run modification mode: parse, delete, set, validate, write */
+static int run_modify_mode(
+    Sysml2PipelineContext *ctx,
+    const Sysml2CliOptions *options
+) {
+    Sysml2ImportResolver *resolver = sysml2_pipeline_get_resolver(ctx);
+    Sysml2DiagContext *diag = sysml2_pipeline_get_diag(ctx);
+    Sysml2Arena *arena = sysml2_pipeline_get_arena(ctx);
+    Sysml2Intern *intern = ctx->intern;
+
+    /* Add directories containing input files to search paths */
+    for (size_t i = 0; i < options->input_file_count; i++) {
+        char *path_copy = strdup(options->input_files[i]);
+        if (path_copy) {
+            char *last_slash = strrchr(path_copy, '/');
+            if (last_slash) {
+                *last_slash = '\0';
+                sysml2_resolver_add_path(resolver, path_copy);
+            } else {
+                sysml2_resolver_add_path(resolver, ".");
+            }
+            free(path_copy);
+        }
+    }
+
+    /* Allocate model array */
+    SysmlSemanticModel **models = malloc(options->input_file_count * sizeof(SysmlSemanticModel *));
+    SysmlSemanticModel **modified_models = malloc(options->input_file_count * sizeof(SysmlSemanticModel *));
+    if (!models || !modified_models) {
+        fprintf(stderr, "error: out of memory\n");
+        free(models);
+        free(modified_models);
+        return 1;
+    }
+
+    bool has_errors = false;
+    size_t error_count_before = diag->error_count;
+
+    /* Pass 1: Parse ALL input files */
+    for (size_t i = 0; i < options->input_file_count; i++) {
+        models[i] = NULL;
+        modified_models[i] = NULL;
+        Sysml2Result result = sysml2_pipeline_process_file(ctx, options->input_files[i], &models[i]);
+        if (result != SYSML2_OK || models[i] == NULL) {
+            has_errors = true;
+        }
+        if (models[i]) {
+            sysml2_resolver_cache_model(resolver, options->input_files[i], models[i]);
+        }
+    }
+
+    if (has_errors) {
+        sysml2_pipeline_print_diagnostics(ctx, stderr);
+        fprintf(stderr, "error: modification aborted due to parse errors (no files modified)\n");
+        free(models);
+        free(modified_models);
+        return 1;
+    }
+
+    /* Pass 2: Build modification plan and apply deletions */
+    Sysml2ModifyPlan *plan = sysml2_modify_plan_create(arena);
+    if (!plan) {
+        fprintf(stderr, "error: out of memory creating modification plan\n");
+        free(models);
+        free(modified_models);
+        return 1;
+    }
+    plan->dry_run = options->dry_run;
+
+    /* Add delete patterns */
+    for (size_t i = 0; i < options->delete_pattern_count; i++) {
+        Sysml2Result add_result = sysml2_modify_plan_add_delete(plan, options->delete_patterns[i]);
+        if (add_result != SYSML2_OK) {
+            fprintf(stderr, "error: invalid delete pattern '%s'\n", options->delete_patterns[i]);
+            free(models);
+            free(modified_models);
+            return 1;
+        }
+    }
+
+    /* Apply deletions to all models */
+    size_t total_deleted = 0;
+    for (size_t i = 0; i < options->input_file_count; i++) {
+        if (!models[i]) continue;
+
+        if (plan->delete_patterns) {
+            size_t deleted_count = 0;
+            modified_models[i] = sysml2_modify_clone_with_deletions(
+                models[i],
+                plan->delete_patterns,
+                arena,
+                intern,
+                &deleted_count
+            );
+            total_deleted += deleted_count;
+
+            if (!modified_models[i]) {
+                fprintf(stderr, "error: failed to apply deletions to '%s'\n", options->input_files[i]);
+                free(models);
+                free(modified_models);
+                return 1;
+            }
+        } else {
+            /* No deletions, just copy reference */
+            modified_models[i] = models[i];
+        }
+    }
+
+    /* Pass 3: Apply set operations */
+    size_t total_added = 0;
+    size_t total_replaced = 0;
+
+    for (size_t op_idx = 0; op_idx < options->set_count; op_idx++) {
+        const char *fragment_path = options->set_fragments[op_idx];
+        const char *target_scope = options->set_targets[op_idx];
+
+        if (!target_scope) {
+            fprintf(stderr, "error: --set '%s' missing --at target scope\n", fragment_path);
+            free(models);
+            free(modified_models);
+            return 1;
+        }
+
+        /* Parse the fragment */
+        SysmlSemanticModel *fragment = NULL;
+
+        if (strcmp(fragment_path, "-") == 0) {
+            /* Read from stdin */
+            Sysml2Result frag_result = sysml2_pipeline_process_stdin(ctx, &fragment);
+            if (frag_result != SYSML2_OK || !fragment) {
+                fprintf(stderr, "error: failed to parse fragment from stdin\n");
+                free(models);
+                free(modified_models);
+                return 1;
+            }
+        } else {
+            /* Read from file */
+            Sysml2Result frag_result = sysml2_pipeline_process_file(ctx, fragment_path, &fragment);
+            if (frag_result != SYSML2_OK || !fragment) {
+                fprintf(stderr, "error: failed to parse fragment file '%s'\n", fragment_path);
+                free(models);
+                free(modified_models);
+                return 1;
+            }
+        }
+
+        /* Find which model contains the target scope (or first model if creating) */
+        int target_model_idx = -1;
+        for (size_t i = 0; i < options->input_file_count; i++) {
+            if (modified_models[i] && sysml2_modify_scope_exists(modified_models[i], target_scope)) {
+                target_model_idx = (int)i;
+                break;
+            }
+        }
+
+        /* If not found and create_scope is set, use first model */
+        if (target_model_idx < 0) {
+            if (options->create_scope && options->input_file_count > 0) {
+                target_model_idx = 0;
+            } else {
+                fprintf(stderr, "error: target scope '%s' not found (use --create-scope to create it)\n", target_scope);
+                free(models);
+                free(modified_models);
+                return 1;
+            }
+        }
+
+        /* Merge fragment into target model */
+        size_t added_count = 0;
+        size_t replaced_count = 0;
+        SysmlSemanticModel *merged = sysml2_modify_merge_fragment(
+            modified_models[target_model_idx],
+            fragment,
+            target_scope,
+            options->create_scope,
+            arena,
+            intern,
+            &added_count,
+            &replaced_count
+        );
+
+        if (!merged) {
+            fprintf(stderr, "error: failed to merge fragment into scope '%s'\n", target_scope);
+            free(models);
+            free(modified_models);
+            return 1;
+        }
+
+        modified_models[target_model_idx] = merged;
+        total_added += added_count;
+        total_replaced += replaced_count;
+    }
+
+    /* Pass 4: Validation (unless --parse-only) */
+    if (!options->parse_only) {
+        /* Update resolver cache with modified models */
+        for (size_t i = 0; i < options->input_file_count; i++) {
+            if (modified_models[i]) {
+                sysml2_resolver_cache_model(resolver, options->input_files[i], modified_models[i]);
+            }
+        }
+
+        Sysml2Result val_result = sysml2_pipeline_validate_all(ctx);
+        if (val_result != SYSML2_OK || diag->error_count > error_count_before) {
+            sysml2_pipeline_print_diagnostics(ctx, stderr);
+            fprintf(stderr, "error: modification aborted due to validation errors (no files modified)\n");
+            free(models);
+            free(modified_models);
+            return 1;
+        }
+    }
+
+    /* Summary */
+    if (options->verbose || options->dry_run) {
+        fprintf(stderr, "Modification summary:\n");
+        fprintf(stderr, "  Elements deleted:  %zu\n", total_deleted);
+        fprintf(stderr, "  Elements added:    %zu\n", total_added);
+        fprintf(stderr, "  Elements replaced: %zu\n", total_replaced);
+    }
+
+    /* Pass 5: Write modified files (unless dry-run) */
+    if (!options->dry_run) {
+        for (size_t i = 0; i < options->input_file_count; i++) {
+            if (!modified_models[i]) continue;
+
+            /* Check if model was actually modified */
+            bool was_modified = (modified_models[i] != models[i]);
+            if (!was_modified && plan->delete_patterns) {
+                /* Check if any deletions affected this model */
+                size_t check_deleted = 0;
+                sysml2_modify_clone_with_deletions(models[i], plan->delete_patterns, arena, intern, &check_deleted);
+                was_modified = (check_deleted > 0);
+            }
+
+            if (was_modified || options->set_count > 0) {
+                FILE *out = fopen(options->input_files[i], "w");
+                if (!out) {
+                    fprintf(stderr, "error: cannot open file '%s' for writing: %s\n",
+                            options->input_files[i], strerror(errno));
+                    has_errors = true;
+                    continue;
+                }
+
+                sysml2_sysml_write(modified_models[i], out);
+                fclose(out);
+
+                if (options->verbose) {
+                    fprintf(stderr, "Modified: %s\n", options->input_files[i]);
+                }
+            }
+        }
+    } else {
+        fprintf(stderr, "Dry run: no files modified\n");
+    }
+
+    free(models);
+    free(modified_models);
+    return has_errors ? 1 : 0;
 }
 
 int main(int argc, char **argv) {
@@ -492,6 +899,20 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    /* Modification modes require file arguments */
+    if (has_modify_options(&options) && options.input_file_count == 0) {
+        fprintf(stderr, "error: --set/--delete require file arguments\n");
+        return 1;
+    }
+
+    /* Validate --set has corresponding --at */
+    for (size_t i = 0; i < options.set_count; i++) {
+        if (options.set_targets[i] == NULL) {
+            fprintf(stderr, "error: --set '%s' missing --at target scope\n", options.set_fragments[i]);
+            return 1;
+        }
+    }
+
     /* Initialize memory arena and string interning */
     Sysml2Arena arena;
     sysml2_arena_init(&arena);
@@ -510,7 +931,9 @@ int main(int argc, char **argv) {
 
     /* Run appropriate mode */
     int exit_code;
-    if (options.fix_in_place) {
+    if (has_modify_options(&options)) {
+        exit_code = run_modify_mode(ctx, &options);
+    } else if (options.fix_in_place) {
         exit_code = run_fix_mode(ctx, &options);
     } else {
         exit_code = run_normal_mode(ctx, &options);

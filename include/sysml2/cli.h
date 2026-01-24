@@ -31,6 +31,24 @@ typedef struct {
     size_t library_path_count;
     size_t library_path_capacity;
 
+    /* Query options */
+    const char **select_patterns;   /* Array of --select patterns */
+    size_t select_pattern_count;
+    size_t select_pattern_capacity;
+
+    /* Modification options */
+    const char **set_fragments;     /* Fragment file paths for --set */
+    const char **set_targets;       /* Target scopes for --set (parallel array) */
+    size_t set_count;
+    size_t set_capacity;
+
+    const char **delete_patterns;   /* Delete patterns for --delete */
+    size_t delete_pattern_count;
+    size_t delete_pattern_capacity;
+
+    bool create_scope;              /* --create-scope flag */
+    bool dry_run;                   /* --dry-run flag */
+
     /* Diagnostics */
     Sysml2ColorMode color_mode;
     size_t max_errors;

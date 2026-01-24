@@ -373,6 +373,12 @@ TEST(validate_e3004_duplicate_name) {
     part2->parent_id = NULL;
     part2->typed_by = NULL;
     part2->typed_by_count = 0;
+    part2->specializes = NULL;
+    part2->specializes_count = 0;
+    part2->redefines = NULL;
+    part2->redefines_count = 0;
+    part2->references = NULL;
+    part2->references_count = 0;
     part2->loc.line = 8;
     sysml2_build_add_element(ctx.build_ctx, part2);
 

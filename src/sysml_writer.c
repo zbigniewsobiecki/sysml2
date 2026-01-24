@@ -5,6 +5,7 @@
  */
 
 #include "sysml2/sysml_writer.h"
+#include "sysml2/query.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -335,15 +336,35 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
         write_name(w, node->name);
     }
 
-    /* Write type specializations */
-    if (node->typed_by && node->typed_by_count > 0) {
-        fputs(" : ", w->out);
-        for (size_t i = 0; i < node->typed_by_count; i++) {
-            if (i > 0) {
-                fputs(", ", w->out);
-            }
-            fputs(node->typed_by[i], w->out);
-        }
+    /* Write type relationships with correct operators */
+    bool first_rel = true;
+
+    /* :> specializations first (most common for definitions) */
+    for (size_t i = 0; i < node->specializes_count; i++) {
+        fputs(first_rel ? " :> " : ", ", w->out);
+        fputs(node->specializes[i], w->out);
+        first_rel = false;
+    }
+
+    /* :>> redefinitions */
+    for (size_t i = 0; i < node->redefines_count; i++) {
+        fputs(first_rel ? " :>> " : ", ", w->out);
+        fputs(node->redefines[i], w->out);
+        first_rel = false;
+    }
+
+    /* ::> references */
+    for (size_t i = 0; i < node->references_count; i++) {
+        fputs(first_rel ? " ::> " : ", ", w->out);
+        fputs(node->references[i], w->out);
+        first_rel = false;
+    }
+
+    /* : typing last (most specific for usages) */
+    for (size_t i = 0; i < node->typed_by_count; i++) {
+        fputs(first_rel ? " : " : ", ", w->out);
+        fputs(node->typed_by[i], w->out);
+        first_rel = false;
     }
 
     /* Write body for container elements */
@@ -442,4 +463,214 @@ Sysml2Result sysml2_sysml_write_string(
     }
 
     return result;
+}
+
+/*
+ * Helper: Find a node by ID across multiple models
+ */
+static const SysmlNode *find_node_by_id(
+    SysmlSemanticModel **models,
+    size_t model_count,
+    const char *id
+) {
+    if (!models || !id) return NULL;
+    for (size_t m = 0; m < model_count; m++) {
+        if (!models[m]) continue;
+        for (size_t i = 0; i < models[m]->element_count; i++) {
+            const SysmlNode *node = models[m]->elements[i];
+            if (node && node->id && strcmp(node->id, id) == 0) {
+                return node;
+            }
+        }
+    }
+    return NULL;
+}
+
+/*
+ * Helper: Get the local name from a qualified ID
+ *
+ * "A::B::C" -> "C"
+ */
+static const char *get_local_name(const char *id) {
+    if (!id) return NULL;
+    const char *last_sep = NULL;
+    const char *p = id;
+    while (*p) {
+        if (p[0] == ':' && p[1] == ':') {
+            last_sep = p;
+        }
+        p++;
+    }
+    if (last_sep) {
+        return last_sep + 2;
+    }
+    return id;
+}
+
+/*
+ * Recursive function to write query result as SysML
+ *
+ * For a given parent path, writes all elements that are direct children.
+ */
+static void write_query_children(
+    Sysml2Writer *w,
+    const Sysml2QueryResult *result,
+    SysmlSemanticModel **models,
+    size_t model_count,
+    const char **ancestors,
+    size_t ancestor_count,
+    const char *parent_path,
+    size_t parent_path_len
+) {
+    bool first = true;
+
+    /* Write elements that are direct children of parent_path */
+    for (size_t i = 0; i < result->element_count; i++) {
+        const SysmlNode *node = result->elements[i];
+        if (!node || !node->id) continue;
+
+        /* Check if this node's parent matches parent_path */
+        const char *last_sep = NULL;
+        const char *p = node->id;
+        while (*p) {
+            if (p[0] == ':' && p[1] == ':') {
+                last_sep = p;
+            }
+            p++;
+        }
+
+        bool is_direct_child;
+        if (parent_path == NULL) {
+            /* Top-level: no :: in the ID */
+            is_direct_child = (last_sep == NULL);
+        } else {
+            /* Check if parent matches exactly */
+            if (!last_sep) {
+                is_direct_child = false;
+            } else {
+                size_t parent_len = last_sep - node->id;
+                is_direct_child = (parent_len == parent_path_len &&
+                                   strncmp(node->id, parent_path, parent_len) == 0);
+            }
+        }
+
+        if (is_direct_child) {
+            if (!first) {
+                write_newline(w);
+            }
+            first = false;
+            write_node(w, node, models[0]);  /* Use first model for structure */
+        }
+    }
+
+    /* Write ancestor stubs that are direct children of parent_path */
+    for (size_t i = 0; i < ancestor_count; i++) {
+        const char *anc_id = ancestors[i];
+        if (!anc_id) continue;
+
+        /* Check if this ancestor's parent matches parent_path */
+        const char *last_sep = NULL;
+        const char *p = anc_id;
+        while (*p) {
+            if (p[0] == ':' && p[1] == ':') {
+                last_sep = p;
+            }
+            p++;
+        }
+
+        bool is_direct_child;
+        if (parent_path == NULL) {
+            is_direct_child = (last_sep == NULL);
+        } else {
+            if (!last_sep) {
+                is_direct_child = false;
+            } else {
+                size_t parent_len = last_sep - anc_id;
+                is_direct_child = (parent_len == parent_path_len &&
+                                   strncmp(anc_id, parent_path, parent_len) == 0);
+            }
+        }
+
+        if (is_direct_child) {
+            if (!first) {
+                write_newline(w);
+            }
+            first = false;
+
+            /* Write the ancestor as a stub package */
+            const SysmlNode *anc_node = find_node_by_id(models, model_count, anc_id);
+            const char *local_name = get_local_name(anc_id);
+
+            write_indent(w);
+
+            /* Determine keyword based on node kind or default to package */
+            const char *keyword = "package";
+            if (anc_node) {
+                keyword = sysml2_kind_to_keyword(anc_node->kind);
+            }
+            fputs(keyword, w->out);
+
+            if (local_name) {
+                fputc(' ', w->out);
+                if (needs_quoting(local_name)) {
+                    fputc('\'', w->out);
+                    fputs(local_name, w->out);
+                    fputc('\'', w->out);
+                } else {
+                    fputs(local_name, w->out);
+                }
+            }
+
+            fputs(" {", w->out);
+            write_newline(w);
+            w->indent_level++;
+
+            /* Recursively write children of this ancestor */
+            write_query_children(
+                w, result, models, model_count,
+                ancestors, ancestor_count,
+                anc_id, strlen(anc_id)
+            );
+
+            w->indent_level--;
+            write_indent(w);
+            fputc('}', w->out);
+            write_newline(w);
+        }
+    }
+}
+
+/*
+ * Write a query result as formatted SysML/KerML source to a file
+ */
+Sysml2Result sysml2_sysml_write_query(
+    const Sysml2QueryResult *result,
+    SysmlSemanticModel **models,
+    size_t model_count,
+    Sysml2Arena *arena,
+    FILE *out
+) {
+    if (!result || !out) {
+        return SYSML2_ERROR_SYNTAX;
+    }
+
+    /* Get ancestors needed for valid output */
+    const char **ancestors = NULL;
+    size_t ancestor_count = 0;
+    sysml2_query_get_ancestors(result, models, model_count, arena, &ancestors, &ancestor_count);
+
+    Sysml2Writer w = {
+        .out = out,
+        .indent_level = 0,
+        .at_line_start = true
+    };
+
+    /* Write hierarchical output starting from root (NULL parent) */
+    write_query_children(
+        &w, result, models, model_count,
+        ancestors, ancestor_count,
+        NULL, 0
+    );
+
+    return SYSML2_OK;
 }

@@ -11,6 +11,7 @@
 #include "sysml2/json_writer.h"
 #include "sysml2/sysml_writer.h"
 #include "sysml2/validator.h"
+#include "sysml2/query.h"
 #include "sysml_parser.h"
 
 #include <stdio.h>
@@ -327,4 +328,37 @@ Sysml2ImportResolver *sysml2_pipeline_get_resolver(Sysml2PipelineContext *ctx) {
 
 bool sysml2_pipeline_has_errors(Sysml2PipelineContext *ctx) {
     return ctx && ctx->diag && ctx->diag->error_count > 0;
+}
+
+Sysml2Arena *sysml2_pipeline_get_arena(Sysml2PipelineContext *ctx) {
+    return ctx ? ctx->arena : NULL;
+}
+
+Sysml2Result sysml2_pipeline_write_query_json(
+    Sysml2PipelineContext *ctx,
+    const Sysml2QueryResult *result,
+    FILE *out
+) {
+    if (!ctx || !result || !out) {
+        return SYSML2_ERROR_SEMANTIC;
+    }
+
+    Sysml2JsonOptions json_opts = SYSML_JSON_OPTIONS_DEFAULT;
+    sysml2_json_write_query(result, out, &json_opts);
+    return SYSML2_OK;
+}
+
+Sysml2Result sysml2_pipeline_write_query_sysml(
+    Sysml2PipelineContext *ctx,
+    const Sysml2QueryResult *result,
+    SysmlSemanticModel **models,
+    size_t model_count,
+    FILE *out
+) {
+    if (!ctx || !result || !out) {
+        return SYSML2_ERROR_SEMANTIC;
+    }
+
+    sysml2_sysml_write_query(result, models, model_count, ctx->arena, out);
+    return SYSML2_OK;
 }

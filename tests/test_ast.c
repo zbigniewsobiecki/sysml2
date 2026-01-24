@@ -516,6 +516,130 @@ TEST(typed_by_multiple) {
     sysml2_arena_destroy(&arena);
 }
 
+/* ========== Specialization Tests ========== */
+
+TEST(specializes_single) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
+
+    SysmlNode *node = sysml2_build_node(ctx, SYSML_KIND_PART_DEF, "Car");
+    sysml2_build_add_specializes(ctx, node, "Vehicle");
+
+    ASSERT_EQ(node->specializes_count, 1);
+    ASSERT_STR_EQ(node->specializes[0], "Vehicle");
+
+    sysml2_build_context_destroy(ctx);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(specializes_multiple) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
+
+    SysmlNode *node = sysml2_build_node(ctx, SYSML_KIND_PART_DEF, "SportsCar");
+    sysml2_build_add_specializes(ctx, node, "Car");
+    sysml2_build_add_specializes(ctx, node, "HighPerformance");
+
+    ASSERT_EQ(node->specializes_count, 2);
+    ASSERT_STR_EQ(node->specializes[0], "Car");
+    ASSERT_STR_EQ(node->specializes[1], "HighPerformance");
+
+    sysml2_build_context_destroy(ctx);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(redefines_single) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
+
+    SysmlNode *node = sysml2_build_node(ctx, SYSML_KIND_ATTRIBUTE_USAGE, "speed");
+    sysml2_build_add_redefines(ctx, node, "baseSpeed");
+
+    ASSERT_EQ(node->redefines_count, 1);
+    ASSERT_STR_EQ(node->redefines[0], "baseSpeed");
+
+    sysml2_build_context_destroy(ctx);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(references_single) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
+
+    SysmlNode *node = sysml2_build_node(ctx, SYSML_KIND_REFERENCE_USAGE, "owner");
+    sysml2_build_add_references(ctx, node, "Person");
+
+    ASSERT_EQ(node->references_count, 1);
+    ASSERT_STR_EQ(node->references[0], "Person");
+
+    sysml2_build_context_destroy(ctx);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(mixed_type_relationships) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
+
+    SysmlNode *node = sysml2_build_node(ctx, SYSML_KIND_PART_DEF, "SportsCar");
+    sysml2_build_add_specializes(ctx, node, "Car");
+    sysml2_build_add_redefines(ctx, node, "topSpeed");
+    sysml2_build_add_typed_by(ctx, node, "Vehicle");
+    sysml2_build_add_references(ctx, node, "Driver");
+
+    ASSERT_EQ(node->specializes_count, 1);
+    ASSERT_EQ(node->redefines_count, 1);
+    ASSERT_EQ(node->typed_by_count, 1);
+    ASSERT_EQ(node->references_count, 1);
+    ASSERT_STR_EQ(node->specializes[0], "Car");
+    ASSERT_STR_EQ(node->redefines[0], "topSpeed");
+    ASSERT_STR_EQ(node->typed_by[0], "Vehicle");
+    ASSERT_STR_EQ(node->references[0], "Driver");
+
+    sysml2_build_context_destroy(ctx);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(node_initializes_new_fields) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
+
+    SysmlNode *node = sysml2_build_node(ctx, SYSML_KIND_PACKAGE, "MyPackage");
+    ASSERT_NOT_NULL(node);
+    ASSERT_NULL(node->specializes);
+    ASSERT_EQ(node->specializes_count, 0);
+    ASSERT_NULL(node->redefines);
+    ASSERT_EQ(node->redefines_count, 0);
+    ASSERT_NULL(node->references);
+    ASSERT_EQ(node->references_count, 0);
+
+    sysml2_build_context_destroy(ctx);
+    sysml2_arena_destroy(&arena);
+}
+
 /* ========== Relationship Tests ========== */
 
 TEST(relationship_creation) {
@@ -743,6 +867,15 @@ int main(void) {
     printf("\n  Type specialization tests:\n");
     RUN_TEST(typed_by_single);
     RUN_TEST(typed_by_multiple);
+
+    /* Specialization/Redefines/References tests */
+    printf("\n  Specialization/Redefines/References tests:\n");
+    RUN_TEST(specializes_single);
+    RUN_TEST(specializes_multiple);
+    RUN_TEST(redefines_single);
+    RUN_TEST(references_single);
+    RUN_TEST(mixed_type_relationships);
+    RUN_TEST(node_initializes_new_fields);
 
     /* Relationship tests */
     printf("\n  Relationship tests:\n");

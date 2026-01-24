@@ -187,9 +187,18 @@ typedef struct SysmlNode {
     SysmlNodeKind kind;
     const char *parent_id;    /* Parent element ID (containment) */
 
-    /* Type specializations (typed by) */
-    const char **typed_by;    /* Array of type IDs */
+    /* Type relationships */
+    const char **typed_by;       /* : Type (typing) */
     size_t typed_by_count;
+
+    const char **specializes;    /* :> Type (specialization/subsetting) */
+    size_t specializes_count;
+
+    const char **redefines;      /* :>> Type (redefinition) */
+    size_t redefines_count;
+
+    const char **references;     /* ::> Type (referencing) */
+    size_t references_count;
 
     /* Source location for debugging */
     Sysml2SourceLoc loc;

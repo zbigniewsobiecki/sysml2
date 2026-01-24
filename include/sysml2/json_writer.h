@@ -12,6 +12,7 @@
 
 #include "common.h"
 #include "ast.h"
+#include "query.h"
 #include <stdio.h>
 
 /*
@@ -74,5 +75,22 @@ Sysml2Result sysml2_json_write_string(
  * @return Number of characters written (excluding null terminator)
  */
 size_t sysml2_json_escape_string(const char *str, char *out, size_t out_size);
+
+/*
+ * Write a query result as JSON to a file
+ *
+ * Output format is similar to sysml2_json_write but contains only
+ * the filtered elements and relationships from the query result.
+ *
+ * @param result Query result to serialize
+ * @param out Output file handle
+ * @param options Output options (can be NULL for defaults)
+ * @return SYSML2_OK on success, error code on failure
+ */
+Sysml2Result sysml2_json_write_query(
+    const Sysml2QueryResult *result,
+    FILE *out,
+    const Sysml2JsonOptions *options
+);
 
 #endif /* SYSML2_JSON_WRITER_H */

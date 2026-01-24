@@ -84,135 +84,138 @@ static const char *sysml2_extract_name(SysmlParserContext *ctx, const char *text
     return sysml2_intern_n(ctx->build_ctx->intern, text, name_end);
 }
 
-/* Helper: extract type reference from captured text (finds : TypeName) */
-static const char *sysml2_extract_type(SysmlParserContext *ctx, const char *text, size_t len) {
-    if (!ctx->build_ctx || !text || len == 0) return NULL;
+/* Operator kind for type relationships */
+typedef enum {
+    SYSML_OP_NONE = 0,
+    SYSML_OP_TYPED_BY,      /* : */
+    SYSML_OP_SPECIALIZES,   /* :> */
+    SYSML_OP_REDEFINES,     /* :>> */
+    SYSML_OP_REFERENCES,    /* ::> */
+} SysmlOperatorKind;
 
-    /* Find : that's not :: or :> or :>> (typed-by marker) */
-    size_t i = 0;
+/* Result of extracting a type reference with its operator */
+typedef struct {
+    SysmlOperatorKind op;
+    const char *ref;
+} SysmlTypeRefResult;
+
+/* Helper: extract next type reference from captured text at position i, returning operator and reference */
+static SysmlTypeRefResult sysml2_extract_next_type_ref(SysmlParserContext *ctx, const char *text, size_t len, size_t *pos) {
+    SysmlTypeRefResult result = { SYSML_OP_NONE, NULL };
+    if (!ctx->build_ctx || !text || len == 0) return result;
+
+    size_t i = *pos;
     int in_quote = 0;
+
     while (i < len) {
         if (text[i] == '\'') in_quote = !in_quote;
         if (!in_quote && text[i] == ':') {
-            /* Check what follows the colon */
-            if (i + 1 < len && text[i + 1] == ':') {
+            SysmlOperatorKind op = SYSML_OP_NONE;
+            size_t op_end = i;
+
+            /* Determine operator type */
+            if (i + 2 < len && text[i + 1] == ':' && text[i + 2] == '>') {
+                /* ::> - references */
+                op = SYSML_OP_REFERENCES;
+                op_end = i + 3;
+            } else if (i + 1 < len && text[i + 1] == '>') {
+                if (i + 2 < len && text[i + 2] == '>') {
+                    /* :>> - redefines */
+                    op = SYSML_OP_REDEFINES;
+                    op_end = i + 3;
+                } else {
+                    /* :> - specializes */
+                    op = SYSML_OP_SPECIALIZES;
+                    op_end = i + 2;
+                }
+            } else if (i + 1 < len && text[i + 1] == ':') {
                 /* :: - qualified name separator, skip both */
                 i += 2;
                 continue;
+            } else {
+                /* : - typed by */
+                op = SYSML_OP_TYPED_BY;
+                op_end = i + 1;
             }
-            if (i + 1 < len && text[i + 1] == '>') {
-                /* :> or :>> - subsets or redefines, skip past it */
-                i += 2;
-                if (i < len && text[i] == '>') i++;  /* :>> */
-                /* Skip the qualified name that follows */
-                while (i < len && (text[i] == ' ' || text[i] == '\t')) i++;
-                /* Skip the qualified name (including ::) */
-                while (i < len && text[i] != ' ' && text[i] != '\t' &&
-                       text[i] != ':' && text[i] != '[' && text[i] != '=' &&
-                       text[i] != '{' && text[i] != ';') {
-                    if (text[i] == ':' && i + 1 < len && text[i + 1] == ':') {
-                        i += 2;  /* Skip :: in qualified name */
-                    } else {
-                        i++;
-                    }
-                }
-                continue;
-            }
-            /* Found typed-by marker (plain :) */
-            i++;
-            /* Skip whitespace and optional ~ */
-            while (i < len && (text[i] == ' ' || text[i] == '\t' || text[i] == '~')) i++;
-            if (i >= len) return NULL;
 
-            /* Find end of type name (stop at comma, [, =, {, ;, :>) */
-            size_t type_start = i;
-            size_t type_end = i;
+            /* Skip whitespace and optional ~ after operator */
+            i = op_end;
+            while (i < len && (text[i] == ' ' || text[i] == '\t' || text[i] == '~')) i++;
+            if (i >= len) {
+                *pos = i;
+                return result;
+            }
+
+            /* Find end of type name (stop at comma, [, =, {, ;, another operator) */
+            size_t ref_start = i;
+            size_t ref_end = i;
             while (i < len) {
                 if (text[i] == ',' || text[i] == '[' || text[i] == '=' ||
                     text[i] == '{' || text[i] == ';') {
                     break;
                 }
-                if (text[i] == ':' && i + 1 < len && text[i + 1] == '>') {
-                    break;  /* :> or :>> ends the type */
-                }
-                if (text[i] == ':' && (i + 1 >= len || text[i + 1] != ':')) {
-                    break;  /* Another : that's not :: */
-                }
-                type_end = i + 1;
-                i++;
-            }
-            /* Trim trailing whitespace */
-            while (type_end > type_start && (text[type_end-1] == ' ' || text[type_end-1] == '\t' ||
-                   text[type_end-1] == '\n' || text[type_end-1] == '\r')) type_end--;
-            if (type_end > type_start) {
-                return sysml2_intern_n(ctx->build_ctx->intern, text + type_start, type_end - type_start);
-            }
-            return NULL;
-        }
-        i++;
-    }
-    return NULL;
-}
-
-/* Helper: extract specialization reference from captured text (finds :> TypeName or :>> TypeName) */
-static const char *sysml2_extract_specialization(SysmlParserContext *ctx, const char *text, size_t len) {
-    if (!ctx->build_ctx || !text || len == 0) return NULL;
-
-    /* Find :> or :>> that's not :: */
-    size_t i = 0;
-    int in_quote = 0;
-    while (i < len) {
-        if (text[i] == '\'') in_quote = !in_quote;
-        if (!in_quote && text[i] == ':') {
-            /* Check what follows the colon */
-            if (i + 1 < len && text[i + 1] == ':') {
-                /* :: - qualified name separator, skip both */
-                i += 2;
-                continue;
-            }
-            if (i + 1 < len && text[i + 1] == '>') {
-                /* :> or :>> - this is a specialization */
-                i += 2;
-                if (i < len && text[i] == '>') i++;  /* :>> */
-                /* Skip whitespace */
-                while (i < len && (text[i] == ' ' || text[i] == '\t')) i++;
-                if (i >= len) return NULL;
-
-                /* Find end of specialization name (stop at comma, [, =, {, ;, another :) */
-                size_t spec_start = i;
-                size_t spec_end = i;
-                while (i < len) {
-                    if (text[i] == ',' || text[i] == '[' || text[i] == '=' ||
-                        text[i] == '{' || text[i] == ';') {
-                        break;
+                if (text[i] == ':') {
+                    if (i + 2 < len && text[i + 1] == ':' && text[i + 2] == '>') {
+                        break;  /* ::> */
                     }
-                    if (text[i] == ':' && (i + 1 >= len || text[i + 1] != ':')) {
-                        break;  /* : or :> ends the specialization name */
+                    if (i + 1 < len && text[i + 1] == '>') {
+                        break;  /* :> or :>> */
                     }
-                    if (text[i] == ':' && i + 1 < len && text[i + 1] == ':') {
+                    if (i + 1 < len && text[i + 1] == ':') {
                         /* :: in qualified name, keep going */
                         i += 2;
-                        spec_end = i;
+                        ref_end = i;
                         continue;
                     }
-                    spec_end = i + 1;
-                    i++;
+                    break;  /* Another : */
                 }
-                /* Trim trailing whitespace */
-                while (spec_end > spec_start && (text[spec_end-1] == ' ' || text[spec_end-1] == '\t' ||
-                       text[spec_end-1] == '\n' || text[spec_end-1] == '\r')) spec_end--;
-                if (spec_end > spec_start) {
-                    return sysml2_intern_n(ctx->build_ctx->intern, text + spec_start, spec_end - spec_start);
-                }
-                return NULL;
+                ref_end = i + 1;
+                i++;
             }
-            /* Plain : - not a specialization, skip */
-            i++;
-            continue;
+
+            /* Trim trailing whitespace */
+            while (ref_end > ref_start && (text[ref_end-1] == ' ' || text[ref_end-1] == '\t' ||
+                   text[ref_end-1] == '\n' || text[ref_end-1] == '\r')) ref_end--;
+
+            if (ref_end > ref_start) {
+                result.op = op;
+                result.ref = sysml2_intern_n(ctx->build_ctx->intern, text + ref_start, ref_end - ref_start);
+            }
+            *pos = i;
+            return result;
         }
         i++;
     }
-    return NULL;
+    *pos = i;
+    return result;
+}
+
+/* Helper: extract all type references from captured text */
+static void sysml2_extract_all_type_refs(SysmlParserContext *ctx, SysmlNode *node, const char *text, size_t len) {
+    if (!ctx->build_ctx || !node || !text || len == 0) return;
+
+    size_t pos = 0;
+    while (pos < len) {
+        SysmlTypeRefResult result = sysml2_extract_next_type_ref(ctx, text, len, &pos);
+        if (result.op == SYSML_OP_NONE || !result.ref) break;
+
+        switch (result.op) {
+            case SYSML_OP_TYPED_BY:
+                sysml2_build_add_typed_by(ctx->build_ctx, node, result.ref);
+                break;
+            case SYSML_OP_SPECIALIZES:
+                sysml2_build_add_specializes(ctx->build_ctx, node, result.ref);
+                break;
+            case SYSML_OP_REDEFINES:
+                sysml2_build_add_redefines(ctx->build_ctx, node, result.ref);
+                break;
+            case SYSML_OP_REFERENCES:
+                sysml2_build_add_references(ctx->build_ctx, node, result.ref);
+                break;
+            default:
+                break;
+        }
+    }
 }
 
 /* Build node, add to model, push scope */
@@ -221,16 +224,8 @@ static void sysml2_build_push(SysmlParserContext *ctx, SysmlNodeKind kind, const
     const char *name = sysml2_extract_name(ctx, text, len);
     SysmlNode *node = sysml2_build_node(ctx->build_ctx, kind, name);
     if (node) {
-        /* Extract type information for usages */
-        const char *type_ref = sysml2_extract_type(ctx, text, len);
-        if (type_ref) {
-            sysml2_build_add_typed_by(ctx->build_ctx, node, type_ref);
-        }
-        /* Extract specialization reference (for :> and :>>) */
-        const char *spec_ref = sysml2_extract_specialization(ctx, text, len);
-        if (spec_ref) {
-            sysml2_build_add_typed_by(ctx->build_ctx, node, spec_ref);
-        }
+        /* Extract all type references with correct operator types */
+        sysml2_extract_all_type_refs(ctx, node, text, len);
         sysml2_build_add_element(ctx->build_ctx, node);
         sysml2_build_push_scope(ctx->build_ctx, node->id);
     }

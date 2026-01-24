@@ -173,13 +173,52 @@ SysmlRelationship *sysml2_build_relationship(
 void sysml2_build_add_relationship(SysmlBuildContext *ctx, SysmlRelationship *rel);
 
 /*
- * Add a type specialization to a node
+ * Add a type reference to a node (: operator)
  *
  * @param ctx Build context
  * @param node Node to modify
  * @param type_ref Type reference (qualified name)
  */
 void sysml2_build_add_typed_by(
+    SysmlBuildContext *ctx,
+    SysmlNode *node,
+    const char *type_ref
+);
+
+/*
+ * Add a specialization to a node (:> operator)
+ *
+ * @param ctx Build context
+ * @param node Node to modify
+ * @param type_ref Type reference (qualified name)
+ */
+void sysml2_build_add_specializes(
+    SysmlBuildContext *ctx,
+    SysmlNode *node,
+    const char *type_ref
+);
+
+/*
+ * Add a redefinition to a node (:>> operator)
+ *
+ * @param ctx Build context
+ * @param node Node to modify
+ * @param type_ref Type reference (qualified name)
+ */
+void sysml2_build_add_redefines(
+    SysmlBuildContext *ctx,
+    SysmlNode *node,
+    const char *type_ref
+);
+
+/*
+ * Add a reference to a node (::> operator)
+ *
+ * @param ctx Build context
+ * @param node Node to modify
+ * @param type_ref Type reference (qualified name)
+ */
+void sysml2_build_add_references(
     SysmlBuildContext *ctx,
     SysmlNode *node,
     const char *type_ref
