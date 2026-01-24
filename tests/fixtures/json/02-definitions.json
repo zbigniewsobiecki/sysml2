@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "version": "1.0"
+  },
+  "elements": [
+    {
+      "id": "Definitions",
+      "name": "Definitions",
+      "type": "Package",
+      "parent": null
+    },
+    {
+      "id": "Definitions::Engine",
+      "name": "Engine",
+      "type": "PartDef",
+      "parent": "Definitions"
+    },
+    {
+      "id": "Definitions::Wheel",
+      "name": "Wheel",
+      "type": "PartDef",
+      "parent": "Definitions"
+    },
+    {
+      "id": "Definitions::FuelPort",
+      "name": "FuelPort",
+      "type": "PortDef",
+      "parent": "Definitions"
+    },
+    {
+      "id": "Definitions::StartEngine",
+      "name": "StartEngine",
+      "type": "ActionDef",
+      "parent": "Definitions"
+    },
+    {
+      "id": "Definitions::Running",
+      "name": "Running",
+      "type": "StateDef",
+      "parent": "Definitions"
+    }
+  ],
+  "relationships": [
+  ]
+}

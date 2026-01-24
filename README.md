@@ -8,7 +8,7 @@ A state-of-the-art SysML v2 and KerML parser CLI written in C for validating `.s
 - **Arena memory allocation** - Fast allocation/deallocation, cache-friendly
 - **Clang-style diagnostics** - Clear error messages with source context and suggestions
 - **KerML and SysML v2 support** - Parses both language layers
-- **JSON AST output** - For tooling integration
+- **JSON semantic graph output** - Elements and relationships for visualization tools
 - **Semantic analysis** - Detects undefined references, duplicates, type errors
 
 ## Building
@@ -55,9 +55,20 @@ Validate a KerML file:
 ./sysml2 model.kerml
 ```
 
-Parse and output JSON AST:
+Parse and output JSON semantic graph:
 ```bash
 ./sysml2 -f json model.sysml > model.json
+```
+
+The JSON output includes elements (packages, definitions, usages) and relationships:
+```json
+{
+  "meta": { "version": "1.0", "source": "model.sysml" },
+  "elements": [
+    { "id": "Pkg::Part", "name": "Part", "type": "PartDef", "parent": "Pkg" }
+  ],
+  "relationships": []
+}
 ```
 
 Show lexer tokens (for debugging):
@@ -110,13 +121,20 @@ model.kerml:20:17: error[E3001]: undefined type 'Engin'
 
 Run the test suite:
 ```bash
-make check
+cd build
+ctest --output-on-failure
 ```
 
-Or run individual tests:
+Or use the check target:
 ```bash
-./test_lexer
-./test_packcc_parser <file.sysml>
+ninja check   # or: make check
+```
+
+Run individual test groups:
+```bash
+./test_lexer            # Lexer unit tests
+./test_ast              # AST/builder/JSON unit tests
+ctest -R json_output    # JSON fixture tests
 ```
 
 ## Project Structure
@@ -130,21 +148,32 @@ sysml2/
 │   ├── token.h         # Token definitions
 │   ├── lexer.h         # Lexer interface
 │   ├── diagnostic.h    # Error reporting
-│   └── cli.h           # CLI options
+│   ├── cli.h           # CLI options
+│   ├── ast.h           # AST node types
+│   ├── ast_builder.h   # AST builder context
+│   └── json_writer.h   # JSON serialization
 ├── src/
 │   ├── arena.c         # Arena allocator implementation
 │   ├── intern.c        # String interning implementation
 │   ├── keywords.c      # Keyword recognition
 │   ├── lexer.c         # Lexer implementation
 │   ├── diagnostic.c    # Diagnostic reporting
+│   ├── ast.c           # AST utilities
+│   ├── ast_builder.c   # AST builder implementation
+│   ├── json_writer.c   # JSON writer implementation
 │   ├── main.c          # CLI entry point
 │   └── sysml_parser.c  # PackCC-generated parser
 ├── grammar/
 │   └── sysml.peg       # PEG grammar (source of truth)
 ├── tests/
-│   ├── test_lexer.c
-│   ├── test_packcc_parser.c
-│   └── fixtures/       # Test SysML/KerML files
+│   ├── test_lexer.c           # Lexer unit tests
+│   ├── test_ast.c             # AST/builder/JSON unit tests
+│   ├── test_packcc_parser.c   # Parser integration tests
+│   ├── test_json_output.sh    # JSON output fixture tests
+│   └── fixtures/              # Test fixtures
+│       ├── json/              # JSON output test pairs
+│       ├── official/          # Official SysML v2 examples
+│       └── errors/            # Error case tests
 └── CMakeLists.txt
 ```
 

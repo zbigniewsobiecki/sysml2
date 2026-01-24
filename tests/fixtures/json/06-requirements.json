@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "version": "1.0"
+  },
+  "elements": [
+    {
+      "id": "Requirements",
+      "name": "Requirements",
+      "type": "Package",
+      "parent": null
+    },
+    {
+      "id": "Requirements::PerformanceReq",
+      "name": "PerformanceReq",
+      "type": "RequirementDef",
+      "parent": "Requirements"
+    },
+    {
+      "id": "Requirements::SpeedConstraint",
+      "name": "SpeedConstraint",
+      "type": "ConstraintDef",
+      "parent": "Requirements"
+    },
+    {
+      "id": "Requirements::safetyReq",
+      "name": "safetyReq",
+      "type": "Requirement",
+      "parent": "Requirements",
+      "typedBy": ["PerformanceReq"]
+    }
+  ],
+  "relationships": [
+  ]
+}

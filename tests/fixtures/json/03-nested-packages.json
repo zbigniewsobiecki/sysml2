@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "version": "1.0"
+  },
+  "elements": [
+    {
+      "id": "Outer",
+      "name": "Outer",
+      "type": "Package",
+      "parent": null
+    },
+    {
+      "id": "Outer::Middle",
+      "name": "Middle",
+      "type": "Package",
+      "parent": "Outer"
+    },
+    {
+      "id": "Outer::Middle::Inner",
+      "name": "Inner",
+      "type": "Package",
+      "parent": "Outer::Middle"
+    },
+    {
+      "id": "Outer::Middle::Inner::DeepPart",
+      "name": "DeepPart",
+      "type": "PartDef",
+      "parent": "Outer::Middle::Inner"
+    }
+  ],
+  "relationships": [
+  ]
+}

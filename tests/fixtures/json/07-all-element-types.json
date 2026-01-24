@@ -1,0 +1,129 @@
+{
+  "meta": {
+    "version": "1.0"
+  },
+  "elements": [
+    {
+      "id": "AllTypes",
+      "name": "AllTypes",
+      "type": "Package",
+      "parent": null
+    },
+    {
+      "id": "AllTypes::AttrDef",
+      "name": "AttrDef",
+      "type": "AttributeDef",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::PartDef",
+      "name": "PartDef",
+      "type": "PartDef",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::PortDef",
+      "name": "PortDef",
+      "type": "PortDef",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::ItemDef",
+      "name": "ItemDef",
+      "type": "ItemDef",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::ConnDef",
+      "name": "ConnDef",
+      "type": "ConnectionDef",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::ActionDef",
+      "name": "ActionDef",
+      "type": "ActionDef",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::StateDef",
+      "name": "StateDef",
+      "type": "StateDef",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::ConstraintDef",
+      "name": "ConstraintDef",
+      "type": "ConstraintDef",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::RequirementDef",
+      "name": "RequirementDef",
+      "type": "RequirementDef",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::CalcDef",
+      "name": "CalcDef",
+      "type": "CalcDef",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::attr",
+      "name": "attr",
+      "type": "Attribute",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::myPart",
+      "name": "myPart",
+      "type": "Part",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::myPort",
+      "name": "myPort",
+      "type": "Port",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::myItem",
+      "name": "myItem",
+      "type": "Item",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::myAction",
+      "name": "myAction",
+      "type": "Action",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::myState",
+      "name": "myState",
+      "type": "State",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::myConstraint",
+      "name": "myConstraint",
+      "type": "Constraint",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::myReq",
+      "name": "myReq",
+      "type": "Requirement",
+      "parent": "AllTypes"
+    },
+    {
+      "id": "AllTypes::myCalc",
+      "name": "myCalc",
+      "type": "Calc",
+      "parent": "AllTypes"
+    }
+  ],
+  "relationships": [
+  ]
+}

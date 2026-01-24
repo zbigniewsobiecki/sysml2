@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "version": "1.0"
+  },
+  "elements": [
+    {
+      "id": "SimplePackage",
+      "name": "SimplePackage",
+      "type": "Package",
+      "parent": null
+    }
+  ],
+  "relationships": [
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "version": "1.0"
+  },
+  "elements": [
+    {
+      "id": "Package With Spaces",
+      "name": "Package With Spaces",
+      "type": "Package",
+      "parent": null
+    },
+    {
+      "id": "Package With Spaces::My Part Definition",
+      "name": "My Part Definition",
+      "type": "PartDef",
+      "parent": "Package With Spaces"
+    },
+    {
+      "id": "Package With Spaces::instance-with-dashes",
+      "name": "instance-with-dashes",
+      "type": "Part",
+      "parent": "Package With Spaces"
+    }
+  ],
+  "relationships": [
+  ]
+}

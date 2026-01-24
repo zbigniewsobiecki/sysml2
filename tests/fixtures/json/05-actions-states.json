@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "version": "1.0"
+  },
+  "elements": [
+    {
+      "id": "Behavioral",
+      "name": "Behavioral",
+      "type": "Package",
+      "parent": null
+    },
+    {
+      "id": "Behavioral::DriveAction",
+      "name": "DriveAction",
+      "type": "ActionDef",
+      "parent": "Behavioral"
+    },
+    {
+      "id": "Behavioral::VehicleStates",
+      "name": "VehicleStates",
+      "type": "StateDef",
+      "parent": "Behavioral"
+    }
+  ],
+  "relationships": [
+  ]
+}

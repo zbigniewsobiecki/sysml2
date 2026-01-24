@@ -1,0 +1,54 @@
+{
+  "meta": {
+    "version": "1.0"
+  },
+  "elements": [
+    {
+      "id": "TypedUsages",
+      "name": "TypedUsages",
+      "type": "Package",
+      "parent": null
+    },
+    {
+      "id": "TypedUsages::Engine",
+      "name": "Engine",
+      "type": "PartDef",
+      "parent": "TypedUsages"
+    },
+    {
+      "id": "TypedUsages::Wheel",
+      "name": "Wheel",
+      "type": "PartDef",
+      "parent": "TypedUsages"
+    },
+    {
+      "id": "TypedUsages::vehicle",
+      "name": "vehicle",
+      "type": "Part",
+      "parent": "TypedUsages"
+    },
+    {
+      "id": "TypedUsages::vehicle::engine",
+      "name": "engine",
+      "type": "Part",
+      "parent": "TypedUsages::vehicle",
+      "typedBy": ["Engine"]
+    },
+    {
+      "id": "TypedUsages::vehicle::frontLeft",
+      "name": "frontLeft",
+      "type": "Part",
+      "parent": "TypedUsages::vehicle",
+      "typedBy": ["Wheel"]
+    },
+    {
+      "id": "TypedUsages::vehicle::frontRight",
+      "name": "frontRight",
+      "type": "Part",
+      "parent": "TypedUsages::vehicle",
+      "typedBy": ["Wheel"]
+    }
+  ],
+  "relationships": [
+  ]
+}

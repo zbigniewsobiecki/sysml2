@@ -69,9 +69,13 @@ install(TARGETS sysml2 DESTINATION bin)
 # Testing
 enable_testing()
 
-# Test executable
+# Test executables
 add_executable(test_lexer tests/test_lexer.c)
 target_link_libraries(test_lexer sysml2_core)
+
+# AST and JSON unit tests
+add_executable(test_ast tests/test_ast.c)
+target_link_libraries(test_ast sysml2_core)
 
 # PackCC-generated parser test
 add_executable(test_packcc_parser
@@ -83,6 +87,7 @@ target_link_libraries(test_packcc_parser sysml2_core)
 
 # Add tests
 add_test(NAME lexer_tests COMMAND test_lexer)
+add_test(NAME ast_tests COMMAND test_ast)
 
 # PackCC parser tests - valid syntax files
 file(GLOB PACKCC_VALID_FIXTURES
@@ -128,10 +133,20 @@ add_test(NAME packcc_error_reporting
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
 
+# JSON output fixture tests
+file(GLOB JSON_FIXTURES ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/json/*.sysml)
+foreach(fixture ${JSON_FIXTURES})
+    get_filename_component(fixture_name ${fixture} NAME_WE)
+    add_test(NAME json_output_${fixture_name}
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_json_output.sh
+            $<TARGET_FILE:sysml2> ${fixture}
+    )
+endforeach()
+
 # Custom target for running tests
 add_custom_target(check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS test_lexer test_packcc_parser
+    DEPENDS test_lexer test_ast test_packcc_parser sysml2
 )
 
 # Print configuration summary
