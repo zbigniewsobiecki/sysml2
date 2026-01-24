@@ -464,11 +464,16 @@ static int run_normal_mode(
     Sysml2Result final_result = SYSML2_OK;
 
     if (options->input_file_count == 0) {
-        /* Read from stdin - single file mode (no import resolution for stdin) */
+        /* Read from stdin - single file mode (with import resolution) */
         SysmlSemanticModel *model = NULL;
         Sysml2Result result = sysml2_pipeline_process_stdin(ctx, &model);
         if (result != SYSML2_OK) {
             final_result = result;
+        }
+
+        /* Resolve imports for stdin input (uses -I library paths) */
+        if (model && !options->no_resolve) {
+            sysml2_resolver_resolve_imports(resolver, model, diag);
         }
 
         /* Validation for single stdin input */
@@ -671,6 +676,15 @@ static int run_modify_mode(
         free(models);
         free(modified_models);
         return 1;
+    }
+
+    /* Resolve imports for all input files (uses -I library paths) */
+    if (!options->no_resolve) {
+        for (size_t i = 0; i < options->input_file_count; i++) {
+            if (models[i]) {
+                sysml2_resolver_resolve_imports(resolver, models[i], diag);
+            }
+        }
     }
 
     /* Pass 2: Build modification plan and apply deletions */

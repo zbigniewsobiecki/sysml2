@@ -114,11 +114,6 @@ static void skip_whitespace(Sysml2Lexer *lexer) {
 
         if (is_whitespace(c)) {
             advance(lexer);
-        } else if (c == '/' && peek_next(lexer) == '/') {
-            /* Single-line comment */
-            while (!is_eof(lexer) && peek(lexer) != '\n') {
-                advance(lexer);
-            }
         } else if (c == '/' && peek_next(lexer) == '*') {
             /* Multi-line comment */
             advance(lexer); /* / */
@@ -150,6 +145,11 @@ static void skip_whitespace(Sysml2Lexer *lexer) {
                     "unterminated block comment"
                 );
                 sysml2_diag_emit(lexer->diag, diag);
+            }
+        } else if (c == '/' && peek_next(lexer) == '/') {
+            /* Single-line comment */
+            while (!is_eof(lexer) && peek(lexer) != '\n') {
+                advance(lexer);
             }
         } else {
             break;
