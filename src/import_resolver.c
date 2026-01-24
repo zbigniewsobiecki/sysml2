@@ -9,6 +9,7 @@
 
 #include "sysml2/import_resolver.h"
 #include "sysml2/ast_builder.h"
+#include "sysml2/utils.h"
 #include "sysml_parser.h"
 
 #include <stdio.h>
@@ -16,8 +17,6 @@
 #include <string.h>
 #include <errno.h>
 #include <dirent.h>
-#include <sys/stat.h>
-#include <limits.h>
 
 /* Initial capacities */
 #define RESOLVER_INITIAL_PATH_CAPACITY 8
@@ -26,77 +25,7 @@
 /* Environment variable name */
 #define SYSML2_LIBRARY_PATH_ENV "SYSML2_LIBRARY_PATH"
 
-/* Helper: Read file into memory */
-static char *read_file(const char *path, size_t *out_size) {
-    FILE *file = fopen(path, "rb");
-    if (!file) {
-        return NULL;
-    }
-
-    fseek(file, 0, SEEK_END);
-    long size = ftell(file);
-    fseek(file, 0, SEEK_SET);
-
-    if (size < 0) {
-        fclose(file);
-        return NULL;
-    }
-
-    char *content = malloc(size + 1);
-    if (!content) {
-        fclose(file);
-        return NULL;
-    }
-
-    size_t read = fread(content, 1, size, file);
-    fclose(file);
-
-    content[read] = '\0';
-    if (out_size) {
-        *out_size = read;
-    }
-
-    return content;
-}
-
-/* Helper: Check if path exists and is a directory */
-static bool is_directory(const char *path) {
-    struct stat st;
-    return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
-}
-
-/* Helper: Check if path exists and is a regular file */
-static bool is_file(const char *path) {
-    struct stat st;
-    return stat(path, &st) == 0 && S_ISREG(st.st_mode);
-}
-
-/* Helper: Join path components */
-static char *path_join(const char *dir, const char *name) {
-    size_t dir_len = strlen(dir);
-    size_t name_len = strlen(name);
-
-    /* Remove trailing slash from dir if present */
-    while (dir_len > 0 && dir[dir_len - 1] == '/') {
-        dir_len--;
-    }
-
-    char *result = malloc(dir_len + 1 + name_len + 1);
-    if (!result) return NULL;
-
-    memcpy(result, dir, dir_len);
-    result[dir_len] = '/';
-    memcpy(result + dir_len + 1, name, name_len);
-    result[dir_len + 1 + name_len] = '\0';
-
-    return result;
-}
-
-/* Helper: Get realpath (canonical absolute path) */
-static char *get_realpath(const char *path) {
-    char *resolved = realpath(path, NULL);
-    return resolved;
-}
+/* File I/O and path utilities are now in sysml2/utils.h */
 
 /* Helper: Extract package name from import target
  * "ScalarValues::Real" -> "ScalarValues"
@@ -133,12 +62,12 @@ static char *search_directory_recursive(const char *dir, const char *filename, i
             continue;
         }
 
-        char *full_path = path_join(dir, entry->d_name);
+        char *full_path = sysml2_path_join(dir, entry->d_name);
         if (!full_path) continue;
 
-        if (strcmp(entry->d_name, filename) == 0 && is_file(full_path)) {
+        if (strcmp(entry->d_name, filename) == 0 && sysml2_is_file(full_path)) {
             result = full_path;
-        } else if (is_directory(full_path)) {
+        } else if (sysml2_is_directory(full_path)) {
             /* Recurse into subdirectory */
             result = search_directory_recursive(full_path, filename, max_depth - 1);
             free(full_path);
@@ -215,7 +144,7 @@ void sysml_resolver_add_path(SysmlImportResolver *resolver, const char *path) {
     if (!resolver || !path) return;
 
     /* Convert to absolute path if possible */
-    char *abs_path = get_realpath(path);
+    char *abs_path = sysml2_get_realpath(path);
     if (!abs_path) {
         /* If realpath fails, use the path as-is */
         abs_path = strdup(path);
@@ -281,7 +210,7 @@ void sysml_resolver_cache_model(
     if (!resolver || !path || !model) return;
 
     /* Convert to absolute path */
-    char *abs_path = get_realpath(path);
+    char *abs_path = sysml2_get_realpath(path);
     if (!abs_path) {
         abs_path = strdup(path);
         if (!abs_path) return;
@@ -319,7 +248,7 @@ SysmlSemanticModel *sysml_resolver_get_cached(
     if (!resolver || !path) return NULL;
 
     /* Convert to absolute path */
-    char *abs_path = get_realpath(path);
+    char *abs_path = sysml2_get_realpath(path);
     if (!abs_path) {
         abs_path = strdup(path);
         if (!abs_path) return NULL;
@@ -361,16 +290,16 @@ char *sysml_resolver_find_file(
         char *full_path;
 
         /* Try {lib}/{package}.kerml */
-        full_path = path_join(lib_path, filename_kerml);
-        if (full_path && is_file(full_path)) {
+        full_path = sysml2_path_join(lib_path, filename_kerml);
+        if (full_path && sysml2_is_file(full_path)) {
             free(package_name);
             return full_path;
         }
         free(full_path);
 
         /* Try {lib}/{package}.sysml */
-        full_path = path_join(lib_path, filename_sysml);
-        if (full_path && is_file(full_path)) {
+        full_path = sysml2_path_join(lib_path, filename_sysml);
+        if (full_path && sysml2_is_file(full_path)) {
             free(package_name);
             return full_path;
         }
@@ -439,7 +368,7 @@ static SysmlSemanticModel *parse_file(
 ) {
     /* Read file content */
     size_t content_length;
-    char *content = read_file(path, &content_length);
+    char *content = sysml2_read_file(path, &content_length);
     if (!content) {
         /* Report error using diagnostic system */
         Sysml2SourceRange range = {{1, 1, 0}, {1, 1, 0}};
@@ -542,7 +471,7 @@ static Sysml2Result resolve_single_import(
     }
 
     /* Get canonical path */
-    char *abs_path = get_realpath(found_path);
+    char *abs_path = sysml2_get_realpath(found_path);
     if (!abs_path) {
         abs_path = found_path;
     } else {
@@ -648,7 +577,7 @@ Sysml2Result sysml_resolver_resolve_imports(
 
     /* Push the source file onto the resolution stack */
     const char *source = model->source_name ? model->source_name : "<input>";
-    char *abs_source = get_realpath(source);
+    char *abs_source = sysml2_get_realpath(source);
     if (!abs_source) {
         abs_source = strdup(source);
     }

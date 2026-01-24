@@ -5,6 +5,7 @@
  */
 
 #include "sysml2/ast_builder.h"
+#include "sysml2/utils.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -192,14 +193,8 @@ SysmlNode *sysml_build_node(
  * Grow the elements array if needed
  */
 static void ensure_element_capacity(SysmlBuildContext *ctx) {
-    if (ctx->element_count >= ctx->element_capacity) {
-        size_t new_capacity = ctx->element_capacity * 2;
-        SysmlNode **new_elements = SYSML2_ARENA_NEW_ARRAY(ctx->arena, SysmlNode *, new_capacity);
-        if (!new_elements) return;
-        memcpy(new_elements, ctx->elements, ctx->element_count * sizeof(SysmlNode *));
-        ctx->elements = new_elements;
-        ctx->element_capacity = new_capacity;
-    }
+    SYSML2_ARRAY_GROW(ctx->arena, ctx->elements, ctx->element_count,
+                      ctx->element_capacity, SysmlNode *);
 }
 
 /*
@@ -215,14 +210,8 @@ void sysml_build_add_element(SysmlBuildContext *ctx, SysmlNode *node) {
  * Grow the relationships array if needed
  */
 static void ensure_relationship_capacity(SysmlBuildContext *ctx) {
-    if (ctx->relationship_count >= ctx->relationship_capacity) {
-        size_t new_capacity = ctx->relationship_capacity * 2;
-        SysmlRelationship **new_rels = SYSML2_ARENA_NEW_ARRAY(ctx->arena, SysmlRelationship *, new_capacity);
-        if (!new_rels) return;
-        memcpy(new_rels, ctx->relationships, ctx->relationship_count * sizeof(SysmlRelationship *));
-        ctx->relationships = new_rels;
-        ctx->relationship_capacity = new_capacity;
-    }
+    SYSML2_ARRAY_GROW(ctx->arena, ctx->relationships, ctx->relationship_count,
+                      ctx->relationship_capacity, SysmlRelationship *);
 }
 
 /*
@@ -304,14 +293,8 @@ void sysml_build_add_typed_by(
  * Grow the imports array if needed
  */
 static void ensure_import_capacity(SysmlBuildContext *ctx) {
-    if (ctx->import_count >= ctx->import_capacity) {
-        size_t new_capacity = ctx->import_capacity * 2;
-        SysmlImport **new_imports = SYSML2_ARENA_NEW_ARRAY(ctx->arena, SysmlImport *, new_capacity);
-        if (!new_imports) return;
-        memcpy(new_imports, ctx->imports, ctx->import_count * sizeof(SysmlImport *));
-        ctx->imports = new_imports;
-        ctx->import_capacity = new_capacity;
-    }
+    SYSML2_ARRAY_GROW(ctx->arena, ctx->imports, ctx->import_count,
+                      ctx->import_capacity, SysmlImport *);
 }
 
 /*

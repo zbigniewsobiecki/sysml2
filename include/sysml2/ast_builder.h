@@ -1,0 +1,249 @@
+/*
+ * SysML v2 Parser - AST Builder
+ *
+ * Builder context for constructing the semantic graph during parsing.
+ * Manages scope stack, ID generation, and element collection.
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#ifndef SYSML2_AST_BUILDER_H
+#define SYSML2_AST_BUILDER_H
+
+#include "common.h"
+#include "arena.h"
+#include "intern.h"
+#include "ast.h"
+
+/* Default capacities */
+#define SYSML_BUILD_DEFAULT_SCOPE_CAPACITY 32
+#define SYSML_BUILD_DEFAULT_ELEMENT_CAPACITY 256
+#define SYSML_BUILD_DEFAULT_REL_CAPACITY 64
+#define SYSML_BUILD_DEFAULT_IMPORT_CAPACITY 32
+
+/*
+ * Build Context - manages AST construction during parsing
+ */
+typedef struct SysmlBuildContext {
+    Sysml2Arena *arena;       /* Memory arena for allocations */
+    Sysml2Intern *intern;     /* String interning table */
+    const char *source_name;  /* Source file name */
+
+    /* Scope stack for containment tracking */
+    const char **scope_stack; /* Stack of scope IDs */
+    size_t scope_depth;
+    size_t scope_capacity;
+
+    /* Anonymous element counter for ID generation */
+    size_t anon_counter;
+
+    /* Relationship counter for ID generation */
+    size_t rel_counter;
+
+    /* Collected elements */
+    SysmlNode **elements;
+    size_t element_count;
+    size_t element_capacity;
+
+    /* Collected relationships */
+    SysmlRelationship **relationships;
+    size_t relationship_count;
+    size_t relationship_capacity;
+
+    /* Collected imports */
+    SysmlImport **imports;
+    size_t import_count;
+    size_t import_capacity;
+
+    /* Pending trivia for attachment to next node */
+    SysmlTrivia *pending_trivia_head;
+    SysmlTrivia *pending_trivia_tail;
+} SysmlBuildContext;
+
+/*
+ * Create a new build context
+ *
+ * @param arena Memory arena for allocations
+ * @param intern String interning table
+ * @param source_name Name of the source file
+ * @return New build context, or NULL on failure
+ */
+SysmlBuildContext *sysml_build_context_create(
+    Sysml2Arena *arena,
+    Sysml2Intern *intern,
+    const char *source_name
+);
+
+/*
+ * Destroy a build context
+ *
+ * Note: Elements allocated via the arena are not freed here.
+ */
+void sysml_build_context_destroy(SysmlBuildContext *ctx);
+
+/*
+ * Push a new scope onto the scope stack
+ *
+ * @param ctx Build context
+ * @param scope_id ID of the new scope (interned)
+ */
+void sysml_build_push_scope(SysmlBuildContext *ctx, const char *scope_id);
+
+/*
+ * Pop the current scope from the stack
+ *
+ * @param ctx Build context
+ */
+void sysml_build_pop_scope(SysmlBuildContext *ctx);
+
+/*
+ * Get the current scope ID
+ *
+ * @param ctx Build context
+ * @return Current scope ID, or NULL if at root
+ */
+const char *sysml_build_current_scope(SysmlBuildContext *ctx);
+
+/*
+ * Generate a path-based ID for an element
+ *
+ * If name is NULL, generates an anonymous ID like "Pkg::_anon_1"
+ *
+ * @param ctx Build context
+ * @param name Local name (can be NULL for anonymous)
+ * @return Interned path ID
+ */
+const char *sysml_build_make_id(SysmlBuildContext *ctx, const char *name);
+
+/*
+ * Generate a unique relationship ID
+ *
+ * @param ctx Build context
+ * @param kind Type hint for the ID prefix (e.g., "conn", "flow")
+ * @return Interned relationship ID
+ */
+const char *sysml_build_make_rel_id(SysmlBuildContext *ctx, const char *kind);
+
+/*
+ * Create a new AST node
+ *
+ * The node is allocated from the arena but not yet added to the model.
+ *
+ * @param ctx Build context
+ * @param kind Node kind
+ * @param name Local name (can be NULL)
+ * @return New node, or NULL on failure
+ */
+SysmlNode *sysml_build_node(
+    SysmlBuildContext *ctx,
+    SysmlNodeKind kind,
+    const char *name
+);
+
+/*
+ * Add an element to the model
+ *
+ * @param ctx Build context
+ * @param node Node to add
+ */
+void sysml_build_add_element(SysmlBuildContext *ctx, SysmlNode *node);
+
+/*
+ * Create a new relationship
+ *
+ * @param ctx Build context
+ * @param kind Relationship kind
+ * @param source Source element/feature path
+ * @param target Target element/feature path
+ * @return New relationship, or NULL on failure
+ */
+SysmlRelationship *sysml_build_relationship(
+    SysmlBuildContext *ctx,
+    SysmlNodeKind kind,
+    const char *source,
+    const char *target
+);
+
+/*
+ * Add a relationship to the model
+ *
+ * @param ctx Build context
+ * @param rel Relationship to add
+ */
+void sysml_build_add_relationship(SysmlBuildContext *ctx, SysmlRelationship *rel);
+
+/*
+ * Add a type specialization to a node
+ *
+ * @param ctx Build context
+ * @param node Node to modify
+ * @param type_ref Type reference (qualified name)
+ */
+void sysml_build_add_typed_by(
+    SysmlBuildContext *ctx,
+    SysmlNode *node,
+    const char *type_ref
+);
+
+/*
+ * Add an import declaration to the model
+ *
+ * @param ctx Build context
+ * @param kind Import kind (IMPORT, IMPORT_ALL, IMPORT_RECURSIVE)
+ * @param target Target qualified name (what is being imported)
+ */
+void sysml_build_add_import(
+    SysmlBuildContext *ctx,
+    SysmlNodeKind kind,
+    const char *target
+);
+
+/*
+ * Finalize the build and return the semantic model
+ *
+ * After calling this, the build context should not be used.
+ *
+ * @param ctx Build context
+ * @return Semantic model
+ */
+SysmlSemanticModel *sysml_build_finalize(SysmlBuildContext *ctx);
+
+/*
+ * Add a trivia node to the pending list
+ *
+ * Trivia is accumulated until the next AST node is created,
+ * at which point it becomes leading trivia for that node.
+ *
+ * @param ctx Build context
+ * @param trivia Trivia to add
+ */
+void sysml_build_add_pending_trivia(SysmlBuildContext *ctx, SysmlTrivia *trivia);
+
+/*
+ * Attach pending trivia to a node
+ *
+ * Called after creating a node to attach accumulated trivia
+ * as leading trivia.
+ *
+ * @param ctx Build context
+ * @param node Node to attach trivia to
+ */
+void sysml_build_attach_pending_trivia(SysmlBuildContext *ctx, SysmlNode *node);
+
+/*
+ * Create a trivia node
+ *
+ * @param ctx Build context
+ * @param kind Trivia kind
+ * @param text Text content (without delimiters)
+ * @param loc Source location
+ * @return New trivia node
+ */
+SysmlTrivia *sysml_build_trivia(
+    SysmlBuildContext *ctx,
+    SysmlTriviaKind kind,
+    const char *text,
+    Sysml2SourceLoc loc
+);
+
+#endif /* SYSML2_AST_BUILDER_H */

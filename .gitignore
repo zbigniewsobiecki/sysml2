@@ -18,7 +18,7 @@ cmake-build-*/
 *.dylib
 
 # Executables
-sysml2
+/sysml2
 test_lexer
 test_parser
 

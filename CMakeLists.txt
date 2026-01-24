@@ -52,6 +52,9 @@ add_library(sysml2_core STATIC
     src/sysml_writer.c
     src/validator.c
     src/import_resolver.c
+    src/utils.c
+    src/pipeline.c
+    src/symtab.c
 )
 
 # Link math library on Unix
