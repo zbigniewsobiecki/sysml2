@@ -70,6 +70,7 @@ typedef struct SysmlBuildContext {
     bool pending_variation;
     bool pending_readonly;
     bool pending_derived;
+    bool pending_ref;
     SysmlDirection pending_direction;
     SysmlVisibility pending_visibility;
 
@@ -83,6 +84,10 @@ typedef struct SysmlBuildContext {
 
     /* Pending import visibility for next import */
     bool pending_import_private;
+    bool pending_import_public;  /* Explicit public keyword */
+
+    /* Pending parameter kind for parameter usages */
+    SysmlNodeKind pending_param_kind;
 
     /* Pending prefix metadata for attachment to next node */
     const char **pending_prefix_metadata;
@@ -510,6 +515,15 @@ void sysml2_capture_abstract(SysmlBuildContext *ctx);
 void sysml2_capture_variation(SysmlBuildContext *ctx);
 
 /*
+ * Capture the ref modifier
+ *
+ * Will be applied to the next created node.
+ *
+ * @param ctx Build context
+ */
+void sysml2_capture_ref(SysmlBuildContext *ctx);
+
+/*
  * Capture direction (in/out/inout)
  *
  * Will be applied to the next created node.
@@ -528,6 +542,16 @@ void sysml2_capture_direction(SysmlBuildContext *ctx, SysmlDirection dir);
  * @param is_private True for private import
  */
 void sysml2_capture_import_visibility(SysmlBuildContext *ctx, bool is_private);
+
+/*
+ * Capture parameter kind (item, part, attribute, etc.)
+ *
+ * Will be applied to the next parameter usage.
+ *
+ * @param ctx Build context
+ * @param kind Node kind for the parameter
+ */
+void sysml2_capture_param_kind(SysmlBuildContext *ctx, SysmlNodeKind kind);
 
 /*
  * Clear all pending modifiers
@@ -774,6 +798,24 @@ void sysml2_capture_textual_rep(
  * @param len Length of expression
  */
 void sysml2_capture_result_expr(SysmlBuildContext *ctx, const char *expr, size_t len);
+
+/*
+ * Capture a standalone metadata usage (metadata X about Y, Z;)
+ *
+ * @param ctx Build context
+ * @param text Raw text of the metadata usage
+ * @param len Length of text
+ */
+void sysml2_capture_metadata_usage(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture a shorthand feature (:> name : Type; or :>> name = value;)
+ *
+ * @param ctx Build context
+ * @param text Raw text of the shorthand feature
+ * @param len Length of text
+ */
+void sysml2_capture_shorthand_feature(SysmlBuildContext *ctx, const char *text, size_t len);
 
 /*
  * Attach pending body statements to a node

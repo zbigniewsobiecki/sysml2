@@ -587,6 +587,40 @@ static void sysml2_build_push(SysmlParserContext *ctx, SysmlNodeKind kind, const
     }
 }
 
+/* Push parameter usage - uses pending_param_kind if set, otherwise PARAMETER */
+static void sysml2_build_push_param(SysmlParserContext *ctx, const char *text, size_t len) {
+    if (!ctx->build_ctx) return;
+
+    /* Determine node kind from pending_param_kind or default to PARAMETER (no keyword) */
+    SysmlNodeKind kind = ctx->build_ctx->pending_param_kind;
+    if (kind == SYSML_KIND_UNKNOWN) {
+        kind = SYSML_KIND_PARAMETER;
+    }
+    /* Clear pending_param_kind after use */
+    ctx->build_ctx->pending_param_kind = SYSML_KIND_UNKNOWN;
+
+    /* First, attach any pending statements to the CURRENT scope (parent) before creating child */
+    const char *current_scope = sysml2_build_current_scope(ctx->build_ctx);
+    if (current_scope) {
+        for (size_t i = ctx->build_ctx->element_count; i > 0; i--) {
+            SysmlNode *parent_node = ctx->build_ctx->elements[i - 1];
+            if (parent_node->id == current_scope) {
+                sysml2_attach_pending_stmts(ctx->build_ctx, parent_node);
+                break;
+            }
+        }
+    }
+
+    const char *name = sysml2_extract_name(ctx, text, len);
+    SysmlNode *node = sysml2_build_node(ctx->build_ctx, kind, name);
+    if (node) {
+        /* Extract all type references with correct operator types */
+        sysml2_extract_all_type_refs(ctx, node, text, len);
+        sysml2_build_add_element(ctx->build_ctx, node);
+        sysml2_build_push_scope(ctx->build_ctx, node->id);
+    }
+}
+
 /* Pop scope - attach pending statements to current scope node before popping */
 static void sysml2_pop(SysmlParserContext *ctx) {
     if (!ctx->build_ctx) return;
@@ -655,6 +689,7 @@ static void sysml2_capture_visibility_private(SysmlParserContext *ctx) {
 static void sysml2_capture_visibility_public(SysmlParserContext *ctx) {
     if (!ctx->build_ctx) return;
     ctx->build_ctx->pending_import_private = false;
+    ctx->build_ctx->pending_import_public = true;  /* Explicit public */
     ctx->build_ctx->pending_visibility = SYSML_VIS_PUBLIC;
 }
 
@@ -662,6 +697,12 @@ static void sysml2_capture_visibility_protected(SysmlParserContext *ctx) {
     if (!ctx->build_ctx) return;
     ctx->build_ctx->pending_import_private = false;
     ctx->build_ctx->pending_visibility = SYSML_VIS_PROTECTED;
+}
+
+/* Clear direction (after parsing parameter lists for definitions) */
+static void sysml2_clear_direction(SysmlParserContext *ctx) {
+    if (!ctx->build_ctx) return;
+    ctx->build_ctx->pending_direction = SYSML_DIR_NONE;
 }
 
 /* Capture prefix metadata (#MetadataName) */
@@ -1303,7 +1344,7 @@ SuccessionFlowDefinition <- KerMLFeaturePrefix KW_SUCCESSION KW_FLOW < KerMLFlow
 # Metadata
 PrefixMetadata <- HASH < QualifiedName > { sysml2_capture_prefix_metadata(auxil, $1, $1e - $1s); }
 MetadataUsage <- AT < QualifiedName > { sysml2_capture_start_metadata(auxil, $1, $1e - $1s); } MetadataUsageTail { sysml2_capture_end_metadata(auxil); }
-              / AT? KW_METADATA Identification? (COLON QualifiedName)? (KW_ABOUT QualifiedName (COMMA QualifiedName)*)? MetadataBody
+              / < AT? KW_METADATA Identification? (COLON QualifiedName)? (KW_ABOUT QualifiedName (COMMA QualifiedName)*)? > { if (auxil->build_ctx) sysml2_capture_metadata_usage(auxil->build_ctx, $2, $2e - $2s); } MetadataBody
 MetadataUsageTail <- (KW_ABOUT QualifiedName (COMMA QualifiedName)*)? (MetadataBody / SEMICOLON)
 MetadataBody <- SEMICOLON / LBRACE MetadataBodyElement* RBRACE
 MetadataBodyElement <- MetadataBodyFeature / ShorthandFeatureMember / AnnotatingElement
@@ -1326,7 +1367,8 @@ BasicDefinitionPrefix <- KW_INDIVIDUAL / LifeclassPrefix
 LifeclassPrefix <- KW_SNAPSHOT / KW_TIMESLICE
 UsagePrefix <- PrefixMetadata / AbstractModifier / VariationModifier / KW_VARIANT / BasicUsagePrefix
 BasicUsagePrefix <- Direction? RefPrefix? KW_INDIVIDUAL? / KW_INDIVIDUAL
-RefPrefix <- KW_REF / KW_READONLY / KW_DERIVED / KW_CONSTANT / KW_END
+RefPrefix <- KW_REF { if (auxil->build_ctx) sysml2_capture_ref(auxil->build_ctx); }
+           / KW_READONLY / KW_DERIVED / KW_CONSTANT / KW_END
 
 # Definitions
 AttributeDefinition <- DefinitionPrefix* KW_ATTRIBUTE KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_ATTRIBUTE_DEF, $1, $1e - $1s); } DefinitionBody { sysml2_pop(auxil); }
@@ -1358,11 +1400,11 @@ ConjugatedPortDefinitionMember <- MemberPrefix KW_PORT (TILDE NAME SEMICOLON / C
 ConjugatedPortDeclaration <- Identification TILDE QualifiedName SEMICOLON
 PortUsageElement <- ParameterUsage / UsageElement
 AllocationDefinition <- DefinitionPrefix* KW_ALLOCATION KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_ALLOCATION_DEF, $1, $1e - $1s); } DefinitionBody { sysml2_pop(auxil); }
-ActionDefinition <- DefinitionPrefix* KW_ACTION KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_ACTION_DEF, $1, $1e - $1s); } ActionBody { sysml2_pop(auxil); }
+ActionDefinition <- DefinitionPrefix* KW_ACTION KW_DEF < Identification > ActionParameterList? { sysml2_clear_direction(auxil); } DefinitionSpecializations? { sysml2_build_push(auxil, SYSML_KIND_ACTION_DEF, $1, $1e - $1s); } ActionBody { sysml2_pop(auxil); }
 ActionBody <- SEMICOLON / LBRACE ActionBodyItem* RBRACE
 ActionBodyItem <- MemberPrefix ActionBodyElement
-ActionBodyElement <- DefinitionElement / BindUsage / TerminateAction / SuccessionUsage / StateUsage / CalcUsage / ShorthandFeatureMember / AssertConstraintUsage / VariantUsage / ActionUsageElement / AnnotatingElement / Import / Alias / StructureUsageElement
-StateDefinition <- DefinitionPrefix* KW_STATE KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_STATE_DEF, $1, $1e - $1s); } StateBody { sysml2_pop(auxil); }
+ActionBodyElement <- DefinitionElement / BindUsage / TerminateAction / SuccessionUsage / StateUsage / CalcUsage / AssertConstraintUsage / VariantUsage / ActionUsageElement / ShorthandFeatureMember / AnnotatingElement / Import / Alias / StructureUsageElement
+StateDefinition <- DefinitionPrefix* KW_STATE KW_DEF < Identification > ActionParameterList? { sysml2_clear_direction(auxil); } DefinitionSpecializations? { sysml2_build_push(auxil, SYSML_KIND_STATE_DEF, $1, $1e - $1s); } StateBody { sysml2_pop(auxil); }
 StateBody <- SEMICOLON / LBRACE StateBodyItem* RBRACE
 StateBodyItem <- MemberPrefix StateBodyElement
 StateBodyElement <- DefinitionElement / AssertConstraintUsage / StateUsageElement / AnnotatingElement / Import / Alias
@@ -1517,10 +1559,19 @@ ViewpointUsage <- UsagePrefix* KW_VIEWPOINT < UsageDeclaration > { sysml2_build_
 RenderingUsage <- UsagePrefix* KW_RENDERING < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_RENDERING_USAGE, $1, $1e - $1s); } ViewBody { sysml2_pop(auxil); }
 
 # Specialized Usages
-ParameterKind <- KW_ATTRIBUTE / KW_ITEM / KW_PART / KW_REQUIREMENT / KW_OCCURRENCE
-               / KW_EVENT KW_OCCURRENCE / KW_ACTION / KW_STATE / KW_CASE
-               / KW_MESSAGE / KW_CONSTRAINT / KW_CALC
-ParameterUsage <- Direction? UsagePrefix* ParameterKind? UsageDeclaration UsageBody
+ParameterKind <- KW_ATTRIBUTE { if (auxil->build_ctx) sysml2_capture_param_kind(auxil->build_ctx, SYSML_KIND_ATTRIBUTE_USAGE); }
+               / KW_ITEM { if (auxil->build_ctx) sysml2_capture_param_kind(auxil->build_ctx, SYSML_KIND_ITEM_USAGE); }
+               / KW_PART { if (auxil->build_ctx) sysml2_capture_param_kind(auxil->build_ctx, SYSML_KIND_PART_USAGE); }
+               / KW_REQUIREMENT { if (auxil->build_ctx) sysml2_capture_param_kind(auxil->build_ctx, SYSML_KIND_REQUIREMENT_USAGE); }
+               / KW_EVENT KW_OCCURRENCE { if (auxil->build_ctx) sysml2_capture_param_kind(auxil->build_ctx, SYSML_KIND_EVENT_USAGE); }
+               / KW_OCCURRENCE { if (auxil->build_ctx) sysml2_capture_param_kind(auxil->build_ctx, SYSML_KIND_OCCURRENCE_USAGE); }
+               / KW_ACTION { if (auxil->build_ctx) sysml2_capture_param_kind(auxil->build_ctx, SYSML_KIND_ACTION_USAGE); }
+               / KW_STATE { if (auxil->build_ctx) sysml2_capture_param_kind(auxil->build_ctx, SYSML_KIND_STATE_USAGE); }
+               / KW_CASE { if (auxil->build_ctx) sysml2_capture_param_kind(auxil->build_ctx, SYSML_KIND_CASE_USAGE); }
+               / KW_MESSAGE { if (auxil->build_ctx) sysml2_capture_param_kind(auxil->build_ctx, SYSML_KIND_MESSAGE_USAGE); }
+               / KW_CONSTRAINT { if (auxil->build_ctx) sysml2_capture_param_kind(auxil->build_ctx, SYSML_KIND_CONSTRAINT_USAGE); }
+               / KW_CALC { if (auxil->build_ctx) sysml2_capture_param_kind(auxil->build_ctx, SYSML_KIND_CALC_USAGE); }
+ParameterUsage <- Direction? UsagePrefix* ParameterKind? < UsageDeclaration > { sysml2_build_push_param(auxil, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
 Direction <- KW_INOUT { if (auxil->build_ctx) sysml2_capture_direction(auxil->build_ctx, SYSML_DIR_INOUT); }
            / KW_OUT { if (auxil->build_ctx) sysml2_capture_direction(auxil->build_ctx, SYSML_DIR_OUT); }
            / KW_IN { if (auxil->build_ctx) sysml2_capture_direction(auxil->build_ctx, SYSML_DIR_IN); }
@@ -1619,15 +1670,15 @@ UsageBodyItem <- MemberPrefix (DefinitionElement / AssertConstraintUsage / BindU
 
 # Shorthand feature member like :>> name = value; or :> name = value; or :>> name : Type { }
 # Also supports comma-separated targets: :>> a, b;
-ShorthandFeatureMember <- (COLONGTGT / COLONGT) QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)* (COLON QualifiedName Multiplicity?)? FeatureValue? UsageBody
-                        / KW_REDEFINES QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)* FeatureValue? UsageBody
+ShorthandFeatureMember <- < (COLONGTGT / COLONGT) QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)* (COLON QualifiedName Multiplicity?)? FeatureValue? UsageBody > { if (auxil->build_ctx) sysml2_capture_shorthand_feature(auxil->build_ctx, $1, $1e - $1s); }
+                        / < KW_REDEFINES QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)* FeatureValue? UsageBody > { if (auxil->build_ctx) sysml2_capture_shorthand_feature(auxil->build_ctx, $2, $2e - $2s); }
                         / ImplicitInvocation
                         / ImplicitShorthand
 # Implicit invocation like P::Q(args) as a body element
 # Must not match usage keywords that take arguments like connect, allocate
-ImplicitInvocation <- !SpecializationKeyword !UsageKeyword QualifiedName ArgumentList
+ImplicitInvocation <- !SpecializationKeyword !UsageKeyword < QualifiedName ArgumentList > { if (auxil->build_ctx) sysml2_capture_shorthand_feature(auxil->build_ctx, $1, $1e - $1s); }
 UsageKeyword <- ('connect' / 'allocate' / 'include' / 'perform' / 'exhibit' / 'send' / 'accept') !IdentCont
-ImplicitShorthand <- !SpecializationKeyword NAME FeatureChain? FeatureSpecialization* FeatureValue? UsageBody
+ImplicitShorthand <- !SpecializationKeyword < NAME FeatureChain? FeatureSpecialization* FeatureValue? UsageBody > { if (auxil->build_ctx) sysml2_capture_shorthand_feature(auxil->build_ctx, $1, $1e - $1s); }
 
 # === BIND STATEMENT ===
 # Supports: bind x = y; or binding [mult] bind [mult] x = [mult] y;
@@ -1663,7 +1714,7 @@ EndMember <- KW_END Identification? Multiplicity? KW_REF? (KW_PORT / KW_ITEM / K
 # === MESSAGE USAGE ===
 # Message can have 'of' for payload type: message name of Type from x to y;
 # Also supports typed-only: message : Type from x to y;
-MessageUsage <- UsagePrefix* KW_MESSAGE (TypedBy / Identification? UsageSpecializations? (KW_OF NAME (COLON QualifiedName)? Multiplicity?)? FeatureValue?) MessageFlowPart? UsageBody
+MessageUsage <- UsagePrefix* KW_MESSAGE < Identification? UsageSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_MESSAGE_USAGE, $1, $1e - $1s); } (KW_OF NAME (COLON QualifiedName)? Multiplicity?)? FeatureValue? MessageFlowPart? UsageBody { sysml2_pop(auxil); }
 MessageFlowPart <- KW_FROM FlowEndMember KW_TO FlowEndMember / FlowConnectionPart
 
 # === TERMINATE ACTION ===

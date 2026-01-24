@@ -243,9 +243,11 @@ static void write_applied_metadata(Sysml2Writer *w, const SysmlNode *node);
 static void write_import(Sysml2Writer *w, const SysmlImport *imp) {
     write_indent(w);
 
-    /* Write visibility if private */
+    /* Write visibility */
     if (imp->is_private) {
         fputs("private ", w->out);
+    } else if (imp->is_public_explicit) {
+        fputs("public ", w->out);
     }
 
     fputs("import ", w->out);
@@ -487,6 +489,21 @@ static void write_statement(Sysml2Writer *w, const SysmlStatement *stmt) {
 
         case SYSML_STMT_RESULT_EXPR:
             /* Just the expression, no keyword */
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_METADATA_USAGE:
+            /* metadata X about Y, Z; */
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            fputs(";", w->out);
+            break;
+
+        case SYSML_STMT_SHORTHAND_FEATURE:
+            /* :> name : Type; or :>> name = value; */
             if (stmt->raw_text) {
                 fputs(stmt->raw_text, w->out);
             }
@@ -857,13 +874,25 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
         fputs("variation ", w->out);
     }
 
+    /* Write ref modifier */
+    if (node->is_ref) {
+        fputs("ref ", w->out);
+    }
+
     /* Write keyword */
     const char *keyword = sysml2_kind_to_keyword(node->kind);
-    fputs(keyword, w->out);
+    bool has_keyword = keyword && keyword[0];
+    if (has_keyword) {
+        fputs(keyword, w->out);
+    }
 
     /* Write name if present */
     if (node->name) {
-        fputc(' ', w->out);
+        /* Only add space before name if there was a keyword
+           (direction/abstract/variation already added their own trailing space) */
+        if (has_keyword) {
+            fputc(' ', w->out);
+        }
         write_name(w, node->name);
     }
 

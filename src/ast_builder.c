@@ -63,6 +63,7 @@ SysmlBuildContext *sysml2_build_context_create(
     ctx->pending_variation = false;
     ctx->pending_readonly = false;
     ctx->pending_derived = false;
+    ctx->pending_ref = false;
     ctx->pending_direction = SYSML_DIR_NONE;
     ctx->pending_visibility = SYSML_VIS_PUBLIC;
 
@@ -76,6 +77,7 @@ SysmlBuildContext *sysml2_build_context_create(
 
     /* Initialize pending import visibility */
     ctx->pending_import_private = false;
+    ctx->pending_import_public = false;
 
     /* Initialize pending prefix metadata */
     ctx->pending_prefix_metadata_capacity = 8;
@@ -259,10 +261,12 @@ SysmlNode *sysml2_build_node(
     node->is_variation = ctx->pending_variation;
     node->is_readonly = ctx->pending_readonly;
     node->is_derived = ctx->pending_derived;
+    node->is_ref = ctx->pending_ref;
     ctx->pending_abstract = false;
     ctx->pending_variation = false;
     ctx->pending_readonly = false;
     ctx->pending_derived = false;
+    ctx->pending_ref = false;
 
     /* Apply pending direction */
     node->direction = ctx->pending_direction;
@@ -538,10 +542,12 @@ void sysml2_build_add_import(
     imp->target = sysml2_intern(ctx->intern, target);
     imp->owner_scope = sysml2_build_current_scope(ctx);
     imp->is_private = ctx->pending_import_private;
+    imp->is_public_explicit = ctx->pending_import_public;
     imp->loc = SYSML2_LOC_INVALID;
 
     /* Reset pending import visibility */
     ctx->pending_import_private = false;
+    ctx->pending_import_public = false;
 
     ctx->imports[ctx->import_count++] = imp;
 }
@@ -1188,6 +1194,14 @@ void sysml2_capture_variation(SysmlBuildContext *ctx) {
 }
 
 /*
+ * Capture the ref modifier
+ */
+void sysml2_capture_ref(SysmlBuildContext *ctx) {
+    if (!ctx) return;
+    ctx->pending_ref = true;
+}
+
+/*
  * Capture direction (in/out/inout)
  */
 void sysml2_capture_direction(SysmlBuildContext *ctx, SysmlDirection dir) {
@@ -1204,6 +1218,14 @@ void sysml2_capture_import_visibility(SysmlBuildContext *ctx, bool is_private) {
 }
 
 /*
+ * Capture parameter kind (item, part, attribute, etc.)
+ */
+void sysml2_capture_param_kind(SysmlBuildContext *ctx, SysmlNodeKind kind) {
+    if (!ctx) return;
+    ctx->pending_param_kind = kind;
+}
+
+/*
  * Clear all pending modifiers
  */
 void sysml2_build_clear_pending_modifiers(SysmlBuildContext *ctx) {
@@ -1213,12 +1235,14 @@ void sysml2_build_clear_pending_modifiers(SysmlBuildContext *ctx) {
     ctx->pending_variation = false;
     ctx->pending_readonly = false;
     ctx->pending_derived = false;
+    ctx->pending_ref = false;
     ctx->pending_direction = SYSML_DIR_NONE;
     ctx->pending_visibility = SYSML_VIS_PUBLIC;
     ctx->pending_multiplicity_lower = NULL;
     ctx->pending_multiplicity_upper = NULL;
     ctx->pending_default_value = NULL;
     ctx->pending_has_default_keyword = false;
+    ctx->pending_param_kind = SYSML_KIND_UNKNOWN;
 }
 
 /*
@@ -1683,6 +1707,34 @@ void sysml2_capture_result_expr(SysmlBuildContext *ctx, const char *expr, size_t
             }
         }
     }
+}
+
+/*
+ * Capture a standalone metadata usage (metadata X about Y, Z;)
+ */
+void sysml2_capture_metadata_usage(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_METADATA_USAGE);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture a shorthand feature (:> name : Type; or :>> name = value;)
+ */
+void sysml2_capture_shorthand_feature(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_SHORTHAND_FEATURE);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
 }
 
 /*

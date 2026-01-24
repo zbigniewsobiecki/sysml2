@@ -98,6 +98,7 @@ const char *sysml2_kind_to_json_type(SysmlNodeKind kind) {
         case SYSML_KIND_ACTOR_USAGE:       return "Actor";
         case SYSML_KIND_STAKEHOLDER_USAGE: return "Stakeholder";
         case SYSML_KIND_MESSAGE_USAGE:     return "Message";
+        case SYSML_KIND_PARAMETER:         return "Parameter";
 
         /* KerML Features */
         case SYSML_KIND_FEATURE:           return "Feature";
@@ -354,6 +355,7 @@ const char *sysml2_kind_to_keyword(SysmlNodeKind kind) {
         case SYSML_KIND_ACTOR_USAGE:      return "actor";
         case SYSML_KIND_STAKEHOLDER_USAGE: return "stakeholder";
         case SYSML_KIND_MESSAGE_USAGE:    return "message";
+        case SYSML_KIND_PARAMETER:        return "";  /* Bare parameter has no keyword */
 
         /* KerML Features */
         case SYSML_KIND_FEATURE:          return "feature";

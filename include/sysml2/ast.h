@@ -129,6 +129,7 @@ typedef enum {
     SYSML_KIND_ACTOR_USAGE,
     SYSML_KIND_STAKEHOLDER_USAGE,
     SYSML_KIND_MESSAGE_USAGE,
+    SYSML_KIND_PARAMETER,         /* Bare parameter (no keyword, just direction) */
 
     /* KerML Features (0x10xx continued) */
     SYSML_KIND_FEATURE,           /* KerML feature */
@@ -219,6 +220,12 @@ typedef enum {
     /* Succession members */
     SYSML_STMT_FIRST,          /* first x then y; */
     SYSML_STMT_THEN,           /* then x; */
+
+    /* Metadata */
+    SYSML_STMT_METADATA_USAGE, /* metadata X about Y, Z; */
+
+    /* Shorthand features */
+    SYSML_STMT_SHORTHAND_FEATURE, /* :> name : Type; or :>> name = value; */
 
     /* Other */
     SYSML_STMT_RESULT_EXPR,    /* bare expression at end of calc/constraint */
@@ -357,6 +364,7 @@ typedef struct SysmlNode {
     bool is_variation;
     bool is_readonly;
     bool is_derived;
+    bool is_ref;
 
     /* Direction (for parameters) */
     SysmlDirection direction;
@@ -426,6 +434,7 @@ typedef struct SysmlImport {
 
     /* Visibility for the import (private import X::*;) */
     bool is_private;
+    bool is_public_explicit;  /* True if 'public' keyword was explicit */
 
     /* Source location for debugging */
     Sysml2SourceLoc loc;
