@@ -116,7 +116,7 @@ make check
 Or run individual tests:
 ```bash
 ./test_lexer
-./test_parser
+./test_packcc_parser <file.sysml>
 ```
 
 ## Project Structure
@@ -129,27 +129,21 @@ sysml2/
 │   ├── intern.h        # String interning
 │   ├── token.h         # Token definitions
 │   ├── lexer.h         # Lexer interface
-│   ├── ast.h           # AST node definitions
-│   ├── parser.h        # Parser interface
-│   ├── symbol.h        # Symbol table
-│   ├── semantic.h      # Semantic analysis
 │   ├── diagnostic.h    # Error reporting
 │   └── cli.h           # CLI options
-├── src/                # Implementation files
-│   ├── arena.c
-│   ├── intern.c
-│   ├── keywords.c
-│   ├── lexer.c
-│   ├── parser.c
-│   ├── parser_expr.c
-│   ├── ast.c
-│   ├── symbol.c
-│   ├── semantic.c
-│   ├── diagnostic.c
-│   └── main.c
+├── src/
+│   ├── arena.c         # Arena allocator implementation
+│   ├── intern.c        # String interning implementation
+│   ├── keywords.c      # Keyword recognition
+│   ├── lexer.c         # Lexer implementation
+│   ├── diagnostic.c    # Diagnostic reporting
+│   ├── main.c          # CLI entry point
+│   └── sysml_parser.c  # PackCC-generated parser
+├── grammar/
+│   └── sysml.peg       # PEG grammar (source of truth)
 ├── tests/
 │   ├── test_lexer.c
-│   ├── test_parser.c
+│   ├── test_packcc_parser.c
 │   └── fixtures/       # Test SysML/KerML files
 └── CMakeLists.txt
 ```

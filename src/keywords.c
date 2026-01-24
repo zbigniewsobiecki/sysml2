@@ -7,6 +7,7 @@
  */
 
 #include "sysml2/lexer.h"
+#include "sysml2/intern.h"
 #include <string.h>
 
 /* Keyword entry */
@@ -209,16 +210,6 @@ typedef struct {
 static HashEntry hash_table[HASH_TABLE_SIZE];
 static bool keywords_initialized = false;
 
-/* FNV-1a hash */
-static uint32_t hash_string(const char *str, size_t length) {
-    uint32_t hash = 2166136261u;
-    for (size_t i = 0; i < length; i++) {
-        hash ^= (uint8_t)str[i];
-        hash *= 16777619u;
-    }
-    return hash;
-}
-
 void sysml2_keywords_init(void) {
     if (keywords_initialized) return;
 
@@ -229,7 +220,7 @@ void sysml2_keywords_init(void) {
     for (size_t i = 0; i < KEYWORD_COUNT; i++) {
         const char *key = keywords[i].name;
         size_t length = strlen(key);
-        uint32_t hash = hash_string(key, length);
+        uint32_t hash = sysml2_hash_string(key, length);
         size_t index = hash % HASH_TABLE_SIZE;
 
         /* Linear probing for collision resolution */
@@ -250,7 +241,7 @@ Sysml2TokenType sysml2_keyword_lookup(const char *str, size_t length) {
         sysml2_keywords_init();
     }
 
-    uint32_t hash = hash_string(str, length);
+    uint32_t hash = sysml2_hash_string(str, length);
     size_t index = hash % HASH_TABLE_SIZE;
 
     /* Linear probing */

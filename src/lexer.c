@@ -457,228 +457,238 @@ Sysml2SourceLoc sysml2_lexer_current_loc(const Sysml2Lexer *lexer) {
     };
 }
 
+/* Token type to string lookup table */
+static const char *token_strings[] = {
+    [SYSML2_TOKEN_EOF] = "EOF",
+    [SYSML2_TOKEN_ERROR] = "ERROR",
+    [SYSML2_TOKEN_IDENTIFIER] = "IDENTIFIER",
+    [SYSML2_TOKEN_UNRESTRICTED_NAME] = "UNRESTRICTED_NAME",
+    [SYSML2_TOKEN_INTEGER] = "INTEGER",
+    [SYSML2_TOKEN_REAL] = "REAL",
+    [SYSML2_TOKEN_STRING] = "STRING",
+    /* KerML keywords */
+    [SYSML2_TOKEN_KW_ABOUT] = "about",
+    [SYSML2_TOKEN_KW_ABSTRACT] = "abstract",
+    [SYSML2_TOKEN_KW_ALIAS] = "alias",
+    [SYSML2_TOKEN_KW_ALL] = "all",
+    [SYSML2_TOKEN_KW_AND] = "and",
+    [SYSML2_TOKEN_KW_AS] = "as",
+    [SYSML2_TOKEN_KW_ASSOC] = "assoc",
+    [SYSML2_TOKEN_KW_BEHAVIOR] = "behavior",
+    [SYSML2_TOKEN_KW_BINDING] = "binding",
+    [SYSML2_TOKEN_KW_BOOL] = "bool",
+    [SYSML2_TOKEN_KW_BY] = "by",
+    [SYSML2_TOKEN_KW_CHAINS] = "chains",
+    [SYSML2_TOKEN_KW_CLASS] = "class",
+    [SYSML2_TOKEN_KW_CLASSIFIER] = "classifier",
+    [SYSML2_TOKEN_KW_COMMENT] = "comment",
+    [SYSML2_TOKEN_KW_COMPOSITE] = "composite",
+    [SYSML2_TOKEN_KW_CONJUGATE] = "conjugate",
+    [SYSML2_TOKEN_KW_CONJUGATES] = "conjugates",
+    [SYSML2_TOKEN_KW_CONJUGATION] = "conjugation",
+    [SYSML2_TOKEN_KW_CONNECTOR] = "connector",
+    [SYSML2_TOKEN_KW_DATATYPE] = "datatype",
+    [SYSML2_TOKEN_KW_DEFAULT] = "default",
+    [SYSML2_TOKEN_KW_DERIVED] = "derived",
+    [SYSML2_TOKEN_KW_DIFFERENCES] = "differences",
+    [SYSML2_TOKEN_KW_DISJOINING] = "disjoining",
+    [SYSML2_TOKEN_KW_DISJOINT] = "disjoint",
+    [SYSML2_TOKEN_KW_DOC] = "doc",
+    [SYSML2_TOKEN_KW_ELSE] = "else",
+    [SYSML2_TOKEN_KW_END] = "end",
+    [SYSML2_TOKEN_KW_EXPR] = "expr",
+    [SYSML2_TOKEN_KW_FALSE] = "false",
+    [SYSML2_TOKEN_KW_FEATURE] = "feature",
+    [SYSML2_TOKEN_KW_FEATURED] = "featured",
+    [SYSML2_TOKEN_KW_FEATURING] = "featuring",
+    [SYSML2_TOKEN_KW_FILTER] = "filter",
+    [SYSML2_TOKEN_KW_FIRST] = "first",
+    [SYSML2_TOKEN_KW_FROM] = "from",
+    [SYSML2_TOKEN_KW_FUNCTION] = "function",
+    [SYSML2_TOKEN_KW_HASTYPE] = "hastype",
+    [SYSML2_TOKEN_KW_IF] = "if",
+    [SYSML2_TOKEN_KW_IMPLIES] = "implies",
+    [SYSML2_TOKEN_KW_IMPORT] = "import",
+    [SYSML2_TOKEN_KW_IN] = "in",
+    [SYSML2_TOKEN_KW_INOUT] = "inout",
+    [SYSML2_TOKEN_KW_INTERACTION] = "interaction",
+    [SYSML2_TOKEN_KW_INTERSECTS] = "intersects",
+    [SYSML2_TOKEN_KW_INTERSECTING] = "intersecting",
+    [SYSML2_TOKEN_KW_INV] = "inv",
+    [SYSML2_TOKEN_KW_INVERSE] = "inverse",
+    [SYSML2_TOKEN_KW_ISTYPE] = "istype",
+    [SYSML2_TOKEN_KW_LANGUAGE] = "language",
+    [SYSML2_TOKEN_KW_LIBRARY] = "library",
+    [SYSML2_TOKEN_KW_LOCALE] = "locale",
+    [SYSML2_TOKEN_KW_LOOP] = "loop",
+    [SYSML2_TOKEN_KW_MEMBER] = "member",
+    [SYSML2_TOKEN_KW_METACLASS] = "metaclass",
+    [SYSML2_TOKEN_KW_METADATA] = "metadata",
+    [SYSML2_TOKEN_KW_MULTIPLICITY] = "multiplicity",
+    [SYSML2_TOKEN_KW_NAMESPACE] = "namespace",
+    [SYSML2_TOKEN_KW_NONUNIQUE] = "nonunique",
+    [SYSML2_TOKEN_KW_NOT] = "not",
+    [SYSML2_TOKEN_KW_NULL] = "null",
+    [SYSML2_TOKEN_KW_OF] = "of",
+    [SYSML2_TOKEN_KW_OR] = "or",
+    [SYSML2_TOKEN_KW_ORDERED] = "ordered",
+    [SYSML2_TOKEN_KW_OUT] = "out",
+    [SYSML2_TOKEN_KW_PACKAGE] = "package",
+    [SYSML2_TOKEN_KW_PORTION] = "portion",
+    [SYSML2_TOKEN_KW_PREDICATE] = "predicate",
+    [SYSML2_TOKEN_KW_PRIVATE] = "private",
+    [SYSML2_TOKEN_KW_PROTECTED] = "protected",
+    [SYSML2_TOKEN_KW_PUBLIC] = "public",
+    [SYSML2_TOKEN_KW_READONLY] = "readonly",
+    [SYSML2_TOKEN_KW_REDEFINES] = "redefines",
+    [SYSML2_TOKEN_KW_REDEFINITION] = "redefinition",
+    [SYSML2_TOKEN_KW_REF] = "ref",
+    [SYSML2_TOKEN_KW_REFERENCES] = "references",
+    [SYSML2_TOKEN_KW_REP] = "rep",
+    [SYSML2_TOKEN_KW_RETURN] = "return",
+    [SYSML2_TOKEN_KW_SPECIALIZATION] = "specialization",
+    [SYSML2_TOKEN_KW_SPECIALIZES] = "specializes",
+    [SYSML2_TOKEN_KW_STEP] = "step",
+    [SYSML2_TOKEN_KW_STRUCT] = "struct",
+    [SYSML2_TOKEN_KW_SUBCLASSIFIER] = "subclassifier",
+    [SYSML2_TOKEN_KW_SUBSET] = "subset",
+    [SYSML2_TOKEN_KW_SUBSETS] = "subsets",
+    [SYSML2_TOKEN_KW_SUBTYPE] = "subtype",
+    [SYSML2_TOKEN_KW_SUCCESSION] = "succession",
+    [SYSML2_TOKEN_KW_THEN] = "then",
+    [SYSML2_TOKEN_KW_TO] = "to",
+    [SYSML2_TOKEN_KW_TRUE] = "true",
+    [SYSML2_TOKEN_KW_TYPE] = "type",
+    [SYSML2_TOKEN_KW_TYPED] = "typed",
+    [SYSML2_TOKEN_KW_TYPING] = "typing",
+    [SYSML2_TOKEN_KW_UNIONS] = "unions",
+    [SYSML2_TOKEN_KW_UNIONING] = "unioning",
+    [SYSML2_TOKEN_KW_XOR] = "xor",
+    /* SysML keywords */
+    [SYSML2_TOKEN_KW_ACCEPT] = "accept",
+    [SYSML2_TOKEN_KW_ACTION] = "action",
+    [SYSML2_TOKEN_KW_ACTOR] = "actor",
+    [SYSML2_TOKEN_KW_AFTER] = "after",
+    [SYSML2_TOKEN_KW_ALLOCATION] = "allocation",
+    [SYSML2_TOKEN_KW_ANALYSIS] = "analysis",
+    [SYSML2_TOKEN_KW_ASSERT] = "assert",
+    [SYSML2_TOKEN_KW_ASSIGN] = "assign",
+    [SYSML2_TOKEN_KW_ASSUMPTION] = "assumption",
+    [SYSML2_TOKEN_KW_AT] = "at",
+    [SYSML2_TOKEN_KW_ATTRIBUTE] = "attribute",
+    [SYSML2_TOKEN_KW_CALC] = "calc",
+    [SYSML2_TOKEN_KW_CASE] = "case",
+    [SYSML2_TOKEN_KW_CONCERN] = "concern",
+    [SYSML2_TOKEN_KW_CONNECT] = "connect",
+    [SYSML2_TOKEN_KW_CONNECTION] = "connection",
+    [SYSML2_TOKEN_KW_CONSTRAINT] = "constraint",
+    [SYSML2_TOKEN_KW_DECIDE] = "decide",
+    [SYSML2_TOKEN_KW_DEF] = "def",
+    [SYSML2_TOKEN_KW_DEPENDENCY] = "dependency",
+    [SYSML2_TOKEN_KW_DO] = "do",
+    [SYSML2_TOKEN_KW_ENTRY] = "entry",
+    [SYSML2_TOKEN_KW_ENUM] = "enum",
+    [SYSML2_TOKEN_KW_EVENT] = "event",
+    [SYSML2_TOKEN_KW_EXHIBIT] = "exhibit",
+    [SYSML2_TOKEN_KW_EXIT] = "exit",
+    [SYSML2_TOKEN_KW_EXPOSE] = "expose",
+    [SYSML2_TOKEN_KW_FLOW] = "flow",
+    [SYSML2_TOKEN_KW_FOR] = "for",
+    [SYSML2_TOKEN_KW_FORK] = "fork",
+    [SYSML2_TOKEN_KW_FRAME] = "frame",
+    [SYSML2_TOKEN_KW_INCLUDE] = "include",
+    [SYSML2_TOKEN_KW_INDIVIDUAL] = "individual",
+    [SYSML2_TOKEN_KW_INTERFACE] = "interface",
+    [SYSML2_TOKEN_KW_ITEM] = "item",
+    [SYSML2_TOKEN_KW_JOIN] = "join",
+    [SYSML2_TOKEN_KW_MERGE] = "merge",
+    [SYSML2_TOKEN_KW_MESSAGE] = "message",
+    [SYSML2_TOKEN_KW_OBJECTIVE] = "objective",
+    [SYSML2_TOKEN_KW_OCCURRENCE] = "occurrence",
+    [SYSML2_TOKEN_KW_PARALLEL] = "parallel",
+    [SYSML2_TOKEN_KW_PART] = "part",
+    [SYSML2_TOKEN_KW_PERFORM] = "perform",
+    [SYSML2_TOKEN_KW_PORT] = "port",
+    [SYSML2_TOKEN_KW_RECEIVE] = "receive",
+    [SYSML2_TOKEN_KW_RENDERING] = "rendering",
+    [SYSML2_TOKEN_KW_REQ] = "req",
+    [SYSML2_TOKEN_KW_REQUIRE] = "require",
+    [SYSML2_TOKEN_KW_REQUIREMENT] = "requirement",
+    [SYSML2_TOKEN_KW_SATISFY] = "satisfy",
+    [SYSML2_TOKEN_KW_SEND] = "send",
+    [SYSML2_TOKEN_KW_SNAPSHOT] = "snapshot",
+    [SYSML2_TOKEN_KW_STAKEHOLDER] = "stakeholder",
+    [SYSML2_TOKEN_KW_STANDARD] = "standard",
+    [SYSML2_TOKEN_KW_STATE] = "state",
+    [SYSML2_TOKEN_KW_SUBJECT] = "subject",
+    [SYSML2_TOKEN_KW_TIMESLICE] = "timeslice",
+    [SYSML2_TOKEN_KW_TRANSITION] = "transition",
+    [SYSML2_TOKEN_KW_USE] = "use",
+    [SYSML2_TOKEN_KW_VARIANT] = "variant",
+    [SYSML2_TOKEN_KW_VERIFICATION] = "verification",
+    [SYSML2_TOKEN_KW_VERIFY] = "verify",
+    [SYSML2_TOKEN_KW_VIA] = "via",
+    [SYSML2_TOKEN_KW_VIEW] = "view",
+    [SYSML2_TOKEN_KW_VIEWPOINT] = "viewpoint",
+    [SYSML2_TOKEN_KW_WHEN] = "when",
+    [SYSML2_TOKEN_KW_WHILE] = "while",
+    [SYSML2_TOKEN_KW_BIND] = "bind",
+    [SYSML2_TOKEN_KW_TERMINATE] = "terminate",
+    [SYSML2_TOKEN_KW_UNTIL] = "until",
+    [SYSML2_TOKEN_KW_DONE] = "done",
+    [SYSML2_TOKEN_KW_RENDER] = "render",
+    [SYSML2_TOKEN_KW_ASSUME] = "assume",
+    [SYSML2_TOKEN_KW_ALLOCATE] = "allocate",
+    [SYSML2_TOKEN_KW_NEW] = "new",
+    /* Operators */
+    [SYSML2_TOKEN_LBRACE] = "{",
+    [SYSML2_TOKEN_RBRACE] = "}",
+    [SYSML2_TOKEN_LBRACKET] = "[",
+    [SYSML2_TOKEN_RBRACKET] = "]",
+    [SYSML2_TOKEN_LPAREN] = "(",
+    [SYSML2_TOKEN_RPAREN] = ")",
+    [SYSML2_TOKEN_SEMICOLON] = ";",
+    [SYSML2_TOKEN_COMMA] = ",",
+    [SYSML2_TOKEN_DOT] = ".",
+    [SYSML2_TOKEN_COLON] = ":",
+    [SYSML2_TOKEN_COLON_GT] = ":>",
+    [SYSML2_TOKEN_COLON_COLON] = "::",
+    [SYSML2_TOKEN_COLON_COLON_GT] = "::>",
+    [SYSML2_TOKEN_COLON_GT_GT] = ":>>",
+    [SYSML2_TOKEN_TILDE] = "~",
+    [SYSML2_TOKEN_DOT_DOT] = "..",
+    [SYSML2_TOKEN_ARROW] = "->",
+    [SYSML2_TOKEN_AT] = "@",
+    [SYSML2_TOKEN_HASH] = "#",
+    [SYSML2_TOKEN_QUESTION] = "?",
+    [SYSML2_TOKEN_PLUS] = "+",
+    [SYSML2_TOKEN_MINUS] = "-",
+    [SYSML2_TOKEN_STAR] = "*",
+    [SYSML2_TOKEN_SLASH] = "/",
+    [SYSML2_TOKEN_PERCENT] = "%",
+    [SYSML2_TOKEN_STAR_STAR] = "**",
+    [SYSML2_TOKEN_EQ] = "=",
+    [SYSML2_TOKEN_EQ_EQ] = "==",
+    [SYSML2_TOKEN_BANG_EQ] = "!=",
+    [SYSML2_TOKEN_EQ_EQ_EQ] = "===",
+    [SYSML2_TOKEN_BANG_EQ_EQ] = "!==",
+    [SYSML2_TOKEN_LT] = "<",
+    [SYSML2_TOKEN_GT] = ">",
+    [SYSML2_TOKEN_LT_EQ] = "<=",
+    [SYSML2_TOKEN_GT_EQ] = ">=",
+    [SYSML2_TOKEN_AMP] = "&",
+    [SYSML2_TOKEN_PIPE] = "|",
+    [SYSML2_TOKEN_BANG] = "!",
+    [SYSML2_TOKEN_CARET] = "^",
+    [SYSML2_TOKEN_DOT_DOT_DOT] = "...",
+};
+
 /* Token type to string */
 const char *sysml2_token_type_to_string(Sysml2TokenType type) {
-    switch (type) {
-        case SYSML2_TOKEN_EOF: return "EOF";
-        case SYSML2_TOKEN_ERROR: return "ERROR";
-        case SYSML2_TOKEN_IDENTIFIER: return "IDENTIFIER";
-        case SYSML2_TOKEN_UNRESTRICTED_NAME: return "UNRESTRICTED_NAME";
-        case SYSML2_TOKEN_INTEGER: return "INTEGER";
-        case SYSML2_TOKEN_REAL: return "REAL";
-        case SYSML2_TOKEN_STRING: return "STRING";
-
-        /* Keywords */
-        case SYSML2_TOKEN_KW_ABOUT: return "about";
-        case SYSML2_TOKEN_KW_ABSTRACT: return "abstract";
-        case SYSML2_TOKEN_KW_ALIAS: return "alias";
-        case SYSML2_TOKEN_KW_ALL: return "all";
-        case SYSML2_TOKEN_KW_AND: return "and";
-        case SYSML2_TOKEN_KW_AS: return "as";
-        case SYSML2_TOKEN_KW_ASSOC: return "assoc";
-        case SYSML2_TOKEN_KW_BEHAVIOR: return "behavior";
-        case SYSML2_TOKEN_KW_BINDING: return "binding";
-        case SYSML2_TOKEN_KW_BOOL: return "bool";
-        case SYSML2_TOKEN_KW_BY: return "by";
-        case SYSML2_TOKEN_KW_CHAINS: return "chains";
-        case SYSML2_TOKEN_KW_CLASS: return "class";
-        case SYSML2_TOKEN_KW_CLASSIFIER: return "classifier";
-        case SYSML2_TOKEN_KW_COMMENT: return "comment";
-        case SYSML2_TOKEN_KW_COMPOSITE: return "composite";
-        case SYSML2_TOKEN_KW_CONJUGATE: return "conjugate";
-        case SYSML2_TOKEN_KW_CONJUGATES: return "conjugates";
-        case SYSML2_TOKEN_KW_CONJUGATION: return "conjugation";
-        case SYSML2_TOKEN_KW_CONNECTOR: return "connector";
-        case SYSML2_TOKEN_KW_DATATYPE: return "datatype";
-        case SYSML2_TOKEN_KW_DEFAULT: return "default";
-        case SYSML2_TOKEN_KW_DERIVED: return "derived";
-        case SYSML2_TOKEN_KW_DIFFERENCES: return "differences";
-        case SYSML2_TOKEN_KW_DISJOINING: return "disjoining";
-        case SYSML2_TOKEN_KW_DISJOINT: return "disjoint";
-        case SYSML2_TOKEN_KW_DOC: return "doc";
-        case SYSML2_TOKEN_KW_ELSE: return "else";
-        case SYSML2_TOKEN_KW_END: return "end";
-        case SYSML2_TOKEN_KW_EXPR: return "expr";
-        case SYSML2_TOKEN_KW_FALSE: return "false";
-        case SYSML2_TOKEN_KW_FEATURE: return "feature";
-        case SYSML2_TOKEN_KW_FEATURED: return "featured";
-        case SYSML2_TOKEN_KW_FEATURING: return "featuring";
-        case SYSML2_TOKEN_KW_FILTER: return "filter";
-        case SYSML2_TOKEN_KW_FIRST: return "first";
-        case SYSML2_TOKEN_KW_FROM: return "from";
-        case SYSML2_TOKEN_KW_FUNCTION: return "function";
-        case SYSML2_TOKEN_KW_HASTYPE: return "hastype";
-        case SYSML2_TOKEN_KW_IF: return "if";
-        case SYSML2_TOKEN_KW_IMPLIES: return "implies";
-        case SYSML2_TOKEN_KW_IMPORT: return "import";
-        case SYSML2_TOKEN_KW_IN: return "in";
-        case SYSML2_TOKEN_KW_INOUT: return "inout";
-        case SYSML2_TOKEN_KW_INTERACTION: return "interaction";
-        case SYSML2_TOKEN_KW_INTERSECTS: return "intersects";
-        case SYSML2_TOKEN_KW_INTERSECTING: return "intersecting";
-        case SYSML2_TOKEN_KW_INV: return "inv";
-        case SYSML2_TOKEN_KW_INVERSE: return "inverse";
-        case SYSML2_TOKEN_KW_ISTYPE: return "istype";
-        case SYSML2_TOKEN_KW_LANGUAGE: return "language";
-        case SYSML2_TOKEN_KW_LIBRARY: return "library";
-        case SYSML2_TOKEN_KW_LOCALE: return "locale";
-        case SYSML2_TOKEN_KW_LOOP: return "loop";
-        case SYSML2_TOKEN_KW_MEMBER: return "member";
-        case SYSML2_TOKEN_KW_METACLASS: return "metaclass";
-        case SYSML2_TOKEN_KW_METADATA: return "metadata";
-        case SYSML2_TOKEN_KW_MULTIPLICITY: return "multiplicity";
-        case SYSML2_TOKEN_KW_NAMESPACE: return "namespace";
-        case SYSML2_TOKEN_KW_NONUNIQUE: return "nonunique";
-        case SYSML2_TOKEN_KW_NOT: return "not";
-        case SYSML2_TOKEN_KW_NULL: return "null";
-        case SYSML2_TOKEN_KW_OF: return "of";
-        case SYSML2_TOKEN_KW_OR: return "or";
-        case SYSML2_TOKEN_KW_ORDERED: return "ordered";
-        case SYSML2_TOKEN_KW_OUT: return "out";
-        case SYSML2_TOKEN_KW_PACKAGE: return "package";
-        case SYSML2_TOKEN_KW_PORTION: return "portion";
-        case SYSML2_TOKEN_KW_PREDICATE: return "predicate";
-        case SYSML2_TOKEN_KW_PRIVATE: return "private";
-        case SYSML2_TOKEN_KW_PROTECTED: return "protected";
-        case SYSML2_TOKEN_KW_PUBLIC: return "public";
-        case SYSML2_TOKEN_KW_READONLY: return "readonly";
-        case SYSML2_TOKEN_KW_REDEFINES: return "redefines";
-        case SYSML2_TOKEN_KW_REDEFINITION: return "redefinition";
-        case SYSML2_TOKEN_KW_REF: return "ref";
-        case SYSML2_TOKEN_KW_REFERENCES: return "references";
-        case SYSML2_TOKEN_KW_REP: return "rep";
-        case SYSML2_TOKEN_KW_RETURN: return "return";
-        case SYSML2_TOKEN_KW_SPECIALIZATION: return "specialization";
-        case SYSML2_TOKEN_KW_SPECIALIZES: return "specializes";
-        case SYSML2_TOKEN_KW_STEP: return "step";
-        case SYSML2_TOKEN_KW_STRUCT: return "struct";
-        case SYSML2_TOKEN_KW_SUBCLASSIFIER: return "subclassifier";
-        case SYSML2_TOKEN_KW_SUBSET: return "subset";
-        case SYSML2_TOKEN_KW_SUBSETS: return "subsets";
-        case SYSML2_TOKEN_KW_SUBTYPE: return "subtype";
-        case SYSML2_TOKEN_KW_SUCCESSION: return "succession";
-        case SYSML2_TOKEN_KW_THEN: return "then";
-        case SYSML2_TOKEN_KW_TO: return "to";
-        case SYSML2_TOKEN_KW_TRUE: return "true";
-        case SYSML2_TOKEN_KW_TYPE: return "type";
-        case SYSML2_TOKEN_KW_TYPED: return "typed";
-        case SYSML2_TOKEN_KW_TYPING: return "typing";
-        case SYSML2_TOKEN_KW_UNIONS: return "unions";
-        case SYSML2_TOKEN_KW_UNIONING: return "unioning";
-        case SYSML2_TOKEN_KW_XOR: return "xor";
-
-        /* SysML keywords */
-        case SYSML2_TOKEN_KW_ACCEPT: return "accept";
-        case SYSML2_TOKEN_KW_ACTION: return "action";
-        case SYSML2_TOKEN_KW_ACTOR: return "actor";
-        case SYSML2_TOKEN_KW_AFTER: return "after";
-        case SYSML2_TOKEN_KW_ALLOCATION: return "allocation";
-        case SYSML2_TOKEN_KW_ANALYSIS: return "analysis";
-        case SYSML2_TOKEN_KW_ASSERT: return "assert";
-        case SYSML2_TOKEN_KW_ASSIGN: return "assign";
-        case SYSML2_TOKEN_KW_ASSUMPTION: return "assumption";
-        case SYSML2_TOKEN_KW_AT: return "at";
-        case SYSML2_TOKEN_KW_ATTRIBUTE: return "attribute";
-        case SYSML2_TOKEN_KW_CALC: return "calc";
-        case SYSML2_TOKEN_KW_CASE: return "case";
-        case SYSML2_TOKEN_KW_CONCERN: return "concern";
-        case SYSML2_TOKEN_KW_CONNECT: return "connect";
-        case SYSML2_TOKEN_KW_CONNECTION: return "connection";
-        case SYSML2_TOKEN_KW_CONSTRAINT: return "constraint";
-        case SYSML2_TOKEN_KW_DECIDE: return "decide";
-        case SYSML2_TOKEN_KW_DEF: return "def";
-        case SYSML2_TOKEN_KW_DEPENDENCY: return "dependency";
-        case SYSML2_TOKEN_KW_DO: return "do";
-        case SYSML2_TOKEN_KW_ENTRY: return "entry";
-        case SYSML2_TOKEN_KW_ENUM: return "enum";
-        case SYSML2_TOKEN_KW_EVENT: return "event";
-        case SYSML2_TOKEN_KW_EXHIBIT: return "exhibit";
-        case SYSML2_TOKEN_KW_EXIT: return "exit";
-        case SYSML2_TOKEN_KW_EXPOSE: return "expose";
-        case SYSML2_TOKEN_KW_FLOW: return "flow";
-        case SYSML2_TOKEN_KW_FOR: return "for";
-        case SYSML2_TOKEN_KW_FORK: return "fork";
-        case SYSML2_TOKEN_KW_FRAME: return "frame";
-        case SYSML2_TOKEN_KW_INCLUDE: return "include";
-        case SYSML2_TOKEN_KW_INDIVIDUAL: return "individual";
-        case SYSML2_TOKEN_KW_INTERFACE: return "interface";
-        case SYSML2_TOKEN_KW_ITEM: return "item";
-        case SYSML2_TOKEN_KW_JOIN: return "join";
-        case SYSML2_TOKEN_KW_MERGE: return "merge";
-        case SYSML2_TOKEN_KW_MESSAGE: return "message";
-        case SYSML2_TOKEN_KW_OBJECTIVE: return "objective";
-        case SYSML2_TOKEN_KW_OCCURRENCE: return "occurrence";
-        case SYSML2_TOKEN_KW_PARALLEL: return "parallel";
-        case SYSML2_TOKEN_KW_PART: return "part";
-        case SYSML2_TOKEN_KW_PERFORM: return "perform";
-        case SYSML2_TOKEN_KW_PORT: return "port";
-        case SYSML2_TOKEN_KW_RECEIVE: return "receive";
-        case SYSML2_TOKEN_KW_RENDERING: return "rendering";
-        case SYSML2_TOKEN_KW_REQ: return "req";
-        case SYSML2_TOKEN_KW_REQUIRE: return "require";
-        case SYSML2_TOKEN_KW_REQUIREMENT: return "requirement";
-        case SYSML2_TOKEN_KW_SATISFY: return "satisfy";
-        case SYSML2_TOKEN_KW_SEND: return "send";
-        case SYSML2_TOKEN_KW_SNAPSHOT: return "snapshot";
-        case SYSML2_TOKEN_KW_STAKEHOLDER: return "stakeholder";
-        case SYSML2_TOKEN_KW_STATE: return "state";
-        case SYSML2_TOKEN_KW_SUBJECT: return "subject";
-        case SYSML2_TOKEN_KW_TIMESLICE: return "timeslice";
-        case SYSML2_TOKEN_KW_TRANSITION: return "transition";
-        case SYSML2_TOKEN_KW_USE: return "use";
-        case SYSML2_TOKEN_KW_VARIANT: return "variant";
-        case SYSML2_TOKEN_KW_VERIFICATION: return "verification";
-        case SYSML2_TOKEN_KW_VERIFY: return "verify";
-        case SYSML2_TOKEN_KW_VIA: return "via";
-        case SYSML2_TOKEN_KW_VIEW: return "view";
-        case SYSML2_TOKEN_KW_VIEWPOINT: return "viewpoint";
-        case SYSML2_TOKEN_KW_WHEN: return "when";
-        case SYSML2_TOKEN_KW_WHILE: return "while";
-
-        /* Operators */
-        case SYSML2_TOKEN_LBRACE: return "{";
-        case SYSML2_TOKEN_RBRACE: return "}";
-        case SYSML2_TOKEN_LBRACKET: return "[";
-        case SYSML2_TOKEN_RBRACKET: return "]";
-        case SYSML2_TOKEN_LPAREN: return "(";
-        case SYSML2_TOKEN_RPAREN: return ")";
-        case SYSML2_TOKEN_SEMICOLON: return ";";
-        case SYSML2_TOKEN_COMMA: return ",";
-        case SYSML2_TOKEN_DOT: return ".";
-        case SYSML2_TOKEN_COLON: return ":";
-        case SYSML2_TOKEN_COLON_GT: return ":>";
-        case SYSML2_TOKEN_COLON_COLON: return "::";
-        case SYSML2_TOKEN_COLON_COLON_GT: return "::>";
-        case SYSML2_TOKEN_COLON_GT_GT: return ":>>";
-        case SYSML2_TOKEN_TILDE: return "~";
-        case SYSML2_TOKEN_DOT_DOT: return "..";
-        case SYSML2_TOKEN_ARROW: return "->";
-        case SYSML2_TOKEN_AT: return "@";
-        case SYSML2_TOKEN_HASH: return "#";
-        case SYSML2_TOKEN_QUESTION: return "?";
-        case SYSML2_TOKEN_PLUS: return "+";
-        case SYSML2_TOKEN_MINUS: return "-";
-        case SYSML2_TOKEN_STAR: return "*";
-        case SYSML2_TOKEN_SLASH: return "/";
-        case SYSML2_TOKEN_PERCENT: return "%";
-        case SYSML2_TOKEN_STAR_STAR: return "**";
-        case SYSML2_TOKEN_EQ: return "=";
-        case SYSML2_TOKEN_EQ_EQ: return "==";
-        case SYSML2_TOKEN_BANG_EQ: return "!=";
-        case SYSML2_TOKEN_EQ_EQ_EQ: return "===";
-        case SYSML2_TOKEN_BANG_EQ_EQ: return "!==";
-        case SYSML2_TOKEN_LT: return "<";
-        case SYSML2_TOKEN_GT: return ">";
-        case SYSML2_TOKEN_LT_EQ: return "<=";
-        case SYSML2_TOKEN_GT_EQ: return ">=";
-        case SYSML2_TOKEN_AMP: return "&";
-        case SYSML2_TOKEN_PIPE: return "|";
-        case SYSML2_TOKEN_BANG: return "!";
-        case SYSML2_TOKEN_CARET: return "^";
-        case SYSML2_TOKEN_DOT_DOT_DOT: return "...";
-
-        default: return "UNKNOWN";
+    if (type >= 0 && type < SYSML2_TOKEN_COUNT && token_strings[type]) {
+        return token_strings[type];
     }
+    return "UNKNOWN";
 }
 
 bool sysml2_token_is_keyword(Sysml2TokenType type) {
