@@ -52,6 +52,21 @@ const char *sysml_kind_to_json_type(SysmlNodeKind kind) {
         case SYSML_KIND_METADATA_DEF:    return "MetadataDef";
         case SYSML_KIND_DATATYPE:        return "DataType";
 
+        /* KerML Definitions */
+        case SYSML_KIND_NAMESPACE:       return "Namespace";
+        case SYSML_KIND_TYPE:            return "Type";
+        case SYSML_KIND_CLASSIFIER:      return "Classifier";
+        case SYSML_KIND_CLASS:           return "Class";
+        case SYSML_KIND_STRUCTURE:       return "Structure";
+        case SYSML_KIND_METACLASS:       return "Metaclass";
+        case SYSML_KIND_ASSOCIATION:     return "Association";
+        case SYSML_KIND_ASSOC_STRUCT:    return "AssociationStructure";
+        case SYSML_KIND_INTERACTION:     return "Interaction";
+        case SYSML_KIND_BEHAVIOR:        return "Behavior";
+        case SYSML_KIND_FUNCTION:        return "Function";
+        case SYSML_KIND_PREDICATE:       return "Predicate";
+        case SYSML_KIND_MULTIPLICITY_DEF: return "Multiplicity";
+
         /* Usages */
         case SYSML_KIND_ATTRIBUTE_USAGE:   return "Attribute";
         case SYSML_KIND_ENUMERATION_USAGE: return "Enumeration";
@@ -84,6 +99,18 @@ const char *sysml_kind_to_json_type(SysmlNodeKind kind) {
         case SYSML_KIND_STAKEHOLDER_USAGE: return "Stakeholder";
         case SYSML_KIND_MESSAGE_USAGE:     return "Message";
 
+        /* KerML Features */
+        case SYSML_KIND_FEATURE:           return "Feature";
+        case SYSML_KIND_STEP:              return "Step";
+        case SYSML_KIND_EXPRESSION:        return "Expression";
+        case SYSML_KIND_BOOL_EXPRESSION:   return "BooleanExpression";
+        case SYSML_KIND_INVARIANT:         return "Invariant";
+        case SYSML_KIND_CONNECTOR:         return "Connector";
+        case SYSML_KIND_BINDING_CONNECTOR: return "BindingConnector";
+        case SYSML_KIND_SUCCESSION:        return "Succession";
+        case SYSML_KIND_KERML_FLOW:        return "Flow";
+        case SYSML_KIND_SUCCESSION_FLOW:   return "SuccessionFlow";
+
         /* Relationships */
         case SYSML_KIND_REL_CONNECTION:  return "Connection";
         case SYSML_KIND_REL_FLOW:        return "Flow";
@@ -93,6 +120,17 @@ const char *sysml_kind_to_json_type(SysmlNodeKind kind) {
         case SYSML_KIND_REL_TRANSITION:  return "Transition";
         case SYSML_KIND_REL_SUCCESSION:  return "Succession";
         case SYSML_KIND_REL_BIND:        return "Bind";
+
+        /* KerML Relationships */
+        case SYSML_KIND_REL_SPECIALIZATION:    return "Specialization";
+        case SYSML_KIND_REL_CONJUGATION:       return "Conjugation";
+        case SYSML_KIND_REL_SUBCLASSIFICATION: return "Subclassification";
+        case SYSML_KIND_REL_DISJOINING:        return "Disjoining";
+        case SYSML_KIND_REL_INVERTING:         return "FeatureInverting";
+        case SYSML_KIND_REL_TYPING:            return "FeatureTyping";
+        case SYSML_KIND_REL_SUBSETTING:        return "Subsetting";
+        case SYSML_KIND_REL_REDEFINITION:      return "Redefinition";
+        case SYSML_KIND_REL_FEATURING:         return "TypeFeaturing";
 
         case SYSML_KIND_UNKNOWN:
         default:
@@ -141,6 +179,21 @@ const char *sysml_kind_to_string(SysmlNodeKind kind) {
         case SYSML_KIND_METADATA_DEF:    return "MetadataDefinition";
         case SYSML_KIND_DATATYPE:        return "DataTypeDefinition";
 
+        /* KerML Definitions */
+        case SYSML_KIND_NAMESPACE:       return "Namespace";
+        case SYSML_KIND_TYPE:            return "Type";
+        case SYSML_KIND_CLASSIFIER:      return "Classifier";
+        case SYSML_KIND_CLASS:           return "Class";
+        case SYSML_KIND_STRUCTURE:       return "Structure";
+        case SYSML_KIND_METACLASS:       return "Metaclass";
+        case SYSML_KIND_ASSOCIATION:     return "Association";
+        case SYSML_KIND_ASSOC_STRUCT:    return "AssociationStructure";
+        case SYSML_KIND_INTERACTION:     return "Interaction";
+        case SYSML_KIND_BEHAVIOR:        return "Behavior";
+        case SYSML_KIND_FUNCTION:        return "Function";
+        case SYSML_KIND_PREDICATE:       return "Predicate";
+        case SYSML_KIND_MULTIPLICITY_DEF: return "MultiplicityDefinition";
+
         /* Usages */
         case SYSML_KIND_ATTRIBUTE_USAGE:   return "AttributeUsage";
         case SYSML_KIND_ENUMERATION_USAGE: return "EnumerationUsage";
@@ -173,6 +226,18 @@ const char *sysml_kind_to_string(SysmlNodeKind kind) {
         case SYSML_KIND_STAKEHOLDER_USAGE: return "StakeholderUsage";
         case SYSML_KIND_MESSAGE_USAGE:     return "MessageUsage";
 
+        /* KerML Features */
+        case SYSML_KIND_FEATURE:           return "Feature";
+        case SYSML_KIND_STEP:              return "Step";
+        case SYSML_KIND_EXPRESSION:        return "Expression";
+        case SYSML_KIND_BOOL_EXPRESSION:   return "BooleanExpression";
+        case SYSML_KIND_INVARIANT:         return "Invariant";
+        case SYSML_KIND_CONNECTOR:         return "Connector";
+        case SYSML_KIND_BINDING_CONNECTOR: return "BindingConnector";
+        case SYSML_KIND_SUCCESSION:        return "Succession";
+        case SYSML_KIND_KERML_FLOW:        return "Flow";
+        case SYSML_KIND_SUCCESSION_FLOW:   return "SuccessionFlow";
+
         /* Relationships */
         case SYSML_KIND_REL_CONNECTION:  return "ConnectionRelationship";
         case SYSML_KIND_REL_FLOW:        return "FlowRelationship";
@@ -182,6 +247,17 @@ const char *sysml_kind_to_string(SysmlNodeKind kind) {
         case SYSML_KIND_REL_TRANSITION:  return "TransitionRelationship";
         case SYSML_KIND_REL_SUCCESSION:  return "SuccessionRelationship";
         case SYSML_KIND_REL_BIND:        return "BindRelationship";
+
+        /* KerML Relationships */
+        case SYSML_KIND_REL_SPECIALIZATION:    return "SpecializationRelationship";
+        case SYSML_KIND_REL_CONJUGATION:       return "ConjugationRelationship";
+        case SYSML_KIND_REL_SUBCLASSIFICATION: return "SubclassificationRelationship";
+        case SYSML_KIND_REL_DISJOINING:        return "DisjoiningRelationship";
+        case SYSML_KIND_REL_INVERTING:         return "FeatureInvertingRelationship";
+        case SYSML_KIND_REL_TYPING:            return "FeatureTypingRelationship";
+        case SYSML_KIND_REL_SUBSETTING:        return "SubsettingRelationship";
+        case SYSML_KIND_REL_REDEFINITION:      return "RedefinitionRelationship";
+        case SYSML_KIND_REL_FEATURING:         return "TypeFeaturingRelationship";
 
         case SYSML_KIND_UNKNOWN:
         default:

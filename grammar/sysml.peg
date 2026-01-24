@@ -693,6 +693,47 @@ KW_WHEN        <- 'when'        !IdentCont _
 KW_WHILE       <- 'while'       !IdentCont _
 KW_XOR         <- 'xor'         !IdentCont _
 
+# KerML Keywords
+KW_ASSOC       <- 'assoc'       !IdentCont _
+KW_BEHAVIOR    <- 'behavior'    !IdentCont _
+KW_BOOL        <- 'bool'        !IdentCont _
+KW_CHAINS      <- 'chains'      !IdentCont _
+KW_CLASS       <- 'class'       !IdentCont _
+KW_CLASSIFIER  <- 'classifier'  !IdentCont _
+KW_COMPOSITE   <- 'composite'   !IdentCont _
+KW_CONJUGATE   <- 'conjugate'   !IdentCont _
+KW_CONJUGATES  <- 'conjugates'  !IdentCont _
+KW_CONJUGATION <- 'conjugation' !IdentCont _
+KW_CONNECTOR   <- 'connector'   !IdentCont _
+KW_DISJOINT    <- 'disjoint'    !IdentCont _
+KW_DISJOINING  <- 'disjoining'  !IdentCont _
+KW_EXPR        <- 'expr'        !IdentCont _
+KW_FEATURE     <- 'feature'     !IdentCont _
+KW_FEATURED    <- 'featured'    !IdentCont _
+KW_FEATURING   <- 'featuring'   !IdentCont _
+KW_FUNCTION    <- 'function'    !IdentCont _
+KW_INTERACTION <- 'interaction' !IdentCont _
+KW_INV         <- 'inv'         !IdentCont _
+KW_INVERSE     <- 'inverse'     !IdentCont _
+KW_INVERTING   <- 'inverting'   !IdentCont _
+KW_METACLASS   <- 'metaclass'   !IdentCont _
+KW_MULTIPLICITY <- 'multiplicity' !IdentCont _
+KW_NAMESPACE   <- 'namespace'   !IdentCont _
+KW_PORTION     <- 'portion'     !IdentCont _
+KW_PREDICATE   <- 'predicate'   !IdentCont _
+KW_REDEFINITION <- 'redefinition' !IdentCont _
+KW_SPECIALIZATION <- 'specialization' !IdentCont _
+KW_STEP        <- 'step'        !IdentCont _
+KW_STRUCT      <- 'struct'      !IdentCont _
+KW_SUBCLASSIFIER <- 'subclassifier' !IdentCont _
+KW_SUBSET      <- 'subset'      !IdentCont _
+KW_SUBTYPE     <- 'subtype'     !IdentCont _
+KW_TYPE        <- 'type'        !IdentCont _
+KW_TYPING      <- 'typing'      !IdentCont _
+KW_UNIONS      <- 'unions'      !IdentCont _
+KW_INTERSECTS  <- 'intersects'  !IdentCont _
+KW_DIFFERENCES <- 'differences' !IdentCont _
+
 # Operators
 SEMICOLON <- ';' _
 COMMA <- ',' _
@@ -761,7 +802,7 @@ MemberPrefix <- PrefixMetadata* VisibilityIndicator?
 RelationshipBody <- SEMICOLON / LBRACE AnnotatingElement* RBRACE
 
 # Package Body Elements
-PackageBodyElement <- _ MemberPrefix (DefinitionElement / AssertConstraintUsage / BindUsage / ShorthandFeatureMember / UsageElement / Import / Alias / FilterPackageMember / AnnotatingElement)
+PackageBodyElement <- _ MemberPrefix (DefinitionElement / KerMLFeatureElement / AssertConstraintUsage / BindUsage / ShorthandFeatureMember / UsageElement / Import / Alias / FilterPackageMember / AnnotatingElement)
 FilterPackageMember <- KW_FILTER OwnedExpression SEMICOLON
 
 # Packages
@@ -782,6 +823,219 @@ Alias <- KW_ALIAS (ShortName NAME / ShortName / NAME) KW_FOR QualifiedName Relat
 # Dependency
 Dependency <- PrefixMetadata* KW_DEPENDENCY (Identification KW_FROM)? QualifiedName (COMMA QualifiedName)* KW_TO QualifiedName (COMMA QualifiedName)* RelationshipBody
 
+# ===== KerML Type Elements =====
+# KerML NonFeature Elements (type hierarchy)
+KerMLDefinitionElement <- NamespaceDefinition / TypeDefinition / ClassifierDefinition
+                        / ClassDefinition / StructureDefinition / MetaclassDefinition
+                        / AssociationDefinition / AssociationStructureDefinition
+                        / InteractionDefinition / BehaviorDefinition / FunctionDefinition
+                        / PredicateDefinition / MultiplicityDefinition
+                        / SpecializationRelationship / ConjugationRelationship
+                        / SubclassificationRelationship / DisjoiningRelationship
+                        / FeatureInvertingRelationship / FeatureTypingRelationship
+                        / SubsettingRelationship / RedefinitionRelationship
+                        / TypeFeaturingRelationship
+
+# KerML Type Prefix (abstract, etc)
+KerMLTypePrefix <- KW_ABSTRACT? PrefixMetadata*
+
+# Namespace: namespace Name { ... }
+NamespaceDefinition <- KerMLTypePrefix KW_NAMESPACE < Identification >
+    { sysml_build_push(auxil, SYSML_KIND_NAMESPACE, $1, $1e - $1s); }
+    NamespaceBody { sysml_pop(auxil); }
+NamespaceBody <- SEMICOLON / LBRACE NamespaceBodyElement* RBRACE
+NamespaceBodyElement <- MemberPrefix (KerMLDefinitionElement / KerMLFeatureElement
+                                     / Import / Alias / AnnotatingElement)
+
+# Type: [abstract] type Name :> SuperType { ... }
+TypeDefinition <- KerMLTypePrefix KW_TYPE < Identification TypeDeclarationPart? >
+    { sysml_build_push(auxil, SYSML_KIND_TYPE, $1, $1e - $1s); }
+    KerMLTypeBody { sysml_pop(auxil); }
+TypeDeclarationPart <- Multiplicity? (KerMLSpecializationPart / KerMLConjugationPart)? TypeRelationshipPart*
+KerMLSpecializationPart <- SPECIALIZES QualifiedName (COMMA QualifiedName)*
+KerMLConjugationPart <- CONJUGATES QualifiedName
+TypeRelationshipPart <- DisjoiningPart / UnioningPart / IntersectingPart / DifferencingPart
+DisjoiningPart <- KW_DISJOINT KW_FROM QualifiedName (COMMA QualifiedName)*
+UnioningPart <- KW_UNIONS QualifiedName (COMMA QualifiedName)*
+IntersectingPart <- KW_INTERSECTS QualifiedName (COMMA QualifiedName)*
+DifferencingPart <- KW_DIFFERENCES QualifiedName (COMMA QualifiedName)*
+KerMLTypeBody <- SEMICOLON / LBRACE KerMLTypeBodyElement* RBRACE
+KerMLTypeBodyElement <- MemberPrefix (KerMLDefinitionElement / KerMLFeatureElement
+                                / Import / Alias / AnnotatingElement)
+CONJUGATES <- TILDE / KW_CONJUGATES
+
+# Classifier: [abstract] classifier Name :> SuperClassifier { ... }
+ClassifierDefinition <- KerMLTypePrefix KW_CLASSIFIER < Identification ClassifierDeclarationPart? >
+    { sysml_build_push(auxil, SYSML_KIND_CLASSIFIER, $1, $1e - $1s); }
+    KerMLTypeBody { sysml_pop(auxil); }
+ClassifierDeclarationPart <- Multiplicity? (KerMLSpecializationPart / KerMLConjugationPart)? TypeRelationshipPart*
+
+# Class: [abstract] class Name :> SuperClass { ... }
+ClassDefinition <- KerMLTypePrefix KW_CLASS < Identification ClassifierDeclarationPart? >
+    { sysml_build_push(auxil, SYSML_KIND_CLASS, $1, $1e - $1s); }
+    KerMLTypeBody { sysml_pop(auxil); }
+
+# Structure: [abstract] struct Name :> SuperStruct { ... }
+StructureDefinition <- KerMLTypePrefix KW_STRUCT < Identification ClassifierDeclarationPart? >
+    { sysml_build_push(auxil, SYSML_KIND_STRUCTURE, $1, $1e - $1s); }
+    KerMLTypeBody { sysml_pop(auxil); }
+
+# Metaclass: [abstract] metaclass Name :> SuperMeta { ... }
+MetaclassDefinition <- KerMLTypePrefix KW_METACLASS < Identification ClassifierDeclarationPart? >
+    { sysml_build_push(auxil, SYSML_KIND_METACLASS, $1, $1e - $1s); }
+    KerMLTypeBody { sysml_pop(auxil); }
+
+# Association: [abstract] assoc Name :> SuperAssoc { ... }
+AssociationDefinition <- KerMLTypePrefix KW_ASSOC !KW_STRUCT < Identification ClassifierDeclarationPart? >
+    { sysml_build_push(auxil, SYSML_KIND_ASSOCIATION, $1, $1e - $1s); }
+    KerMLTypeBody { sysml_pop(auxil); }
+
+# AssociationStructure: [abstract] assoc struct Name :> Super { ... }
+AssociationStructureDefinition <- KerMLTypePrefix KW_ASSOC KW_STRUCT < Identification ClassifierDeclarationPart? >
+    { sysml_build_push(auxil, SYSML_KIND_ASSOC_STRUCT, $1, $1e - $1s); }
+    KerMLTypeBody { sysml_pop(auxil); }
+
+# Interaction: [abstract] interaction Name :> Super { ... }
+InteractionDefinition <- KerMLTypePrefix KW_INTERACTION < Identification ClassifierDeclarationPart? >
+    { sysml_build_push(auxil, SYSML_KIND_INTERACTION, $1, $1e - $1s); }
+    KerMLTypeBody { sysml_pop(auxil); }
+
+# Behavior: [abstract] behavior Name :> Super { ... }
+BehaviorDefinition <- KerMLTypePrefix KW_BEHAVIOR < Identification ClassifierDeclarationPart? >
+    { sysml_build_push(auxil, SYSML_KIND_BEHAVIOR, $1, $1e - $1s); }
+    KerMLTypeBody { sysml_pop(auxil); }
+
+# Function: [abstract] function Name :> Super { ... result }
+FunctionDefinition <- KerMLTypePrefix KW_FUNCTION < Identification ClassifierDeclarationPart? >
+    { sysml_build_push(auxil, SYSML_KIND_FUNCTION, $1, $1e - $1s); }
+    KerMLFunctionBody { sysml_pop(auxil); }
+KerMLFunctionBody <- SEMICOLON / LBRACE KerMLFunctionBodyElement* ResultExpression? RBRACE
+KerMLFunctionBodyElement <- MemberPrefix (ReturnFeatureMember / KerMLParameterMember / KerMLDefinitionElement
+                                    / KerMLFeatureElement / Import / Alias / AnnotatingElement)
+ReturnFeatureMember <- KW_RETURN (FeatureDefinition / KerMLParameterMember)
+# Parameter-style features: in/out/inout name : Type;
+KerMLParameterMember <- Direction KW_FEATURE? < Identification? UsageSpecializations? > FeatureValue? UsageBody
+
+# Predicate: [abstract] predicate Name :> Super { ... }
+PredicateDefinition <- KerMLTypePrefix KW_PREDICATE < Identification ClassifierDeclarationPart? >
+    { sysml_build_push(auxil, SYSML_KIND_PREDICATE, $1, $1e - $1s); }
+    KerMLFunctionBody { sysml_pop(auxil); }
+
+# Multiplicity: multiplicity Name [bounds] { ... } OR multiplicity Name subsets Super [bounds] { ... }
+MultiplicityDefinition <- KW_MULTIPLICITY < Identification? (KW_SUBSETS QualifiedName)? Multiplicity? >
+    { sysml_build_push(auxil, SYSML_KIND_MULTIPLICITY_DEF, $1, $1e - $1s); }
+    KerMLTypeBody { sysml_pop(auxil); }
+
+# ===== KerML Relationship Elements =====
+# Specialization: specialization [name] subtype Specific :> General;
+SpecializationRelationship <- (KW_SPECIALIZATION Identification?)? KW_SUBTYPE
+    QualifiedName SPECIALIZES QualifiedName RelationshipBody
+
+# Conjugation: conjugation [name] conjugate Conjugated ~ Original;
+ConjugationRelationship <- (KW_CONJUGATION Identification?)? KW_CONJUGATE
+    QualifiedName CONJUGATES QualifiedName RelationshipBody
+
+# Subclassification: specialization [name] subclassifier Sub :> Super;
+SubclassificationRelationship <- (KW_SPECIALIZATION Identification?)? KW_SUBCLASSIFIER
+    QualifiedName SPECIALIZES QualifiedName RelationshipBody
+
+# Disjoining: disjoining [name] disjoint A from B;
+DisjoiningRelationship <- (KW_DISJOINING Identification?)? KW_DISJOINT
+    QualifiedName KW_FROM QualifiedName RelationshipBody
+
+# FeatureInverting: inverting [name] inverse A of B;
+FeatureInvertingRelationship <- (KW_INVERTING Identification?)? KW_INVERSE
+    QualifiedName KW_OF QualifiedName RelationshipBody
+
+# FeatureTyping: specialization [name] typing Feature : Type;
+FeatureTypingRelationship <- (KW_SPECIALIZATION Identification?)? KW_TYPING
+    QualifiedName TYPED_BY QualifiedName RelationshipBody
+
+# Subsetting: specialization [name] subset Sub :> Super;
+SubsettingRelationship <- (KW_SPECIALIZATION Identification?)? KW_SUBSET
+    QualifiedName SUBSETS QualifiedName RelationshipBody
+
+# Redefinition: specialization [name] redefinition Specific :>> General;
+RedefinitionRelationship <- (KW_SPECIALIZATION Identification?)? KW_REDEFINITION
+    QualifiedName REDEFINES QualifiedName RelationshipBody
+
+# TypeFeaturing: featuring [name] of Feature by Type;
+TypeFeaturingRelationship <- KW_FEATURING (Identification KW_OF)?
+    QualifiedName KW_BY QualifiedName RelationshipBody
+
+# ===== KerML Feature Elements =====
+KerMLFeatureElement <- FeatureDefinition / StepDefinition / ExpressionDefinition
+                     / BooleanExpressionDefinition / InvariantDefinition
+                     / ConnectorDefinition / BindingConnectorDefinition
+                     / SuccessionFeatureDefinition / KerMLFlowDefinition / SuccessionFlowDefinition
+
+# KerML Feature Prefix
+KerMLFeaturePrefix <- Direction? KW_DERIVED? KW_ABSTRACT? (KW_COMPOSITE / KW_PORTION)?
+                 (KW_READONLY / KW_CONSTANT)? KW_END? PrefixMetadata*
+
+# Feature: [direction] [abstract] feature Name : Type [mult] = value { ... }
+FeatureDefinition <- KerMLFeaturePrefix KW_FEATURE < KerMLFeatureDeclaration? >
+    { sysml_build_push(auxil, SYSML_KIND_FEATURE, $1, $1e - $1s); }
+    FeatureValue? KerMLTypeBody { sysml_pop(auxil); }
+KerMLFeatureDeclaration <- Identification? KerMLFeatureSpecializationPart? FeatureRelationshipPart*
+KerMLFeatureSpecializationPart <- (Multiplicity (TypedBy / Subsets / References / Redefines / Crosses)*)
+                                / ((TypedBy / Subsets / References / Redefines / Crosses)+)
+FeatureRelationshipPart <- TypeRelationshipPart / ChainingPart / InvertingFeaturePart / TypeFeaturingPart
+ChainingPart <- KW_CHAINS QualifiedName FeatureChain?
+InvertingFeaturePart <- KW_INVERSE KW_OF QualifiedName FeatureChain?
+TypeFeaturingPart <- KW_FEATURED KW_BY QualifiedName (COMMA QualifiedName)*
+
+# Step: step Name : Type { ... }
+StepDefinition <- KerMLFeaturePrefix KW_STEP < KerMLFeatureDeclaration? >
+    { sysml_build_push(auxil, SYSML_KIND_STEP, $1, $1e - $1s); }
+    FeatureValue? KerMLTypeBody { sysml_pop(auxil); }
+
+# Expression: expr Name : Type { ... result }
+ExpressionDefinition <- KerMLFeaturePrefix KW_EXPR < KerMLFeatureDeclaration? >
+    { sysml_build_push(auxil, SYSML_KIND_EXPRESSION, $1, $1e - $1s); }
+    FeatureValue? KerMLFunctionBody { sysml_pop(auxil); }
+
+# BooleanExpression: bool Name : Type { ... }
+BooleanExpressionDefinition <- KerMLFeaturePrefix KW_BOOL < KerMLFeatureDeclaration? >
+    { sysml_build_push(auxil, SYSML_KIND_BOOL_EXPRESSION, $1, $1e - $1s); }
+    FeatureValue? KerMLFunctionBody { sysml_pop(auxil); }
+
+# Invariant: inv [true|false] Name { ... }
+InvariantDefinition <- KerMLFeaturePrefix KW_INV (KW_TRUE / KW_FALSE)? < KerMLFeatureDeclaration? >
+    { sysml_build_push(auxil, SYSML_KIND_INVARIANT, $1, $1e - $1s); }
+    FeatureValue? KerMLFunctionBody { sysml_pop(auxil); }
+
+# Connector: connector Name from A to B { ... }
+ConnectorDefinition <- KerMLFeaturePrefix KW_CONNECTOR < KerMLConnectorDeclaration? >
+    { sysml_build_push(auxil, SYSML_KIND_CONNECTOR, $1, $1e - $1s); }
+    KerMLTypeBody { sysml_pop(auxil); }
+KerMLConnectorDeclaration <- KerMLFeatureDeclaration? (KerMLBinaryConnectorPart / NaryConnectorPart)?
+KerMLBinaryConnectorPart <- KW_FROM? ConnectorEndMember KW_TO ConnectorEndMember
+
+# BindingConnector: binding Name of A = B { ... }
+BindingConnectorDefinition <- KerMLFeaturePrefix KW_BINDING < KerMLBindingConnectorDeclaration? >
+    { sysml_build_push(auxil, SYSML_KIND_BINDING_CONNECTOR, $1, $1e - $1s); }
+    KerMLTypeBody { sysml_pop(auxil); }
+KerMLBindingConnectorDeclaration <- KerMLFeatureDeclaration? (KW_OF? ConnectorEndMember EQ ConnectorEndMember)?
+
+# Succession: succession Name first A then B { ... }
+SuccessionFeatureDefinition <- KerMLFeaturePrefix KW_SUCCESSION !KW_FLOW < KerMLSuccessionDeclaration? >
+    { sysml_build_push(auxil, SYSML_KIND_SUCCESSION, $1, $1e - $1s); }
+    KerMLTypeBody { sysml_pop(auxil); }
+KerMLSuccessionDeclaration <- KerMLFeatureDeclaration? (KW_FIRST? ConnectorEndMember KW_THEN ConnectorEndMember)?
+
+# Flow: flow Name of Payload from A to B { ... }
+KerMLFlowDefinition <- KerMLFeaturePrefix KW_FLOW < KerMLFlowDeclaration? >
+    { sysml_build_push(auxil, SYSML_KIND_KERML_FLOW, $1, $1e - $1s); }
+    KerMLTypeBody { sysml_pop(auxil); }
+KerMLFlowDeclaration <- KerMLFeatureDeclaration? (KW_OF QualifiedName)?
+                   (KW_FROM ConnectorEndMember KW_TO ConnectorEndMember)?
+
+# SuccessionFlow: succession flow Name of Payload from A to B { ... }
+SuccessionFlowDefinition <- KerMLFeaturePrefix KW_SUCCESSION KW_FLOW < KerMLFlowDeclaration? >
+    { sysml_build_push(auxil, SYSML_KIND_SUCCESSION_FLOW, $1, $1e - $1s); }
+    KerMLTypeBody { sysml_pop(auxil); }
+
 # Metadata
 PrefixMetadata <- HASH QualifiedName
 MetadataUsage <- AT QualifiedName MetadataUsageTail / AT? KW_METADATA Identification? (COLON QualifiedName)? (KW_ABOUT QualifiedName (COMMA QualifiedName)*)? MetadataBody
@@ -797,7 +1051,7 @@ Documentation <- KW_DOC Identification (KW_LOCALE STRING_VALUE)? RegularComment
 TextualRepresentation <- (KW_REP Identification)? KW_LANGUAGE STRING_VALUE RegularComment
 
 # Definitions
-DefinitionElement <- DatatypeDefinition / AttributeDefinition / EnumerationDefinition / ItemDefinition / PartDefinition / ConnectionDefinition / FlowDefinition / InterfaceDefinition / PortDefinition / AllocationDefinition / ActionDefinition / StateDefinition / ConstraintDefinition / RequirementDefinition / ConcernDefinition / CalcDefinition / CaseDefinition / AnalysisDefinition / VerificationDefinition / UseCaseDefinition / ViewDefinition / ViewpointDefinition / RenderingDefinition / MetadataDefinition / OccurrenceDefinition / Package / LibraryPackage / Dependency
+DefinitionElement <- KerMLDefinitionElement / DatatypeDefinition / AttributeDefinition / EnumerationDefinition / ItemDefinition / PartDefinition / ConnectionDefinition / FlowDefinition / InterfaceDefinition / PortDefinition / AllocationDefinition / ActionDefinition / StateDefinition / ConstraintDefinition / RequirementDefinition / ConcernDefinition / CalcDefinition / CaseDefinition / AnalysisDefinition / VerificationDefinition / UseCaseDefinition / ViewDefinition / ViewpointDefinition / RenderingDefinition / MetadataDefinition / OccurrenceDefinition / Package / LibraryPackage / Dependency
 
 # Definition Prefixes
 DefinitionPrefix <- PrefixMetadata / KW_ABSTRACT / KW_VARIATION / BasicDefinitionPrefix
@@ -886,7 +1140,7 @@ MetadataDefinition <- DefinitionPrefix* KW_METADATA KW_DEF < Identification Defi
 
 # Definition Body
 DefinitionBody <- SEMICOLON / LBRACE DefinitionBodyItem* RBRACE
-DefinitionBodyItem <- MemberPrefix (EndMember / DefinitionElement / AssertConstraintUsage / BindUsage / ShorthandFeatureMember / SuccessionMember / UsageElement / Import / Alias / AnnotatingElement)
+DefinitionBodyItem <- MemberPrefix (EndMember / DefinitionElement / KerMLFeatureElement / AssertConstraintUsage / BindUsage / ShorthandFeatureMember / SuccessionMember / UsageElement / Import / Alias / AnnotatingElement)
 DefinitionSpecializations <- DefinitionSpecialization+
 DefinitionSpecialization <- SPECIALIZES QualifiedName (COMMA QualifiedName)*
 
