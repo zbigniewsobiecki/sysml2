@@ -99,6 +99,7 @@ const char *sysml2_kind_to_json_type(SysmlNodeKind kind) {
         case SYSML_KIND_STAKEHOLDER_USAGE: return "Stakeholder";
         case SYSML_KIND_MESSAGE_USAGE:     return "Message";
         case SYSML_KIND_PARAMETER:         return "Parameter";
+        case SYSML_KIND_SHORTHAND_USAGE:   return "ShorthandUsage";
 
         /* KerML Features */
         case SYSML_KIND_FEATURE:           return "Feature";
@@ -111,6 +112,7 @@ const char *sysml2_kind_to_json_type(SysmlNodeKind kind) {
         case SYSML_KIND_SUCCESSION:        return "Succession";
         case SYSML_KIND_KERML_FLOW:        return "Flow";
         case SYSML_KIND_SUCCESSION_FLOW:   return "SuccessionFlow";
+        case SYSML_KIND_END_FEATURE:       return "EndFeature";
 
         /* Relationships */
         case SYSML_KIND_REL_CONNECTION:  return "Connection";
@@ -226,6 +228,7 @@ const char *sysml2_kind_to_string(SysmlNodeKind kind) {
         case SYSML_KIND_ACTOR_USAGE:       return "ActorUsage";
         case SYSML_KIND_STAKEHOLDER_USAGE: return "StakeholderUsage";
         case SYSML_KIND_MESSAGE_USAGE:     return "MessageUsage";
+        case SYSML_KIND_SHORTHAND_USAGE:   return "ShorthandUsage";
 
         /* KerML Features */
         case SYSML_KIND_FEATURE:           return "Feature";
@@ -238,6 +241,7 @@ const char *sysml2_kind_to_string(SysmlNodeKind kind) {
         case SYSML_KIND_SUCCESSION:        return "Succession";
         case SYSML_KIND_KERML_FLOW:        return "Flow";
         case SYSML_KIND_SUCCESSION_FLOW:   return "SuccessionFlow";
+        case SYSML_KIND_END_FEATURE:       return "EndFeature";
 
         /* Relationships */
         case SYSML_KIND_REL_CONNECTION:  return "ConnectionRelationship";
@@ -356,6 +360,7 @@ const char *sysml2_kind_to_keyword(SysmlNodeKind kind) {
         case SYSML_KIND_STAKEHOLDER_USAGE: return "stakeholder";
         case SYSML_KIND_MESSAGE_USAGE:    return "message";
         case SYSML_KIND_PARAMETER:        return "";  /* Bare parameter has no keyword */
+        case SYSML_KIND_SHORTHAND_USAGE:  return ":>>";  /* Shorthand uses redefines */
 
         /* KerML Features */
         case SYSML_KIND_FEATURE:          return "feature";
@@ -368,6 +373,7 @@ const char *sysml2_kind_to_keyword(SysmlNodeKind kind) {
         case SYSML_KIND_SUCCESSION:       return "succession";
         case SYSML_KIND_KERML_FLOW:       return "flow";
         case SYSML_KIND_SUCCESSION_FLOW:  return "succession flow";
+        case SYSML_KIND_END_FEATURE:      return "end";
 
         /* Relationships - these are not directly printed as keywords */
         case SYSML_KIND_REL_CONNECTION:   return "connect";

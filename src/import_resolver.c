@@ -653,3 +653,73 @@ SysmlSemanticModel **sysml2_resolver_get_all_models(
     *count = n;
     return models;
 }
+
+/* Recursively load all SysML/KerML files from a directory */
+static void preload_directory(
+    Sysml2ImportResolver *resolver,
+    const char *dir_path,
+    Sysml2DiagContext *diag,
+    int max_depth
+) {
+    if (max_depth <= 0) return;
+
+    DIR *d = opendir(dir_path);
+    if (!d) return;
+
+    struct dirent *entry;
+    while ((entry = readdir(d)) != NULL) {
+        /* Skip . and .. */
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        char *full_path = sysml2_path_join(dir_path, entry->d_name);
+        if (!full_path) continue;
+
+        if (sysml2_is_directory(full_path)) {
+            /* Recurse into subdirectory */
+            preload_directory(resolver, full_path, diag, max_depth - 1);
+        } else if (sysml2_is_file(full_path)) {
+            /* Check if it's a SysML or KerML file */
+            size_t len = strlen(entry->d_name);
+            bool is_sysml = (len > 6 && strcmp(entry->d_name + len - 6, ".sysml") == 0);
+            bool is_kerml = (len > 6 && strcmp(entry->d_name + len - 6, ".kerml") == 0);
+
+            if (is_sysml || is_kerml) {
+                /* Check if already cached */
+                char *abs_path = sysml2_get_realpath(full_path);
+                if (!abs_path) abs_path = strdup(full_path);
+
+                if (abs_path && !sysml2_resolver_get_cached(resolver, abs_path)) {
+                    /* Parse and cache the file */
+                    SysmlSemanticModel *model = parse_file(resolver, abs_path, diag);
+                    if (model) {
+                        sysml2_resolver_cache_model(resolver, abs_path, model);
+                    }
+                }
+                free(abs_path);
+            }
+        }
+        free(full_path);
+    }
+
+    closedir(d);
+}
+
+Sysml2Result sysml2_resolver_preload_libraries(
+    Sysml2ImportResolver *resolver,
+    Sysml2DiagContext *diag
+) {
+    if (!resolver) return SYSML2_ERROR_SEMANTIC;
+
+    /* Preload all SysML/KerML files from each library path */
+    for (size_t i = 0; i < resolver->path_count; i++) {
+        const char *lib_path = resolver->library_paths[i];
+        if (resolver->verbose) {
+            fprintf(stderr, "note: preloading library files from %s\n", lib_path);
+        }
+        preload_directory(resolver, lib_path, diag, 10);
+    }
+
+    return SYSML2_OK;
+}

@@ -130,6 +130,7 @@ typedef enum {
     SYSML_KIND_STAKEHOLDER_USAGE,
     SYSML_KIND_MESSAGE_USAGE,
     SYSML_KIND_PARAMETER,         /* Bare parameter (no keyword, just direction) */
+    SYSML_KIND_SHORTHAND_USAGE,   /* Anonymous usage with :>> redefines (scope container) */
 
     /* KerML Features (0x10xx continued) */
     SYSML_KIND_FEATURE,           /* KerML feature */
@@ -142,6 +143,7 @@ typedef enum {
     SYSML_KIND_SUCCESSION,        /* KerML succession */
     SYSML_KIND_KERML_FLOW,        /* KerML flow */
     SYSML_KIND_SUCCESSION_FLOW,   /* KerML succession flow */
+    SYSML_KIND_END_FEATURE,       /* End feature in connectors/interfaces */
 
     /* Relationships (0x30xx) */
     SYSML_KIND_REL_CONNECTION = 0x3000,
@@ -203,7 +205,8 @@ typedef enum {
      (k) == SYSML_KIND_BINDING_CONNECTOR || \
      (k) == SYSML_KIND_SUCCESSION || \
      (k) == SYSML_KIND_KERML_FLOW || \
-     (k) == SYSML_KIND_SUCCESSION_FLOW)
+     (k) == SYSML_KIND_SUCCESSION_FLOW || \
+     (k) == SYSML_KIND_END_FEATURE)
 
 /*
  * Statement Kind Enumeration

@@ -153,6 +153,21 @@ SysmlSemanticModel **sysml2_resolver_get_all_models(
 );
 
 /*
+ * Preload all library files from configured library paths
+ *
+ * Recursively parses and caches all .sysml and .kerml files in the
+ * library paths, making stdlib types available for validation.
+ *
+ * @param resolver Import resolver
+ * @param diag Diagnostic context for parse errors
+ * @return SYSML2_OK on success
+ */
+Sysml2Result sysml2_resolver_preload_libraries(
+    Sysml2ImportResolver *resolver,
+    Sysml2DiagContext *diag
+);
+
+/*
  * Find the file path for an import target
  *
  * Searches library paths for a file matching the package name.

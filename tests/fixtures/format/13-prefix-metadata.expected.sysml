@@ -2,7 +2,7 @@ metadata def SourceFile;
 
 
 @SourceFile {
-    path = "test.ts";
+    :>> path = "test.ts";
 }
 package MetadataTest {
     item def TrackedItem;

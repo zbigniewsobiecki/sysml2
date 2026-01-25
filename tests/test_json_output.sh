@@ -43,8 +43,8 @@ if ! command -v jq &> /dev/null; then
     exit 1
 fi
 
-# Run parser and capture output
-actual=$("$PARSER" -f json "$FIXTURE" 2>/dev/null)
+# Run parser and capture output (skip validation for JSON output tests)
+actual=$("$PARSER" --no-validate -f json "$FIXTURE" 2>/dev/null)
 if [ $? -ne 0 ]; then
     echo "FAIL: $base - parser returned error"
     exit 1

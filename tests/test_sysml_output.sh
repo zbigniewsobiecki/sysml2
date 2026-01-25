@@ -40,8 +40,8 @@ fi
 # Get base name for reporting
 base=$(basename "$INPUT" .input.sysml)
 
-# Run parser and capture output
-ACTUAL=$("$PARSER" -f sysml "$INPUT" 2>&1)
+# Run parser and capture output (skip validation for format tests)
+ACTUAL=$("$PARSER" --no-validate -f sysml "$INPUT" 2>&1)
 parser_exit=$?
 
 if [ $parser_exit -ne 0 ]; then

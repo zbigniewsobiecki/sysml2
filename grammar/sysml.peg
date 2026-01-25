@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 /* Forward declaration for AST builder */
 struct SysmlBuildContext;
@@ -376,6 +377,17 @@ static const char *sysml2_extract_name(SysmlParserContext *ctx, const char *text
     while (len > 0 && (*text == ' ' || *text == '\t' || *text == '\n' || *text == '\r')) { text++; len--; }
     if (len == 0) return NULL;
 
+    /* Skip leading multiplicity brackets [n] or [n..m] */
+    if (text[0] == '[') {
+        size_t i = 1;
+        while (i < len && text[i] != ']') i++;
+        if (i < len) i++; /* skip ] */
+        while (i < len && (text[i] == ' ' || text[i] == '\t')) i++; /* skip whitespace */
+        text += i;
+        len -= i;
+        if (len == 0) return NULL;
+    }
+
     /* Find end of name (stop at type markers) */
     size_t name_end = 0;
     int in_quote = 0;
@@ -442,6 +454,28 @@ typedef struct {
     const char *ref;
 } SysmlTypeRefResult;
 
+/* Helper: check if position starts with a SysML keyword (followed by non-identifier char) */
+static int sysml2_is_keyword_at(const char *text, size_t len, size_t pos) {
+    static const char *keywords[] = {
+        "redefines", "subsets", "references", "crosses",
+        "from", "to", "about", "by", "default", "defined",
+        "typed", "specializes", "conjugates", "inverse",
+        "chains", "featuring", "unions", "intersects",
+        "differences", "disjoint", NULL
+    };
+
+    size_t remaining = len - pos;
+    for (int i = 0; keywords[i]; i++) {
+        size_t klen = strlen(keywords[i]);
+        if (remaining >= klen &&
+            strncmp(text + pos, keywords[i], klen) == 0 &&
+            (remaining == klen || (!isalnum((unsigned char)text[pos + klen]) && text[pos + klen] != '_'))) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* Helper: extract next type reference from captured text at position i, returning operator and reference */
 static SysmlTypeRefResult sysml2_extract_next_type_ref(SysmlParserContext *ctx, const char *text, size_t len, size_t *pos) {
     SysmlTypeRefResult result = { SYSML_OP_NONE, NULL };
@@ -498,10 +532,20 @@ static SysmlTypeRefResult sysml2_extract_next_type_ref(SysmlParserContext *ctx, 
                 return result;
             }
 
-            /* Find end of type name (stop at comma, [, =, {, ;, another operator) */
+            /* Find end of type name (stop at comma, [, =, {, ;, another operator, or keyword) */
             size_t ref_start = i;
             size_t ref_end = i;
             while (i < len) {
+                /* Skip whitespace but check for keyword after */
+                if (text[i] == ' ' || text[i] == '\t' || text[i] == '\n' || text[i] == '\r') {
+                    while (i < len && (text[i] == ' ' || text[i] == '\t' || text[i] == '\n' || text[i] == '\r')) i++;
+                    /* Check for keyword after whitespace */
+                    if (i < len && sysml2_is_keyword_at(text, len, i)) {
+                        break;  /* Stop at keyword */
+                    }
+                    ref_end = i;
+                    continue;
+                }
                 if (text[i] == ',' || text[i] == '[' || text[i] == '=' ||
                     text[i] == '{' || text[i] == ';') {
                     break;
@@ -542,31 +586,121 @@ static SysmlTypeRefResult sysml2_extract_next_type_ref(SysmlParserContext *ctx, 
     return result;
 }
 
+/* Helper: extract a bare type reference (no operator prefix) starting at pos */
+static const char *sysml2_extract_bare_type_ref(SysmlParserContext *ctx, const char *text, size_t len, size_t *pos) {
+    if (!ctx->build_ctx || !text || len == 0) return NULL;
+
+    size_t i = *pos;
+
+    /* Skip whitespace */
+    while (i < len && (text[i] == ' ' || text[i] == '\t' || text[i] == '\n' || text[i] == '\r')) i++;
+    if (i >= len) {
+        *pos = i;
+        return NULL;
+    }
+
+    /* Check for keyword at start - shouldn't extract keywords as type refs */
+    if (sysml2_is_keyword_at(text, len, i)) {
+        *pos = i;
+        return NULL;
+    }
+
+    /* Find end of type name (stop at comma, [, =, {, ;, another operator, or keyword) */
+    size_t ref_start = i;
+    size_t ref_end = i;
+    while (i < len) {
+        /* Skip whitespace but check for keyword after */
+        if (text[i] == ' ' || text[i] == '\t' || text[i] == '\n' || text[i] == '\r') {
+            while (i < len && (text[i] == ' ' || text[i] == '\t' || text[i] == '\n' || text[i] == '\r')) i++;
+            /* Check for keyword after whitespace */
+            if (i < len && sysml2_is_keyword_at(text, len, i)) {
+                break;  /* Stop at keyword */
+            }
+            ref_end = i;
+            continue;
+        }
+        if (text[i] == ',' || text[i] == '[' || text[i] == '=' ||
+            text[i] == '{' || text[i] == ';') {
+            break;
+        }
+        if (text[i] == ':') {
+            if (i + 2 < len && text[i + 1] == ':' && text[i + 2] == '>') {
+                break;  /* ::> */
+            }
+            if (i + 1 < len && text[i + 1] == '>') {
+                break;  /* :> or :>> */
+            }
+            if (i + 1 < len && text[i + 1] == ':') {
+                /* :: in qualified name, keep going */
+                i += 2;
+                ref_end = i;
+                continue;
+            }
+            break;  /* Another : */
+        }
+        ref_end = i + 1;
+        i++;
+    }
+
+    /* Trim trailing whitespace */
+    while (ref_end > ref_start && (text[ref_end-1] == ' ' || text[ref_end-1] == '\t' ||
+           text[ref_end-1] == '\n' || text[ref_end-1] == '\r')) ref_end--;
+
+    *pos = i;
+    if (ref_end > ref_start) {
+        return sysml2_intern_n(ctx->build_ctx->intern, text + ref_start, ref_end - ref_start);
+    }
+    return NULL;
+}
+
+/* Helper: add a type reference with the given operator */
+static void sysml2_add_type_ref_with_op(SysmlParserContext *ctx, SysmlNode *node, SysmlOperatorKind op, const char *ref) {
+    if (!ctx->build_ctx || !node || !ref) return;
+    switch (op) {
+        case SYSML_OP_TYPED_BY:
+            sysml2_build_add_typed_by(ctx->build_ctx, node, ref);
+            break;
+        case SYSML_OP_SPECIALIZES:
+            sysml2_build_add_specializes(ctx->build_ctx, node, ref);
+            break;
+        case SYSML_OP_REDEFINES:
+            sysml2_build_add_redefines(ctx->build_ctx, node, ref);
+            break;
+        case SYSML_OP_REFERENCES:
+            sysml2_build_add_references(ctx->build_ctx, node, ref);
+            break;
+        default:
+            break;
+    }
+}
+
 /* Helper: extract all type references from captured text */
 static void sysml2_extract_all_type_refs(SysmlParserContext *ctx, SysmlNode *node, const char *text, size_t len) {
     if (!ctx->build_ctx || !node || !text || len == 0) return;
 
     size_t pos = 0;
+    SysmlOperatorKind last_op = SYSML_OP_NONE;
+
     while (pos < len) {
+        /* Skip whitespace */
+        while (pos < len && (text[pos] == ' ' || text[pos] == '\t' || text[pos] == '\n' || text[pos] == '\r')) pos++;
+        if (pos >= len) break;
+
+        /* Check for comma continuation - extract bare type ref with previous operator */
+        if (text[pos] == ',' && last_op != SYSML_OP_NONE) {
+            pos++;  /* Skip comma */
+            const char *ref = sysml2_extract_bare_type_ref(ctx, text, len, &pos);
+            if (ref) {
+                sysml2_add_type_ref_with_op(ctx, node, last_op, ref);
+            }
+            continue;
+        }
+
         SysmlTypeRefResult result = sysml2_extract_next_type_ref(ctx, text, len, &pos);
         if (result.op == SYSML_OP_NONE || !result.ref) break;
 
-        switch (result.op) {
-            case SYSML_OP_TYPED_BY:
-                sysml2_build_add_typed_by(ctx->build_ctx, node, result.ref);
-                break;
-            case SYSML_OP_SPECIALIZES:
-                sysml2_build_add_specializes(ctx->build_ctx, node, result.ref);
-                break;
-            case SYSML_OP_REDEFINES:
-                sysml2_build_add_redefines(ctx->build_ctx, node, result.ref);
-                break;
-            case SYSML_OP_REFERENCES:
-                sysml2_build_add_references(ctx->build_ctx, node, result.ref);
-                break;
-            default:
-                break;
-        }
+        last_op = result.op;  /* Remember operator for comma continuation */
+        sysml2_add_type_ref_with_op(ctx, node, result.op, result.ref);
     }
 }
 
@@ -591,6 +725,38 @@ static void sysml2_build_push(SysmlParserContext *ctx, SysmlNodeKind kind, const
     if (node) {
         /* Extract all type references with correct operator types */
         sysml2_extract_all_type_refs(ctx, node, text, len);
+        sysml2_build_add_element(ctx->build_ctx, node);
+        sysml2_build_push_scope(ctx->build_ctx, node->id);
+    }
+}
+
+/* Build shorthand usage node, add to model, push scope for body elements */
+static void sysml2_build_push_shorthand(SysmlParserContext *ctx, const char *text, size_t len) {
+    if (!ctx->build_ctx) return;
+
+    /* First, attach any pending statements to the CURRENT scope (parent) before creating child */
+    const char *current_scope = sysml2_build_current_scope(ctx->build_ctx);
+    if (current_scope) {
+        for (size_t i = ctx->build_ctx->element_count; i > 0; i--) {
+            SysmlNode *parent_node = ctx->build_ctx->elements[i - 1];
+            if (parent_node->id == current_scope) {
+                sysml2_attach_pending_stmts(ctx->build_ctx, parent_node);
+                break;
+            }
+        }
+    }
+
+    /* Extract name from the qualified name (redefines target) - use it as the node name */
+    const char *name = sysml2_extract_name(ctx, text, len);
+
+    /* Create shorthand usage node - acts as a scope container */
+    SysmlNode *node = sysml2_build_node(ctx->build_ctx, SYSML_KIND_SHORTHAND_USAGE, name);
+    if (node) {
+        /* Add redefines relationship to the target */
+        if (text && len > 0) {
+            const char *target = sysml2_intern_n(ctx->build_ctx->intern, text, len);
+            sysml2_build_add_redefines(ctx->build_ctx, node, target);
+        }
         sysml2_build_add_element(ctx->build_ctx, node);
         sysml2_build_push_scope(ctx->build_ctx, node->id);
     }
@@ -1412,42 +1578,48 @@ KerMLConnectorDeclaration <- KerMLFeatureDeclaration FeatureValue? KW_FROM Conne
 KerMLBinaryConnectorPart <- KW_FROM? ConnectorEndMember KW_TO ConnectorEndMember
 
 # BindingConnector: binding Name of A = B { ... }
-BindingConnectorDefinition <- KerMLFeaturePrefix KW_BINDING < KerMLBindingConnectorDeclaration? >
+# Named binding has explicit feature declaration with 'of' separating name from endpoints
+# Anonymous binding has no name, just endpoints: binding x = y;
+BindingConnectorDefinition <- BindingConnectorNamed / BindingConnectorAnon
+BindingConnectorNamed <- KerMLFeaturePrefix KW_BINDING < KerMLFeatureDeclaration > KW_OF
     { sysml2_build_push(auxil, SYSML_KIND_BINDING_CONNECTOR, $1, $1e - $1s); }
-    KerMLTypeBody { sysml2_pop(auxil); }
-# Three alternatives to handle PEG greedy matching for 'binding result = trueValue;'
-# Order matters: try specific patterns before general ones
-KerMLBindingConnectorDeclaration <- KerMLFeatureDeclaration KW_OF ConnectorEndMember EQ ConnectorEndMember
-                                  / KW_ALL? KW_OF? ConnectorEndMember EQ ConnectorEndMember
-                                  / KerMLFeatureDeclaration
+    ConnectorEndMember EQ ConnectorEndMember KerMLTypeBody { sysml2_pop(auxil); }
+BindingConnectorAnon <- KerMLFeaturePrefix KW_BINDING KW_ALL? KW_OF?
+    { sysml2_build_push(auxil, SYSML_KIND_BINDING_CONNECTOR, "", 0); }
+    (ConnectorEndMember EQ ConnectorEndMember)? KerMLTypeBody { sysml2_pop(auxil); }
 
 # Succession: [all] succession Name first A then B { ... }
-SuccessionFeatureDefinition <- KerMLFeaturePrefix KW_SUCCESSION KW_ALL? !KW_FLOW < KerMLSuccessionDeclaration? >
+# Named succession has explicit feature declaration before 'first' or 'then'
+# Anonymous succession starts with 'first' or endpoint directly
+SuccessionFeatureDefinition <- SuccessionNamed / SuccessionAnon
+SuccessionNamed <- KerMLFeaturePrefix KW_SUCCESSION KW_ALL? !KW_FLOW < KerMLFeatureDeclaration >
     { sysml2_build_push(auxil, SYSML_KIND_SUCCESSION, $1, $1e - $1s); }
-    KerMLTypeBody { sysml2_pop(auxil); }
+    (KW_FIRST SuccessionConnectorEnd KW_THEN SuccessionConnectorEnd)? KerMLTypeBody { sysml2_pop(auxil); }
+SuccessionAnon <- KerMLFeaturePrefix KW_SUCCESSION KW_ALL? !KW_FLOW
+    { sysml2_build_push(auxil, SYSML_KIND_SUCCESSION, "", 0); }
+    (KW_FIRST? SuccessionConnectorEnd KW_THEN SuccessionConnectorEnd)? KerMLTypeBody { sysml2_pop(auxil); }
 # Official grammar: 'first'? is optional (KEBNF line 850)
 # SuccessionConnectorEnd has optional multiplicity like [1] before the name
-# Order matters: try specific patterns before general ones
-KerMLSuccessionDeclaration <- KerMLFeatureDeclaration? KW_FIRST SuccessionConnectorEnd KW_THEN SuccessionConnectorEnd
-                            / SuccessionConnectorEnd KW_THEN SuccessionConnectorEnd
-                            / KerMLFeatureDeclaration
 SuccessionConnectorEnd <- Multiplicity? ConnectorEndMember
 
 # Flow: flow Name of Payload from A to B { ... } or flow A to B { ... }
-KerMLFlowDefinition <- KerMLFeaturePrefix KW_FLOW < KerMLFlowDeclaration? >
+# Named flow has explicit feature declaration, anonymous flow starts with 'of', 'from', or endpoint
+KerMLFlowDefinition <- KerMLFlowNamed / KerMLFlowAnon
+KerMLFlowNamed <- KerMLFeaturePrefix KW_FLOW < KerMLFeatureDeclaration > (KW_OF QualifiedName)?
     { sysml2_build_push(auxil, SYSML_KIND_KERML_FLOW, $1, $1e - $1s); }
-    KerMLTypeBody { sysml2_pop(auxil); }
-# Order matters: try explicit 'from' patterns first, then implicit first endpoint, then declaration-only
-KerMLFlowDeclaration <- KerMLFeatureDeclaration (KW_OF QualifiedName)? KW_FROM ConnectorEndMember KW_TO ConnectorEndMember
-                      / (KW_OF QualifiedName)? KW_FROM ConnectorEndMember KW_TO ConnectorEndMember
-                      / KerMLFeatureDeclaration (KW_OF QualifiedName)? ConnectorEndMember KW_TO ConnectorEndMember
-                      / ConnectorEndMember KW_TO ConnectorEndMember
-                      / KerMLFeatureDeclaration (KW_OF QualifiedName)?
+    (KW_FROM ConnectorEndMember KW_TO ConnectorEndMember / ConnectorEndMember KW_TO ConnectorEndMember)? KerMLTypeBody { sysml2_pop(auxil); }
+KerMLFlowAnon <- KerMLFeaturePrefix KW_FLOW (KW_OF QualifiedName)?
+    { sysml2_build_push(auxil, SYSML_KIND_KERML_FLOW, "", 0); }
+    (KW_FROM ConnectorEndMember KW_TO ConnectorEndMember / ConnectorEndMember KW_TO ConnectorEndMember)? KerMLTypeBody { sysml2_pop(auxil); }
 
 # SuccessionFlow: succession flow Name of Payload from A to B { ... }
-SuccessionFlowDefinition <- KerMLFeaturePrefix KW_SUCCESSION KW_FLOW < KerMLFlowDeclaration? >
+SuccessionFlowDefinition <- SuccessionFlowNamed / SuccessionFlowAnon
+SuccessionFlowNamed <- KerMLFeaturePrefix KW_SUCCESSION KW_FLOW < KerMLFeatureDeclaration > (KW_OF QualifiedName)?
     { sysml2_build_push(auxil, SYSML_KIND_SUCCESSION_FLOW, $1, $1e - $1s); }
-    KerMLTypeBody { sysml2_pop(auxil); }
+    (KW_FROM ConnectorEndMember KW_TO ConnectorEndMember / ConnectorEndMember KW_TO ConnectorEndMember)? KerMLTypeBody { sysml2_pop(auxil); }
+SuccessionFlowAnon <- KerMLFeaturePrefix KW_SUCCESSION KW_FLOW (KW_OF QualifiedName)?
+    { sysml2_build_push(auxil, SYSML_KIND_SUCCESSION_FLOW, "", 0); }
+    (KW_FROM ConnectorEndMember KW_TO ConnectorEndMember / ConnectorEndMember KW_TO ConnectorEndMember)? KerMLTypeBody { sysml2_pop(auxil); }
 
 # Metadata
 PrefixMetadata <- HASH < QualifiedName > { sysml2_capture_prefix_metadata(auxil, $1, $1e - $1s); }
@@ -1488,8 +1660,11 @@ EnumerationBody <- SEMICOLON / LBRACE (EnumeratedValue / AnnotatingElement)* RBR
 EnumeratedValue <- _ MemberPrefix EnumeratedValueVariant
 EnumeratedValueVariant <- KW_ENUM? < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_ENUMERATION_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
                         / KW_VARIANT UsageElement
-OccurrenceDefinition <- DefinitionPrefix* KW_OCCURRENCE KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_OCCURRENCE_DEF, $1, $1e - $1s); } OccurrenceDefinitionBody { sysml2_pop(auxil); }
-                      / DefinitionPrefix* KW_DEF Identification DefinitionSpecializations? OccurrenceDefinitionBody
+# OccurrenceDefinition: occurrence def X or individual def X (shorthand)
+OccurrenceDefinition <- OccurrenceDefinitionExplicit / OccurrenceDefinitionShorthand
+OccurrenceDefinitionExplicit <- DefinitionPrefix* KW_OCCURRENCE KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_OCCURRENCE_DEF, $1, $1e - $1s); } OccurrenceDefinitionBody { sysml2_pop(auxil); }
+# individual def X :> Y - shorthand for occurrence def with individual prefix
+OccurrenceDefinitionShorthand <- DefinitionPrefix* KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_OCCURRENCE_DEF, $1, $1e - $1s); } OccurrenceDefinitionBody { sysml2_pop(auxil); }
 OccurrenceDefinitionBody <- SEMICOLON / LBRACE OccurrenceDefinitionMember* RBRACE
 # ThenMessageUsage for 'then message x of T' syntax in occurrences
 ThenMessageUsage <- KW_THEN MessageUsage
@@ -1567,7 +1742,8 @@ DefinitionSpecialization <- SPECIALIZES QualifiedName (COMMA QualifiedName)*
 
 # Usages
 UsageElement <- AssertSatisfyUsage / SatisfyUsage / ExhibitStateUsage / PerformActionUsage / MessageUsage / ReferenceUsage / AttributeUsage / EnumerationUsage / ItemUsage / PartUsage / ConnectionUsage / FlowUsage / InterfaceUsage / PortUsage / AllocationUsage / ActionUsage / StateUsage / ConstraintUsage / RequirementUsage / ConcernUsage / CalcUsage / CaseUsage / AnalysisUsage / VerificationUsage / UseCaseUsage / ViewUsage / ViewpointUsage / RenderingUsage / SuccessionUsage / PortionUsage / SubjectUsage / ActorUsage / StakeholderUsage / IncludeUseCaseUsage / EventOccurrenceUsage / EventUsage / OccurrenceUsage
-PortionUsage <- BasicUsagePrefix* KW_INDIVIDUAL? PortionKind PortionUsageKind? UsageDeclaration UsageBody
+# PortionUsage: snapshot/timeslice part/item/etc. needs scope for body
+PortionUsage <- BasicUsagePrefix* KW_INDIVIDUAL? PortionKind PortionUsageKind? < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_PORTION_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
 PortionKind <- KW_SNAPSHOT / KW_TIMESLICE
 PortionUsageKind <- KW_ITEM / KW_PART / KW_OCCURRENCE / KW_ATTRIBUTE
 # Succession: the optional UsageDeclaration can't consume 'first' keyword
@@ -1586,7 +1762,8 @@ ReferenceUsage <- Direction? KW_REF PrefixMetadata* RefBehavioralKeyword? UsageD
                 / Direction? RefPrefix PrefixMetadata* UsageDeclaration UsageBody
 StructureUsageElement <- AttributeUsage / ItemUsage / PartUsage / PortUsage / ConnectionUsage / FlowUsage / InterfaceUsage
 BehaviorUsageElement <- ActionUsage / StateUsage / ConstraintUsage / CalcUsage
-ActionUsageElement <- ActionUsage / ParameterUsage / PerformActionUsage / SendAction / AcceptAction / AssignmentAction / IfAction / WhileLoop / ForLoop / ControlNode / SuccessionMember
+# GuardedSuccession before IfAction: 'if cond then target;' is succession, not if-then with body
+ActionUsageElement <- ActionUsage / ParameterUsage / PerformActionUsage / SendAction / AcceptAction / AssignmentAction / GuardedSuccession / IfAction / WhileLoop / ForLoop / ControlNode / SuccessionMember
 ConstraintUsageElement <- ParameterUsage / ReturnUsage / ConstraintUsage
 RequirementUsageElement <- SubjectUsage / ActorUsage / StakeholderUsage / AssumeConstraint / RequireConstraint / AssertSatisfyUsage / SatisfyUsage / RequirementUsage / ConcernUsage / ConstraintUsage / ObjectiveUsage / FrameUsage / VerifyRequirementUsage / RequirementReference / VerificationUsage / CalcUsage / ActionUsage / AllocationUsage / ParameterUsage / StructureUsageElement
 CalcUsageElement <- CalcUsage / ReturnUsage / ActionUsageElement / ConstraintUsage / StructureUsageElement
@@ -1621,12 +1798,13 @@ BinaryConnectorPart <- ConnectorEndMember KW_TO ConnectorEndMember
 NaryConnectorPart <- LPAREN ConnectorEndMember (COMMA ConnectorEndMember)+ RPAREN
 ConnectorEndMember <- (NAME REFERENCES)? Multiplicity? QualifiedName FeatureChain? (REFERENCES QualifiedName FeatureChain?)?
 # Flow can be: flow name of Type from x to y; OR flow x to y; OR flow name;
+# Named flows get scope tracking; anonymous and shorthand flows do not
 FlowUsage <- UsagePrefix* KW_SUCCESSION? KW_FLOW FlowBody
 # Restructured to avoid partial match issues with optional FlowConnectionPart
 # Supports: flow : Type of Payload from x to y; OR flow name of Payload from x to y;
 FlowBody <- (COLONGTGT / COLONGT) QualifiedName FlowConnectionPart UsageBody
           / FlowConnectionPart UsageBody
-          / UsageDeclaration FlowPayload? (FlowConnectionPart UsageBody / UsageBody)
+          / < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_FLOW_USAGE, $1, $1e - $1s); } FlowPayload? (FlowConnectionPart UsageBody / UsageBody) { sysml2_pop(auxil); }
 FlowPayload <- KW_OF < NAME COLON QualifiedName > Multiplicity? { if (auxil->build_ctx) sysml2_capture_flow_payload(auxil->build_ctx, $1, $1e - $1s); }
              / KW_OF < QualifiedName > Multiplicity? { if (auxil->build_ctx) sysml2_capture_flow_payload(auxil->build_ctx, $2, $2e - $2s); }
 FlowConnectionPart <- FlowConnectionPartFrom / FlowConnectionPartTo / FlowConnectionPartReverse
@@ -1785,15 +1963,41 @@ UsageBodyItem <- MemberPrefix (DefinitionElement / AssertConstraintUsage / BindU
 # Shorthand feature member like :>> name = value; or :> name = value; or :>> name : Type { }
 # Also supports comma-separated targets: :>> a, b;
 # And redefines with optional type: redefines name : Type { }
-ShorthandFeatureMember <- < (COLONGTGT / COLONGT) QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)* (COLON QualifiedName Multiplicity? KerMLFeatureSpecialization*)? FeatureValue? UsageBody > { if (auxil->build_ctx) sysml2_capture_shorthand_feature(auxil->build_ctx, $1, $1e - $1s); }
-                        / < KW_REDEFINES QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)* (COLON QualifiedName Multiplicity? KerMLFeatureSpecialization*)? FeatureValue? UsageBody > { if (auxil->build_ctx) sysml2_capture_shorthand_feature(auxil->build_ctx, $2, $2e - $2s); }
+# With body variant needs scope tracking for nested items
+ShorthandFeatureMember <- ShorthandFeatureWithBody
+                        / ShorthandFeatureSimple
+                        / ShorthandRedefinesWithBody
+                        / ShorthandRedefinesSimple
                         / ImplicitInvocation
                         / ImplicitShorthand
+# Shorthand with body - push/pop scope for nested elements
+ShorthandFeatureWithBody <- (COLONGTGT / COLONGT) < QualifiedName > FeatureChain? (COMMA QualifiedName FeatureChain?)* (COLON QualifiedName Multiplicity? KerMLFeatureSpecialization*)? FeatureValue?
+    { sysml2_build_push_shorthand(auxil, $1, $1e - $1s); }
+    LBRACE UsageBodyItem* RBRACE
+    { sysml2_pop(auxil); }
+# Shorthand without body - simple capture
+ShorthandFeatureSimple <- < (COLONGTGT / COLONGT) QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)* (COLON QualifiedName Multiplicity? KerMLFeatureSpecialization*)? FeatureValue? SEMICOLON > { if (auxil->build_ctx) sysml2_capture_shorthand_feature(auxil->build_ctx, $1, $1e - $1s); }
+# redefines keyword with body - push/pop scope for nested elements
+ShorthandRedefinesWithBody <- KW_REDEFINES < QualifiedName > FeatureChain? (COMMA QualifiedName FeatureChain?)* (COLON QualifiedName Multiplicity? KerMLFeatureSpecialization*)? FeatureValue?
+    { sysml2_build_push_shorthand(auxil, $1, $1e - $1s); }
+    LBRACE UsageBodyItem* RBRACE
+    { sysml2_pop(auxil); }
+# redefines keyword without body - simple capture
+ShorthandRedefinesSimple <- < KW_REDEFINES QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)* (COLON QualifiedName Multiplicity? KerMLFeatureSpecialization*)? FeatureValue? SEMICOLON > { if (auxil->build_ctx) sysml2_capture_shorthand_feature(auxil->build_ctx, $1, $1e - $1s); }
 # Implicit invocation like P::Q(args) as a body element
 # Must not match usage keywords that take arguments like connect, allocate
 ImplicitInvocation <- !SpecializationKeyword !UsageKeyword < QualifiedName ArgumentList > { if (auxil->build_ctx) sysml2_capture_shorthand_feature(auxil->build_ctx, $1, $1e - $1s); }
 UsageKeyword <- ('connect' / 'allocate' / 'include' / 'perform' / 'exhibit' / 'send' / 'accept') !IdentCont
-ImplicitShorthand <- !SpecializationKeyword < NAME FeatureChain? FeatureSpecialization* FeatureValue? UsageBody > { if (auxil->build_ctx) sysml2_capture_shorthand_feature(auxil->build_ctx, $1, $1e - $1s); }
+# Usage element keywords that start a UsageElement (item, part, action, etc.)
+# ImplicitShorthand should not match these - they're handled by UsageElement
+UsageElementKeyword <- ('item' / 'part' / 'attribute' / 'port' / 'connection' / 'flow' / 'interface' /
+                        'action' / 'state' / 'constraint' / 'requirement' / 'concern' /
+                        'calc' / 'case' / 'analysis' / 'verification' / 'use' /
+                        'view' / 'viewpoint' / 'rendering' / 'message' / 'occurrence' /
+                        'allocation' / 'ref' / 'event' / 'snapshot' / 'timeslice' /
+                        'succession' / 'actor' / 'stakeholder' / 'subject' /
+                        'metadata' / 'exhibit' / 'perform' / 'include' / 'satisfy' / 'enum') !IdentCont
+ImplicitShorthand <- !SpecializationKeyword !UsageElementKeyword < NAME FeatureChain? FeatureSpecialization* FeatureValue? UsageBody > { if (auxil->build_ctx) sysml2_capture_shorthand_feature(auxil->build_ctx, $1, $1e - $1s); }
 
 # === BIND STATEMENT ===
 # Supports: bind x = y; or binding [mult] bind [mult] x = [mult] y;
@@ -1802,9 +2006,14 @@ BindUsageBinding <- KW_BINDING Multiplicity? KW_BIND Multiplicity? < QualifiedNa
 BindUsageSimple <- KW_BIND Multiplicity? < QualifiedName FeatureChain? > EQ Multiplicity? < QualifiedName FeatureChain? > RelationshipBody { if (auxil->build_ctx) sysml2_capture_bind(auxil->build_ctx, $1, $1e - $1s, $2, $2e - $2s); }
 
 # === ASSERT CONSTRUCTS ===
+# Assert constraint needs scope for body elements (parameters, etc.)
+# With 'constraint' keyword: assert constraint myName { } - creates named constraint
+# Without keyword: assert ExistingConstraint { } - anonymous assertion referencing type
 AssertConstraintUsage <- KW_ASSERT KW_NOT? AssertConstraintBody
-AssertConstraintBody <- KW_CONSTRAINT UsageDeclaration? ConstraintBody
-                      / UsageDeclaration ConstraintBody
+AssertConstraintBody <- AssertConstraintWithKW / AssertConstraintReference
+AssertConstraintWithKW <- KW_CONSTRAINT < UsageDeclaration? > { sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_USAGE, $1, $1e - $1s); } ConstraintBody { sysml2_pop(auxil); }
+# Reference to existing constraint - anonymous assertion (identifier is TYPE not NAME)
+AssertConstraintReference <- UsageDeclaration { sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_USAGE, "", 0); } ConstraintBody { sysml2_pop(auxil); }
 
 # === SATISFY USAGE ===
 # Pattern 1: satisfy [requirement] usageDecl by target body
@@ -1824,7 +2033,12 @@ RequireConstraint <- KW_REQUIRE < PrefixMetadata* KW_CONSTRAINT UsageDeclaration
 
 # === END MEMBER FOR CONNECTIONS ===
 # End member can have identification before multiplicity: end inCart[0..1] item cart: Type;
-EndMember <- KW_END < Identification? Multiplicity? KW_REF? (KW_PORT / KW_ITEM / KW_PART / KW_OCCURRENCE / KW_ACTION)? UsageDeclaration UsageBody > { if (auxil->build_ctx) sysml2_capture_end_member(auxil->build_ctx, $1, $1e - $1s); }
+# End member creates a proper scope for nested features
+# Capture the full declaration; sysml2_extract_name skips multiplicity brackets
+EndMember <- KW_END EndMemberBody
+EndMemberBody <- < Identification? Multiplicity? KW_REF? EndMemberKind UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_END_FEATURE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
+EndMemberKind <- KW_PORT / KW_ITEM / KW_PART / KW_OCCURRENCE / KW_ACTION / &EMPTY
+EMPTY <- ''
 
 # === MESSAGE USAGE ===
 # Message can have 'of' for payload type: message name of Type from x to y;

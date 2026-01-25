@@ -58,6 +58,11 @@ Sysml2PipelineContext *sysml2_pipeline_create(
         sysml2_resolver_add_path(ctx->resolver, options->library_paths[i]);
     }
 
+    /* Preload stdlib files if validation is enabled */
+    if (!options->parse_only && !options->no_resolve && ctx->resolver->path_count > 0) {
+        sysml2_resolver_preload_libraries(ctx->resolver, ctx->diag);
+    }
+
     return ctx;
 }
 

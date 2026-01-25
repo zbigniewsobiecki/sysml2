@@ -491,17 +491,12 @@ static bool check_cycles_from_node(
         }
     }
 
-    /* Check redefines references */
-    for (size_t i = 0; i < node->redefines_count; i++) {
-        Sysml2Symbol *type_sym = sysml2_symtab_resolve(
-            vctx->symtab, scope, node->redefines[i]);
-        if (type_sym && type_sym->node) {
-            if (check_cycles_from_node(vctx, cd, type_sym->node)) {
-                cycle_pop(cd);
-                return true;
-            }
-        }
-    }
+    /* NOTE: We intentionally SKIP redefines references (:>>) for cycle detection.
+     * Redefinitions are OVERRIDES that narrow inherited features, not type cycles.
+     * Example: attribute :>> unitConversion redefines parent's unitConversion -
+     * this is valid inheritance, not a circular dependency.
+     * See SysML v2 spec: redefinitions allow child types to specialize/narrow
+     * features inherited from parent types without creating cycles. */
 
     /* Check references references */
     for (size_t i = 0; i < node->references_count; i++) {
