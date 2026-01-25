@@ -39,6 +39,21 @@ endif()
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)  # for packcc-generated parser
 
+# Parser generation from grammar using packcc
+find_program(PACKCC packcc)
+if(PACKCC)
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/sysml_parser.c
+        COMMAND ${PACKCC} -o ${CMAKE_CURRENT_SOURCE_DIR}/src/sysml_parser
+                ${CMAKE_CURRENT_SOURCE_DIR}/grammar/sysml.peg
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/grammar/sysml.peg
+        COMMENT "Regenerating parser from grammar/sysml.peg"
+    )
+    message(STATUS "PackCC found: ${PACKCC} - parser will be regenerated when grammar changes")
+else()
+    message(STATUS "PackCC not found - using pre-generated parser")
+endif()
+
 # Core library (shared between main executable and tests)
 add_library(sysml2_core STATIC
     src/arena.c
@@ -158,6 +173,8 @@ file(GLOB PACKCC_VALID_FIXTURES
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/official/phase4-advanced/*/*.sysml
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/official/phase5-framework/*/*.sysml
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/official/phase5-framework/*/*/*.sysml
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/valid/*.sysml
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/modify/*.sysml
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/vehicle.sysml
 )
 foreach(fixture ${PACKCC_VALID_FIXTURES})

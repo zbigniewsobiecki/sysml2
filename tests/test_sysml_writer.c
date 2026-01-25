@@ -250,6 +250,42 @@ TEST(sysml_write_attribute_usage) {
     FIXTURE_TEARDOWN();
 }
 
+TEST(sysml_write_connection_usage) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package TestPkg {\n"
+        "    connection authLink connect A to B;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    /* Verify connection element exists in model */
+    bool found_connection = false;
+    for (size_t i = 0; i < model->element_count; i++) {
+        if (model->elements[i]->kind == SYSML_KIND_CONNECTION_USAGE) {
+            found_connection = true;
+            /* Verify the connection has the correct name */
+            ASSERT(model->elements[i]->name != NULL);
+            ASSERT(strstr(model->elements[i]->name, "authLink") != NULL ||
+                   strstr(model->elements[i]->id, "authLink") != NULL);
+            break;
+        }
+    }
+    ASSERT_TRUE(found_connection);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    ASSERT(strstr(output, "connection authLink") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
 /* ========== Import Tests ========== */
 
 TEST(sysml_write_import) {
@@ -641,6 +677,7 @@ int main(void) {
     /* Usages */
     RUN_TEST(sysml_write_part_usage);
     RUN_TEST(sysml_write_attribute_usage);
+    RUN_TEST(sysml_write_connection_usage);
 
     /* Imports */
     RUN_TEST(sysml_write_import);

@@ -1266,7 +1266,7 @@ TEST(merge_preserves_sibling_metadata) {
     FIXTURE_TEARDOWN();
 }
 
-/* Test: Body metadata on target scope is also cleared */
+/* Test: Body metadata on target scope is preserved when fragment has no metadata */
 TEST(merge_clears_body_metadata) {
     FIXTURE_SETUP();
 
@@ -1287,7 +1287,7 @@ TEST(merge_clears_body_metadata) {
 
     SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 1, NULL, 0);
 
-    /* Fragment: new element */
+    /* Fragment: new element with NO metadata */
     SysmlNode frag_nodes[1];
     memset(frag_nodes, 0, sizeof(frag_nodes));
     frag_nodes[0].id = "NewElem";
@@ -1304,10 +1304,11 @@ TEST(merge_clears_body_metadata) {
 
     ASSERT_NOT_NULL(result);
 
-    /* Verify: Package body metadata is cleared */
+    /* Verify: Package body metadata is PRESERVED (fragment had no metadata) */
     for (size_t i = 0; i < result->element_count; i++) {
         if (strcmp(result->elements[i]->id, "Pkg") == 0) {
-            ASSERT_EQ(result->elements[i]->metadata_count, 0);
+            ASSERT_EQ(result->elements[i]->metadata_count, 1);
+            ASSERT_STR_EQ(result->elements[i]->metadata[0]->type_ref, "OldBodyMeta");
         }
     }
 
@@ -1404,6 +1405,111 @@ TEST(merge_clears_leading_trivia) {
     for (size_t i = 0; i < result->element_count; i++) {
         if (strcmp(result->elements[i]->id, "Pkg") == 0) {
             ASSERT_NULL(result->elements[i]->leading_trivia);
+        }
+    }
+
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Scope metadata preserved when fragment provides no metadata */
+TEST(merge_preserves_scope_metadata_when_fragment_has_none) {
+    FIXTURE_SETUP();
+
+    /* Base model: Pkg with prefix_applied_metadata */
+    SysmlNode base_nodes[1];
+    memset(base_nodes, 0, sizeof(base_nodes));
+    base_nodes[0].id = "Pkg";
+    base_nodes[0].name = "Pkg";
+    base_nodes[0].kind = SYSML_KIND_PACKAGE;
+
+    /* Add @SourceFile metadata to package */
+    SysmlMetadataUsage *pkg_meta = sysml2_arena_alloc(&arena, sizeof(SysmlMetadataUsage));
+    memset(pkg_meta, 0, sizeof(SysmlMetadataUsage));
+    pkg_meta->type_ref = "SourceFile";
+    base_nodes[0].prefix_applied_metadata = sysml2_arena_alloc(&arena, sizeof(SysmlMetadataUsage *));
+    base_nodes[0].prefix_applied_metadata[0] = pkg_meta;
+    base_nodes[0].prefix_applied_metadata_count = 1;
+
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 1, NULL, 0);
+
+    /* Fragment: new element with NO metadata */
+    SysmlNode frag_nodes[1];
+    memset(frag_nodes, 0, sizeof(frag_nodes));
+    frag_nodes[0].id = "NewElem";
+    frag_nodes[0].name = "NewElem";
+    frag_nodes[0].kind = SYSML_KIND_PART_DEF;
+
+    SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 1, NULL, 0);
+
+    /* Merge into Pkg */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+    );
+
+    ASSERT_NOT_NULL(result);
+
+    /* Verify: Package prefix_applied_metadata is PRESERVED (fragment had no metadata) */
+    for (size_t i = 0; i < result->element_count; i++) {
+        if (strcmp(result->elements[i]->id, "Pkg") == 0) {
+            ASSERT_EQ(result->elements[i]->prefix_applied_metadata_count, 1);
+            ASSERT_STR_EQ(result->elements[i]->prefix_applied_metadata[0]->type_ref, "SourceFile");
+        }
+    }
+
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Replaced element preserves its metadata when fragment element has none */
+TEST(merge_preserves_replaced_element_metadata) {
+    FIXTURE_SETUP();
+
+    /* Base model: Pkg with Pkg::A that has metadata */
+    SysmlNode base_nodes[2];
+    memset(base_nodes, 0, sizeof(base_nodes));
+    base_nodes[0].id = "Pkg";
+    base_nodes[0].name = "Pkg";
+    base_nodes[0].kind = SYSML_KIND_PACKAGE;
+
+    base_nodes[1].id = "Pkg::A";
+    base_nodes[1].name = "A";
+    base_nodes[1].kind = SYSML_KIND_PART_DEF;
+    base_nodes[1].parent_id = "Pkg";
+
+    /* A has @SourceFile metadata that should be preserved */
+    SysmlMetadataUsage *a_meta = sysml2_arena_alloc(&arena, sizeof(SysmlMetadataUsage));
+    memset(a_meta, 0, sizeof(SysmlMetadataUsage));
+    a_meta->type_ref = "SourceFile";
+    base_nodes[1].prefix_applied_metadata = sysml2_arena_alloc(&arena, sizeof(SysmlMetadataUsage *));
+    base_nodes[1].prefix_applied_metadata[0] = a_meta;
+    base_nodes[1].prefix_applied_metadata_count = 1;
+
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 2, NULL, 0);
+
+    /* Fragment: replacement A with NO metadata */
+    SysmlNode frag_nodes[1];
+    memset(frag_nodes, 0, sizeof(frag_nodes));
+    frag_nodes[0].id = "A";
+    frag_nodes[0].name = "A";
+    frag_nodes[0].kind = SYSML_KIND_PART_DEF;
+    /* No metadata on fragment - original's should be preserved */
+
+    SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 1, NULL, 0);
+
+    /* Merge into Pkg */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+    );
+
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ(replaced, 1);
+
+    /* Verify: Pkg::A still has its metadata (preserved from original) */
+    for (size_t i = 0; i < result->element_count; i++) {
+        if (strcmp(result->elements[i]->id, "Pkg::A") == 0) {
+            ASSERT_EQ(result->elements[i]->prefix_applied_metadata_count, 1);
+            ASSERT_STR_EQ(result->elements[i]->prefix_applied_metadata[0]->type_ref, "SourceFile");
         }
     }
 
@@ -1520,6 +1626,131 @@ TEST(upsert_comment_stability) {
 
     ASSERT_EQ(count_first, 1);
     ASSERT_EQ(count_second, 1);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Trailing inline comments on replaced children don't duplicate during upsert
+ *
+ * Bug scenario: When upserting an element like:
+ *   port httpApi { :>> port = 3000; // comment }
+ * The trailing comment on the replaced child (:>> port) was duplicating
+ * because trivia was only cleared for the target scope, not for replaced children.
+ */
+TEST(upsert_trailing_comment_no_duplication) {
+    FIXTURE_SETUP();
+
+    /* Base model with a port that has a trailing comment on a child redefinition */
+    const char *input =
+        "package TestPkg {\n"
+        "    port def HTTPPort {\n"
+        "        attribute port : Integer;\n"
+        "    }\n"
+        "    port httpApi : HTTPPort {\n"
+        "        :>> port = 3000; // Typical default, to be verified\n"
+        "    }\n"
+        "}\n";
+
+    /* Fragment: same port definition (would trigger replacement) */
+    const char *fragment_src =
+        "port httpApi : HTTPPort {\n"
+        "    :>> port = 3000; // Typical default, to be verified\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    /* Parse fragment */
+    SysmlSemanticModel *fragment = parse_sysml_string(&arena, &intern, fragment_src);
+    ASSERT_NOT_NULL(fragment);
+
+    /* Run 3 upserts to trigger the duplication bug */
+    for (int round = 0; round < 3; round++) {
+        size_t added = 0, replaced = 0;
+        model = sysml2_modify_merge_fragment(
+            model, fragment, "TestPkg", false, &arena, &intern, &added, &replaced
+        );
+        ASSERT_NOT_NULL(model);
+    }
+
+    /* Write result to string */
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Count occurrences of the trailing comment - should be exactly 1 */
+    int comment_count = 0;
+    const char *search = "// Typical default";
+    char *pos = output;
+    while ((pos = strstr(pos, search)) != NULL) {
+        comment_count++;
+        pos++;
+    }
+
+    ASSERT_EQ(comment_count, 1);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Comments inside a body don't accumulate across multiple upserts
+ *
+ * Similar to upsert_trailing_comment_no_duplication but tests comments
+ * on different element types.
+ */
+TEST(upsert_body_comment_stability) {
+    FIXTURE_SETUP();
+
+    /* Input with a part def containing an inner comment */
+    const char *input =
+        "package TestPkg {\n"
+        "    part def MyPart {\n"
+        "        // Inner implementation note\n"
+        "        attribute x : Integer;\n"
+        "    }\n"
+        "}\n";
+
+    /* Fragment: same part def */
+    const char *fragment_src =
+        "part def MyPart {\n"
+        "    // Inner implementation note\n"
+        "    attribute x : Integer;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    /* Parse fragment */
+    SysmlSemanticModel *fragment = parse_sysml_string(&arena, &intern, fragment_src);
+    ASSERT_NOT_NULL(fragment);
+
+    /* Run 3 upserts */
+    for (int round = 0; round < 3; round++) {
+        size_t added = 0, replaced = 0;
+        model = sysml2_modify_merge_fragment(
+            model, fragment, "TestPkg", false, &arena, &intern, &added, &replaced
+        );
+        ASSERT_NOT_NULL(model);
+    }
+
+    /* Write result to string */
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Count occurrences of the comment - should be exactly 1 */
+    int comment_count = 0;
+    const char *search = "// Inner implementation note";
+    char *pos = output;
+    while ((pos = strstr(pos, search)) != NULL) {
+        comment_count++;
+        pos++;
+    }
+
+    ASSERT_EQ(comment_count, 1);
 
     free(output);
     FIXTURE_TEARDOWN();
@@ -1943,6 +2174,136 @@ TEST(auto_unwrap_strips_import_owner_scopes) {
     FIXTURE_TEARDOWN();
 }
 
+/* ========== Body Statement and Doc Preservation Tests ========== */
+
+/* Test: Replaced element preserves its body statements when fragment has none */
+TEST(merge_preserves_replaced_element_body_stmts) {
+    FIXTURE_SETUP();
+
+    /* Base model: Pkg with Pkg::A that has body statements */
+    SysmlNode base_nodes[2];
+    memset(base_nodes, 0, sizeof(base_nodes));
+    base_nodes[0].id = "Pkg";
+    base_nodes[0].name = "Pkg";
+    base_nodes[0].kind = SYSML_KIND_PACKAGE;
+
+    base_nodes[1].id = "Pkg::A";
+    base_nodes[1].name = "A";
+    base_nodes[1].kind = SYSML_KIND_PART_USAGE;
+    base_nodes[1].parent_id = "Pkg";
+
+    /* A has shorthand feature: :>> layer = "presentation"; */
+    SysmlStatement *stmt = sysml2_arena_alloc(&arena, sizeof(SysmlStatement));
+    memset(stmt, 0, sizeof(SysmlStatement));
+    stmt->kind = SYSML_STMT_SHORTHAND_FEATURE;
+    stmt->raw_text = sysml2_intern(&intern, ":>> layer = \"presentation\";");
+
+    base_nodes[1].body_stmts = sysml2_arena_alloc(&arena, sizeof(SysmlStatement *));
+    base_nodes[1].body_stmts[0] = stmt;
+    base_nodes[1].body_stmt_count = 1;
+
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 2, NULL, 0);
+
+    /* Fragment: replacement A with different body statement (name attribute) */
+    SysmlNode frag_nodes[1];
+    memset(frag_nodes, 0, sizeof(frag_nodes));
+    frag_nodes[0].id = "A";
+    frag_nodes[0].name = "A";
+    frag_nodes[0].kind = SYSML_KIND_PART_USAGE;
+
+    /* Fragment has :>> name = "Updated"; */
+    SysmlStatement *frag_stmt = sysml2_arena_alloc(&arena, sizeof(SysmlStatement));
+    memset(frag_stmt, 0, sizeof(SysmlStatement));
+    frag_stmt->kind = SYSML_STMT_SHORTHAND_FEATURE;
+    frag_stmt->raw_text = sysml2_intern(&intern, ":>> name = \"Updated\";");
+
+    frag_nodes[0].body_stmts = sysml2_arena_alloc(&arena, sizeof(SysmlStatement *));
+    frag_nodes[0].body_stmts[0] = frag_stmt;
+    frag_nodes[0].body_stmt_count = 1;
+
+    SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 1, NULL, 0);
+
+    /* Merge into Pkg */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+    );
+
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ(replaced, 1);
+
+    /* Verify: Pkg::A has both body statements (name from fragment, layer preserved) */
+    for (size_t i = 0; i < result->element_count; i++) {
+        if (strcmp(result->elements[i]->id, "Pkg::A") == 0) {
+            /* Should have 2 statements: name (from fragment) + layer (preserved) */
+            ASSERT_EQ(result->elements[i]->body_stmt_count, 2);
+
+            /* Verify both statements exist */
+            bool found_name = false, found_layer = false;
+            for (size_t j = 0; j < result->elements[i]->body_stmt_count; j++) {
+                SysmlStatement *s = result->elements[i]->body_stmts[j];
+                if (s && s->raw_text) {
+                    if (strstr(s->raw_text, "name")) found_name = true;
+                    if (strstr(s->raw_text, "layer")) found_layer = true;
+                }
+            }
+            ASSERT_TRUE(found_name);
+            ASSERT_TRUE(found_layer);
+        }
+    }
+
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Replaced element preserves its documentation when fragment has none */
+TEST(merge_preserves_replaced_element_doc) {
+    FIXTURE_SETUP();
+
+    /* Base model: Pkg with Pkg::A that has documentation */
+    SysmlNode base_nodes[2];
+    memset(base_nodes, 0, sizeof(base_nodes));
+    base_nodes[0].id = "Pkg";
+    base_nodes[0].name = "Pkg";
+    base_nodes[0].kind = SYSML_KIND_PACKAGE;
+
+    base_nodes[1].id = "Pkg::A";
+    base_nodes[1].name = "A";
+    base_nodes[1].kind = SYSML_KIND_PART_DEF;
+    base_nodes[1].parent_id = "Pkg";
+    base_nodes[1].documentation = sysml2_intern(&intern, "Contract between module provider and consumer");
+
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 2, NULL, 0);
+
+    /* Fragment: replacement A with NO documentation */
+    SysmlNode frag_nodes[1];
+    memset(frag_nodes, 0, sizeof(frag_nodes));
+    frag_nodes[0].id = "A";
+    frag_nodes[0].name = "A";
+    frag_nodes[0].kind = SYSML_KIND_PART_DEF;
+    /* No documentation on fragment - original's should be preserved */
+
+    SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 1, NULL, 0);
+
+    /* Merge into Pkg */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+    );
+
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ(replaced, 1);
+
+    /* Verify: Pkg::A still has its documentation (preserved from original) */
+    for (size_t i = 0; i < result->element_count; i++) {
+        if (strcmp(result->elements[i]->id, "Pkg::A") == 0) {
+            ASSERT_NOT_NULL(result->elements[i]->documentation);
+            ASSERT_STR_EQ(result->elements[i]->documentation, "Contract between module provider and consumer");
+        }
+    }
+
+    FIXTURE_TEARDOWN();
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -2008,6 +2369,8 @@ int main(void) {
     RUN_TEST(import_order_preserved_during_write);
     RUN_TEST(no_comment_duplication_during_upsert);
     RUN_TEST(upsert_comment_stability);
+    RUN_TEST(upsert_trailing_comment_no_duplication);
+    RUN_TEST(upsert_body_comment_stability);
 
     /* Metadata accumulation regression tests */
     RUN_TEST(merge_no_metadata_accumulation);
@@ -2015,6 +2378,8 @@ int main(void) {
     RUN_TEST(merge_clears_body_metadata);
     RUN_TEST(merge_clears_trailing_trivia);
     RUN_TEST(merge_clears_leading_trivia);
+    RUN_TEST(merge_preserves_scope_metadata_when_fragment_has_none);
+    RUN_TEST(merge_preserves_replaced_element_metadata);
     RUN_TEST(merge_repeated_upserts_no_accumulation);
 
     /* Child preservation tests */
@@ -2028,6 +2393,10 @@ int main(void) {
     RUN_TEST(auto_unwrap_no_unwrap_different_name);
     RUN_TEST(auto_unwrap_nested_target_scope);
     RUN_TEST(auto_unwrap_strips_import_owner_scopes);
+
+    /* Body statement and doc preservation tests */
+    RUN_TEST(merge_preserves_replaced_element_body_stmts);
+    RUN_TEST(merge_preserves_replaced_element_doc);
 
     printf("\n%d/%d tests passed.\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;
