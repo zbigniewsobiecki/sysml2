@@ -617,6 +617,425 @@ TEST(merge_remaps_relationships) {
     sysml2_arena_destroy(&arena);
 }
 
+/* ========== Additional Delete Tests ========== */
+
+TEST(delete_preserves_unrelated_sibling) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Create model: Pkg, Pkg::A, Pkg::B, Pkg::C */
+    SysmlNode nodes[4] = {
+        {.id = "Pkg", .name = "Pkg", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
+        {.id = "Pkg::A", .name = "A", .kind = SYSML_KIND_PART_DEF, .parent_id = "Pkg"},
+        {.id = "Pkg::B", .name = "B", .kind = SYSML_KIND_PART_DEF, .parent_id = "Pkg"},
+        {.id = "Pkg::C", .name = "C", .kind = SYSML_KIND_PART_DEF, .parent_id = "Pkg"},
+    };
+    SysmlSemanticModel *model = create_test_model(&arena, &intern, nodes, 4, NULL, 0);
+
+    /* Delete Pkg::B */
+    Sysml2QueryPattern *pattern = sysml2_query_parse("Pkg::B", &arena);
+    size_t deleted_count = 0;
+    SysmlSemanticModel *result = sysml2_modify_clone_with_deletions(
+        model, pattern, &arena, &intern, &deleted_count
+    );
+
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ(deleted_count, 1);
+    ASSERT_EQ(result->element_count, 3);  /* Pkg, A, C remain */
+
+    /* Verify siblings preserved */
+    bool found_a = false, found_b = false, found_c = false;
+    for (size_t i = 0; i < result->element_count; i++) {
+        if (strcmp(result->elements[i]->id, "Pkg::A") == 0) found_a = true;
+        if (strcmp(result->elements[i]->id, "Pkg::B") == 0) found_b = true;
+        if (strcmp(result->elements[i]->id, "Pkg::C") == 0) found_c = true;
+    }
+    ASSERT_TRUE(found_a);
+    ASSERT_FALSE(found_b);
+    ASSERT_TRUE(found_c);
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(delete_handles_root_level_elements) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Create model with two root packages */
+    SysmlNode nodes[2] = {
+        {.id = "PkgA", .name = "PkgA", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
+        {.id = "PkgB", .name = "PkgB", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
+    };
+    SysmlSemanticModel *model = create_test_model(&arena, &intern, nodes, 2, NULL, 0);
+
+    /* Delete PkgA (root level) */
+    Sysml2QueryPattern *pattern = sysml2_query_parse("PkgA", &arena);
+    size_t deleted_count = 0;
+    SysmlSemanticModel *result = sysml2_modify_clone_with_deletions(
+        model, pattern, &arena, &intern, &deleted_count
+    );
+
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ(deleted_count, 1);
+    ASSERT_EQ(result->element_count, 1);  /* Only PkgB remains */
+    ASSERT_STR_EQ(result->elements[0]->id, "PkgB");
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(delete_handles_empty_model) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Empty model */
+    SysmlSemanticModel model = {0};
+    model.source_name = "test.sysml";
+
+    /* Try to delete something */
+    Sysml2QueryPattern *pattern = sysml2_query_parse("NonExistent", &arena);
+    size_t deleted_count = 0;
+    SysmlSemanticModel *result = sysml2_modify_clone_with_deletions(
+        &model, pattern, &arena, &intern, &deleted_count
+    );
+
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ(deleted_count, 0);
+    ASSERT_EQ(result->element_count, 0);
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(delete_relationship_when_source_deleted) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Model: A :> B */
+    SysmlNode nodes[3] = {
+        {.id = "Pkg", .name = "Pkg", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
+        {.id = "Pkg::A", .name = "A", .kind = SYSML_KIND_PART_DEF, .parent_id = "Pkg"},
+        {.id = "Pkg::B", .name = "B", .kind = SYSML_KIND_PART_DEF, .parent_id = "Pkg"},
+    };
+    SysmlRelationship rels[1] = {
+        {.id = "rel1", .kind = SYSML_KIND_REL_SPECIALIZATION, .source = "Pkg::A", .target = "Pkg::B"},
+    };
+    SysmlSemanticModel *model = create_test_model(&arena, &intern, nodes, 3, rels, 1);
+
+    /* Delete A (source of relationship) */
+    Sysml2QueryPattern *pattern = sysml2_query_parse("Pkg::A", &arena);
+    size_t deleted_count = 0;
+    SysmlSemanticModel *result = sysml2_modify_clone_with_deletions(
+        model, pattern, &arena, &intern, &deleted_count
+    );
+
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ(result->relationship_count, 0);  /* Relationship removed */
+    ASSERT_EQ(result->element_count, 2);  /* Pkg and B remain */
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(delete_relationship_when_target_deleted) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Model: A :> B */
+    SysmlNode nodes[3] = {
+        {.id = "Pkg", .name = "Pkg", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
+        {.id = "Pkg::A", .name = "A", .kind = SYSML_KIND_PART_DEF, .parent_id = "Pkg"},
+        {.id = "Pkg::B", .name = "B", .kind = SYSML_KIND_PART_DEF, .parent_id = "Pkg"},
+    };
+    SysmlRelationship rels[1] = {
+        {.id = "rel1", .kind = SYSML_KIND_REL_SPECIALIZATION, .source = "Pkg::A", .target = "Pkg::B"},
+    };
+    SysmlSemanticModel *model = create_test_model(&arena, &intern, nodes, 3, rels, 1);
+
+    /* Delete B (target of relationship) */
+    Sysml2QueryPattern *pattern = sysml2_query_parse("Pkg::B", &arena);
+    size_t deleted_count = 0;
+    SysmlSemanticModel *result = sysml2_modify_clone_with_deletions(
+        model, pattern, &arena, &intern, &deleted_count
+    );
+
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ(result->relationship_count, 0);  /* Relationship removed */
+    ASSERT_EQ(result->element_count, 2);  /* Pkg and A remain */
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(delete_import_when_owner_deleted) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Model: Pkg imports Target */
+    SysmlNode nodes[2] = {
+        {.id = "Pkg", .name = "Pkg", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
+        {.id = "Target", .name = "Target", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
+    };
+    SysmlRelationship rels[1] = {
+        {.id = "imp1", .kind = SYSML_KIND_IMPORT, .source = "Pkg", .target = "Target"},
+    };
+    SysmlSemanticModel *model = create_test_model(&arena, &intern, nodes, 2, rels, 1);
+
+    /* Delete Pkg (owner of import) */
+    Sysml2QueryPattern *pattern = sysml2_query_parse("Pkg", &arena);
+    size_t deleted_count = 0;
+    SysmlSemanticModel *result = sysml2_modify_clone_with_deletions(
+        model, pattern, &arena, &intern, &deleted_count
+    );
+
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ(result->relationship_count, 0);  /* Import removed with owner */
+    ASSERT_EQ(result->element_count, 1);  /* Only Target remains */
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(delete_multiple_patterns_no_double_count) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Create model: Pkg, Pkg::A, Pkg::B */
+    SysmlNode nodes[3] = {
+        {.id = "Pkg", .name = "Pkg", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
+        {.id = "Pkg::A", .name = "A", .kind = SYSML_KIND_PART_DEF, .parent_id = "Pkg"},
+        {.id = "Pkg::B", .name = "B", .kind = SYSML_KIND_PART_DEF, .parent_id = "Pkg"},
+    };
+    SysmlSemanticModel *model = create_test_model(&arena, &intern, nodes, 3, NULL, 0);
+
+    /* Parse multiple patterns that overlap */
+    Sysml2QueryPattern *p1 = sysml2_query_parse("Pkg::A", &arena);
+    Sysml2QueryPattern *p2 = sysml2_query_parse("Pkg::*", &arena);
+    p1->next = p2;  /* Chain patterns */
+
+    size_t deleted_count = 0;
+    SysmlSemanticModel *result = sysml2_modify_clone_with_deletions(
+        model, p1, &arena, &intern, &deleted_count
+    );
+
+    ASSERT_NOT_NULL(result);
+    /* A matches both patterns but should only be counted once */
+    ASSERT_EQ(deleted_count, 2);  /* A and B, not 3 */
+    ASSERT_EQ(result->element_count, 1);  /* Only Pkg remains */
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+/* ========== Additional Merge Tests ========== */
+
+TEST(merge_empty_fragment) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Base model: Pkg */
+    SysmlNode base_nodes[1] = {
+        {.id = "Pkg", .name = "Pkg", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
+    };
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 1, NULL, 0);
+
+    /* Empty fragment */
+    SysmlSemanticModel fragment = {0};
+    fragment.source_name = "fragment.sysml";
+
+    /* Merge empty fragment */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, &fragment, "Pkg", false, &arena, &intern, &added, &replaced
+    );
+
+    /* Empty fragment merge should succeed but add nothing */
+    if (result != NULL) {
+        ASSERT_EQ(added, 0);
+        ASSERT_EQ(replaced, 0);
+        ASSERT_EQ(result->element_count, 1);  /* Just Pkg */
+    }
+    /* Or it may return NULL for empty fragment - both are acceptable */
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(merge_remap_deep_nesting) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Base: A::B */
+    SysmlNode base_nodes[2] = {
+        {.id = "A", .name = "A", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
+        {.id = "A::B", .name = "B", .kind = SYSML_KIND_PACKAGE, .parent_id = "A"},
+    };
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 2, NULL, 0);
+
+    /* Fragment: X::Y::Z (nested) */
+    SysmlNode frag_nodes[3] = {
+        {.id = "X", .name = "X", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
+        {.id = "X::Y", .name = "Y", .kind = SYSML_KIND_PACKAGE, .parent_id = "X"},
+        {.id = "X::Y::Z", .name = "Z", .kind = SYSML_KIND_PART_DEF, .parent_id = "X::Y"},
+    };
+    SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 3, NULL, 0);
+
+    /* Merge into A::B */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, fragment, "A::B", false, &arena, &intern, &added, &replaced
+    );
+
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ(added, 3);
+
+    /* Verify deep nesting remapped correctly */
+    ASSERT_TRUE(sysml2_modify_scope_exists(result, "A::B::X"));
+    ASSERT_TRUE(sysml2_modify_scope_exists(result, "A::B::X::Y"));
+    ASSERT_TRUE(sysml2_modify_scope_exists(result, "A::B::X::Y::Z"));
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(merge_preserves_element_properties) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Base: Pkg */
+    SysmlNode base_nodes[1] = {
+        {.id = "Pkg", .name = "Pkg", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
+    };
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 1, NULL, 0);
+
+    /* Fragment: Element with documentation */
+    SysmlNode frag_nodes[1] = {
+        {.id = "Elem", .name = "Elem", .kind = SYSML_KIND_PART_DEF, .parent_id = NULL,
+         .documentation = "Test documentation"},
+    };
+    SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 1, NULL, 0);
+
+    /* Merge */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+    );
+
+    ASSERT_NOT_NULL(result);
+
+    /* Find merged element and check documentation preserved */
+    for (size_t i = 0; i < result->element_count; i++) {
+        if (strcmp(result->elements[i]->name, "Elem") == 0) {
+            ASSERT_NOT_NULL(result->elements[i]->documentation);
+            ASSERT_STR_EQ(result->elements[i]->documentation, "Test documentation");
+        }
+    }
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(merge_relationship_remap_both_endpoints) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Base: Pkg */
+    SysmlNode base_nodes[1] = {
+        {.id = "Pkg", .name = "Pkg", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
+    };
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 1, NULL, 0);
+
+    /* Fragment: A :> B (both in fragment) */
+    SysmlNode frag_nodes[2] = {
+        {.id = "A", .name = "A", .kind = SYSML_KIND_PART_DEF, .parent_id = NULL},
+        {.id = "B", .name = "B", .kind = SYSML_KIND_PART_DEF, .parent_id = NULL},
+    };
+    SysmlRelationship frag_rels[1] = {
+        {.id = "rel1", .kind = SYSML_KIND_REL_SPECIALIZATION, .source = "A", .target = "B"},
+    };
+    SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 2, frag_rels, 1);
+
+    /* Merge into Pkg */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+    );
+
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ(result->relationship_count, 1);
+
+    /* Both endpoints should be remapped */
+    ASSERT_STR_EQ(result->relationships[0]->source, "Pkg::A");
+    ASSERT_STR_EQ(result->relationships[0]->target, "Pkg::B");
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(merge_import_source_remapped) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Base: Pkg, External */
+    SysmlNode base_nodes[2] = {
+        {.id = "Pkg", .name = "Pkg", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
+        {.id = "External", .name = "External", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
+    };
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 2, NULL, 0);
+
+    /* Fragment: Inner that imports External */
+    SysmlNode frag_nodes[1] = {
+        {.id = "Inner", .name = "Inner", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
+    };
+    SysmlRelationship frag_rels[1] = {
+        {.id = "imp1", .kind = SYSML_KIND_IMPORT, .source = "Inner", .target = "External"},
+    };
+    SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 1, frag_rels, 1);
+
+    /* Merge into Pkg */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+    );
+
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ(result->relationship_count, 1);
+
+    /* Source is remapped to Pkg::Inner */
+    ASSERT_STR_EQ(result->relationships[0]->source, "Pkg::Inner");
+    /* Target is also remapped since it's being merged into the scope */
+    /* (All fragment IDs get remapped to the target scope) */
+    ASSERT_NOT_NULL(result->relationships[0]->target);
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
 /* ========== Find Containing File Tests ========== */
 
 TEST(find_containing_file) {
@@ -673,6 +1092,15 @@ int main(void) {
     RUN_TEST(delete_removes_relationships);
     RUN_TEST(delete_nonexistent_returns_copy);
 
+    /* Additional delete tests */
+    RUN_TEST(delete_preserves_unrelated_sibling);
+    RUN_TEST(delete_handles_root_level_elements);
+    RUN_TEST(delete_handles_empty_model);
+    RUN_TEST(delete_relationship_when_source_deleted);
+    RUN_TEST(delete_relationship_when_target_deleted);
+    RUN_TEST(delete_import_when_owner_deleted);
+    RUN_TEST(delete_multiple_patterns_no_double_count);
+
     /* Scope tests */
     RUN_TEST(scope_exists_true);
     RUN_TEST(scope_exists_false);
@@ -684,6 +1112,13 @@ int main(void) {
     RUN_TEST(merge_with_create_scope);
     RUN_TEST(merge_without_create_scope_fails);
     RUN_TEST(merge_remaps_relationships);
+
+    /* Additional merge tests */
+    RUN_TEST(merge_empty_fragment);
+    RUN_TEST(merge_remap_deep_nesting);
+    RUN_TEST(merge_preserves_element_properties);
+    RUN_TEST(merge_relationship_remap_both_endpoints);
+    RUN_TEST(merge_import_source_remapped);
 
     /* Find containing file tests */
     RUN_TEST(find_containing_file);

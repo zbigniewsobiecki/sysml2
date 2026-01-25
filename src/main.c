@@ -19,6 +19,68 @@
 #include <string.h>
 #include <getopt.h>
 #include <errno.h>
+#include <limits.h>
+#include <unistd.h>
+
+/*
+ * Helper: Atomic file write using temp file + rename
+ *
+ * This prevents file truncation if an error occurs during writing.
+ * The original file remains intact until the write completes successfully.
+ *
+ * verbose_msg: NULL to suppress message, or message prefix like "Formatted" or "Modified"
+ */
+static bool atomic_write_file(
+    const char *path,
+    SysmlSemanticModel *model,
+    const char *verbose_msg
+) {
+    char tmp_path[PATH_MAX];
+    int len = snprintf(tmp_path, sizeof(tmp_path), "%s.tmp.%d", path, getpid());
+    if (len < 0 || (size_t)len >= sizeof(tmp_path)) {
+        fprintf(stderr, "error: path too long for temp file: %s\n", path);
+        return false;
+    }
+
+    /* Write to temp file */
+    FILE *out = fopen(tmp_path, "w");
+    if (!out) {
+        fprintf(stderr, "error: cannot create temp file '%s': %s\n",
+                tmp_path, strerror(errno));
+        return false;
+    }
+
+    sysml2_sysml_write(model, out);
+
+    /* Check for write errors before closing */
+    if (ferror(out)) {
+        fprintf(stderr, "error: write failed to temp file '%s'\n", tmp_path);
+        fclose(out);
+        unlink(tmp_path);
+        return false;
+    }
+
+    if (fclose(out) != 0) {
+        fprintf(stderr, "error: failed to close temp file '%s': %s\n",
+                tmp_path, strerror(errno));
+        unlink(tmp_path);
+        return false;
+    }
+
+    /* Atomic rename - this preserves original file until this succeeds */
+    if (rename(tmp_path, path) != 0) {
+        fprintf(stderr, "error: failed to rename temp file '%s' to '%s': %s\n",
+                tmp_path, path, strerror(errno));
+        unlink(tmp_path);
+        return false;
+    }
+
+    if (verbose_msg) {
+        fprintf(stderr, "%s: %s\n", verbose_msg, path);
+    }
+
+    return true;
+}
 
 /* Long options for getopt_long */
 static const struct option long_options[] = {
@@ -424,22 +486,12 @@ static int run_fix_mode(
         }
     }
 
-    /* Pass 4: All checks passed, now rewrite input files */
+    /* Pass 4: All checks passed, now rewrite input files using atomic writes */
     for (size_t i = 0; i < options->input_file_count; i++) {
         if (models[i]) {
-            FILE *out = fopen(options->input_files[i], "w");
-            if (!out) {
-                fprintf(stderr, "error: cannot open file '%s' for writing: %s\n",
-                        options->input_files[i], strerror(errno));
+            if (!atomic_write_file(options->input_files[i], models[i],
+                                   options->verbose ? "Formatted" : NULL)) {
                 has_errors = true;
-                continue;
-            }
-
-            sysml2_sysml_write(models[i], out);
-            fclose(out);
-
-            if (options->verbose) {
-                fprintf(stderr, "Formatted: %s\n", options->input_files[i]);
             }
         }
     }
@@ -877,19 +929,9 @@ static int run_modify_mode(
             }
 
             if (was_modified || options->set_count > 0) {
-                FILE *out = fopen(options->input_files[i], "w");
-                if (!out) {
-                    fprintf(stderr, "error: cannot open file '%s' for writing: %s\n",
-                            options->input_files[i], strerror(errno));
+                if (!atomic_write_file(options->input_files[i], modified_models[i],
+                                       options->verbose ? "Modified" : NULL)) {
                     has_errors = true;
-                    continue;
-                }
-
-                sysml2_sysml_write(modified_models[i], out);
-                fclose(out);
-
-                if (options->verbose) {
-                    fprintf(stderr, "Modified: %s\n", options->input_files[i]);
                 }
             }
         }

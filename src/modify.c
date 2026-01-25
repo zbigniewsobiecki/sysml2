@@ -933,15 +933,14 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
         }
     }
 
-    /* Collect IDs to remove (only the replaced elements themselves, NOT children)
+    /* Collect IDs to remove: replaced elements AND ALL their direct children.
      *
-     * IMPORTANT: We intentionally do NOT cascade deletion to children here.
-     * The replacement element will have the same ID as the replaced element,
-     * so existing children will naturally become children of the new element.
-     * This preserves accumulated content from previous upsert operations.
-     *
-     * Old behavior: Cascade deletion wiped all children, causing data loss
-     * when a replacement fragment didn't include all previously-added children.
+     * When a parent element is replaced, we remove all its direct children
+     * (one level only, not grandchildren) because the fragment provides the
+     * complete new definition. This prevents:
+     *   - Duplicate children (old + new)
+     *   - Orphaned comments and whitespace accumulation
+     *   - Stale attribute values bleeding into parent
      */
     const char **ids_to_remove = NULL;
     size_t remove_count = 0;
@@ -949,10 +948,16 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
 
     for (size_t i = 0; i < replaced_count; i++) {
         add_to_id_set(replaced_ids[i], &ids_to_remove, &remove_count, &remove_capacity, arena);
-    }
 
-    /* NOTE: Cascade deletion to children removed to prevent data loss.
-     * Children are preserved and inherit the replacement element as parent. */
+        /* Remove ALL direct children of replaced elements (one level only) */
+        for (size_t j = 0; j < working_base->element_count; j++) {
+            SysmlNode *node = working_base->elements[j];
+            if (node && node->id && node->parent_id &&
+                strcmp(node->parent_id, replaced_ids[i]) == 0) {
+                add_to_id_set(node->id, &ids_to_remove, &remove_count, &remove_capacity, arena);
+            }
+        }
+    }
 
     /* Step 3: Allocate new model */
     size_t max_elements = working_base->element_count + fragment->element_count;
@@ -1057,10 +1062,54 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
         }
     }
 
-    /* Step 9: Add remapped fragment imports */
+    /* Step 9: Add remapped fragment imports, with deduplication
+     *
+     * Fragment imports often duplicate imports already in the base model
+     * (e.g., "import SysMLPrimitives::*;"). We skip duplicates to prevent
+     * accumulation when the same fragment is applied multiple times.
+     *
+     * Two imports are considered duplicates if they have the same:
+     *   - owner_scope (after remapping)
+     *   - target
+     *   - kind (IMPORT, IMPORT_ALL, IMPORT_RECURSIVE)
+     */
     for (size_t i = 0; i < fragment->import_count; i++) {
         SysmlImport *frag_imp = fragment->imports[i];
         if (!frag_imp) continue;
+
+        /* Compute remapped owner scope for duplicate check */
+        const char *new_owner = frag_imp->owner_scope
+            ? sysml2_modify_remap_id(frag_imp->owner_scope, target_scope, arena, intern)
+            : NULL;
+
+        /* Check for duplicate in result */
+        bool is_duplicate = false;
+        for (size_t j = 0; j < result->import_count; j++) {
+            SysmlImport *existing = result->imports[j];
+            if (!existing) continue;
+
+            /* Compare owner_scope */
+            bool same_owner = (new_owner == existing->owner_scope) ||
+                              (new_owner && existing->owner_scope &&
+                               strcmp(new_owner, existing->owner_scope) == 0);
+            if (!same_owner) continue;
+
+            /* Compare target */
+            bool same_target = (frag_imp->target == existing->target) ||
+                               (frag_imp->target && existing->target &&
+                                strcmp(frag_imp->target, existing->target) == 0);
+            if (!same_target) continue;
+
+            /* Compare kind */
+            if (frag_imp->kind == existing->kind) {
+                is_duplicate = true;
+                break;
+            }
+        }
+
+        if (is_duplicate) {
+            continue;  /* Skip this import */
+        }
 
         /* Create new import with remapped owner scope */
         SysmlImport *new_imp = sysml2_arena_alloc(arena, sizeof(SysmlImport));
@@ -1071,9 +1120,7 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
         if (frag_imp->id) {
             new_imp->id = sysml2_modify_remap_id(frag_imp->id, target_scope, arena, intern);
         }
-        if (frag_imp->owner_scope) {
-            new_imp->owner_scope = sysml2_modify_remap_id(frag_imp->owner_scope, target_scope, arena, intern);
-        }
+        new_imp->owner_scope = new_owner;
         /* Note: target is NOT remapped - it refers to external elements */
 
         result->imports[result->import_count++] = new_imp;
