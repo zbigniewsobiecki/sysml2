@@ -102,6 +102,8 @@ typedef struct {
 
     size_t error_count;         /* Number of errors */
     size_t warning_count;       /* Number of warnings */
+    size_t parse_error_count;   /* E1xxx and E2xxx errors */
+    size_t semantic_error_count; /* E3xxx errors */
     size_t max_errors;          /* Stop after this many errors (0 = unlimited) */
 
     bool treat_warnings_as_errors;
@@ -132,6 +134,12 @@ void sysml2_diag_set_max_errors(Sysml2DiagContext *ctx, size_t max);
 
 /* Check if we should stop due to error limit */
 bool sysml2_diag_should_stop(const Sysml2DiagContext *ctx);
+
+/* Check if there are parse errors (E1xxx or E2xxx) */
+bool sysml2_diag_has_parse_errors(const Sysml2DiagContext *ctx);
+
+/* Check if there are semantic errors (E3xxx) */
+bool sysml2_diag_has_semantic_errors(const Sysml2DiagContext *ctx);
 
 /* Create a new diagnostic */
 Sysml2Diagnostic *sysml2_diag_create(

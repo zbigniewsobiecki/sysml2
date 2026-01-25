@@ -1065,8 +1065,8 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
         fputc(']', w->out);
     }
 
-    /* Write default value */
-    if (node->default_value) {
+    /* Write default value - only for usages, not definitions */
+    if (node->default_value && !SYSML_KIND_IS_DEFINITION(node->kind)) {
         if (node->has_default_keyword) {
             fputs(" default", w->out);
         }

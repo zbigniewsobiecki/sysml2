@@ -419,6 +419,7 @@ static SysmlSemanticModel *parse_file(
 
     if (ctx.error_count > 0) {
         diag->error_count += ctx.error_count;
+        diag->parse_error_count += ctx.error_count;
     }
 
     SysmlSemanticModel *model = NULL;

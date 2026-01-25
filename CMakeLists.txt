@@ -209,6 +209,12 @@ add_test(NAME cli_crud_integration
         $<TARGET_FILE:sysml2>
 )
 
+# Exit code tests - verifies 0/1/2 exit codes for success/parse/semantic errors
+add_test(NAME cli_exit_codes
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_exit_codes.sh
+        $<TARGET_FILE:sysml2>
+)
+
 # Custom target for running tests
 add_custom_target(check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure

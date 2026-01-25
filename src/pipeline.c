@@ -171,6 +171,7 @@ Sysml2Result sysml2_pipeline_process_input(
     /* Track errors in the diagnostic context */
     if (pctx.error_count > 0) {
         ctx->diag->error_count += pctx.error_count;
+        ctx->diag->parse_error_count += pctx.error_count;
     }
 
     /* Dump AST if requested - not yet implemented */

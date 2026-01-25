@@ -27,6 +27,8 @@ void sysml2_diag_context_init(Sysml2DiagContext *ctx, Sysml2Arena *arena) {
     ctx->last = NULL;
     ctx->error_count = 0;
     ctx->warning_count = 0;
+    ctx->parse_error_count = 0;
+    ctx->semantic_error_count = 0;
     ctx->max_errors = 20;
     ctx->treat_warnings_as_errors = false;
     ctx->has_fatal = false;
@@ -40,6 +42,14 @@ bool sysml2_diag_should_stop(const Sysml2DiagContext *ctx) {
     if (ctx->has_fatal) return true;
     if (ctx->max_errors > 0 && ctx->error_count >= ctx->max_errors) return true;
     return false;
+}
+
+bool sysml2_diag_has_parse_errors(const Sysml2DiagContext *ctx) {
+    return ctx->parse_error_count > 0;
+}
+
+bool sysml2_diag_has_semantic_errors(const Sysml2DiagContext *ctx) {
+    return ctx->semantic_error_count > 0;
 }
 
 Sysml2Diagnostic *sysml2_diag_create(
@@ -124,17 +134,35 @@ void sysml2_diag_emit(Sysml2DiagContext *ctx, Sysml2Diagnostic *diag) {
     switch (diag->severity) {
         case SYSML2_SEVERITY_ERROR:
             ctx->error_count++;
+            /* Track error type based on diagnostic code */
+            if (diag->code >= 1000 && diag->code < 3000) {
+                ctx->parse_error_count++;
+            } else if (diag->code >= 3000 && diag->code < 10000) {
+                ctx->semantic_error_count++;
+            }
             break;
         case SYSML2_SEVERITY_WARNING:
             if (ctx->treat_warnings_as_errors) {
                 diag->severity = SYSML2_SEVERITY_ERROR;
                 ctx->error_count++;
+                /* Track error type based on diagnostic code */
+                if (diag->code >= 1000 && diag->code < 3000) {
+                    ctx->parse_error_count++;
+                } else if (diag->code >= 3000 && diag->code < 10000) {
+                    ctx->semantic_error_count++;
+                }
             } else {
                 ctx->warning_count++;
             }
             break;
         case SYSML2_SEVERITY_FATAL:
             ctx->error_count++;
+            /* Track error type based on diagnostic code */
+            if (diag->code >= 1000 && diag->code < 3000) {
+                ctx->parse_error_count++;
+            } else if (diag->code >= 3000 && diag->code < 10000) {
+                ctx->semantic_error_count++;
+            }
             ctx->has_fatal = true;
             break;
         default:

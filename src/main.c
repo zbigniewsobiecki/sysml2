@@ -409,7 +409,7 @@ static int run_fix_mode(
             sysml2_pipeline_print_diagnostics(ctx, stderr);
             fprintf(stderr, "error: --fix aborted due to import errors (no files modified)\n");
             free(models);
-            return 1;
+            return sysml2_diag_has_parse_errors(diag) ? 1 : 2;
         }
     }
 
@@ -420,7 +420,7 @@ static int run_fix_mode(
             sysml2_pipeline_print_diagnostics(ctx, stderr);
             fprintf(stderr, "error: --fix aborted due to validation errors (no files modified)\n");
             free(models);
-            return 1;
+            return sysml2_diag_has_parse_errors(diag) ? 1 : 2;
         }
     }
 
@@ -445,7 +445,15 @@ static int run_fix_mode(
     }
 
     free(models);
-    return has_errors ? 1 : 0;
+
+    /* Exit codes: 0 = success, 1 = parse error, 2 = semantic error */
+    if (diag->error_count == 0 && !has_errors) {
+        return 0;
+    } else if (sysml2_diag_has_parse_errors(diag)) {
+        return 1;
+    } else {
+        return 2;
+    }
 }
 
 /* Run normal mode: parse, resolve, validate, output */
@@ -604,10 +612,10 @@ static int run_normal_mode(
     /* Print diagnostics */
     sysml2_pipeline_print_diagnostics(ctx, stderr);
 
-    /* Exit codes */
-    if (final_result == SYSML2_OK && !sysml2_pipeline_has_errors(ctx)) {
+    /* Exit codes: 0 = success, 1 = parse error, 2 = semantic error */
+    if (diag->error_count == 0) {
         return 0;
-    } else if (final_result == SYSML2_ERROR_SYNTAX) {
+    } else if (sysml2_diag_has_parse_errors(diag)) {
         return 1;
     } else {
         return 2;
@@ -836,7 +844,7 @@ static int run_modify_mode(
             fprintf(stderr, "error: modification aborted due to validation errors (no files modified)\n");
             free(models);
             free(modified_models);
-            return 1;
+            return sysml2_diag_has_parse_errors(diag) ? 1 : 2;
         }
     }
 
@@ -885,7 +893,15 @@ static int run_modify_mode(
 
     free(models);
     free(modified_models);
-    return has_errors ? 1 : 0;
+
+    /* Exit codes: 0 = success, 1 = parse error, 2 = semantic error */
+    if (diag->error_count == 0 && !has_errors) {
+        return 0;
+    } else if (sysml2_diag_has_parse_errors(diag)) {
+        return 1;
+    } else {
+        return 2;
+    }
 }
 
 int main(int argc, char **argv) {
