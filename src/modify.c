@@ -918,13 +918,31 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
         const char *new_id = sysml2_modify_remap_id(frag_node->id, target_scope, arena, intern);
         if (!new_id) continue;
 
+        /* Debug logging to trace element matching */
+        if (getenv("SYSML2_DEBUG_MODIFY")) {
+            bool exists = sysml2_modify_scope_exists(working_base, new_id);
+            fprintf(stderr, "DEBUG: Fragment '%s' -> remapped '%s', exists=%d\n",
+                    frag_node->id ? frag_node->id : "(null)",
+                    new_id,
+                    exists);
+        }
+
         /* Check if this ID exists in the base */
         if (sysml2_modify_scope_exists(working_base, new_id)) {
             add_to_id_set(new_id, &replaced_ids, &replaced_count, &replaced_capacity, arena);
         }
     }
 
-    /* Collect IDs to remove (replaced elements and their children) */
+    /* Collect IDs to remove (only the replaced elements themselves, NOT children)
+     *
+     * IMPORTANT: We intentionally do NOT cascade deletion to children here.
+     * The replacement element will have the same ID as the replaced element,
+     * so existing children will naturally become children of the new element.
+     * This preserves accumulated content from previous upsert operations.
+     *
+     * Old behavior: Cascade deletion wiped all children, causing data loss
+     * when a replacement fragment didn't include all previously-added children.
+     */
     const char **ids_to_remove = NULL;
     size_t remove_count = 0;
     size_t remove_capacity = 0;
@@ -933,22 +951,8 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
         add_to_id_set(replaced_ids[i], &ids_to_remove, &remove_count, &remove_capacity, arena);
     }
 
-    /* Cascade removal to children */
-    bool changed = true;
-    while (changed) {
-        changed = false;
-        for (size_t i = 0; i < working_base->element_count; i++) {
-            SysmlNode *node = working_base->elements[i];
-            if (!node || !node->id) continue;
-
-            if (id_in_set(node->id, ids_to_remove, remove_count)) continue;
-
-            if (node->parent_id && id_in_set(node->parent_id, ids_to_remove, remove_count)) {
-                add_to_id_set(node->id, &ids_to_remove, &remove_count, &remove_capacity, arena);
-                changed = true;
-            }
-        }
-    }
+    /* NOTE: Cascade deletion to children removed to prevent data loss.
+     * Children are preserved and inherit the replacement element as parent. */
 
     /* Step 3: Allocate new model */
     size_t max_elements = working_base->element_count + fragment->element_count;

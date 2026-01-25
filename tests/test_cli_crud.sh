@@ -311,6 +311,90 @@ assert_exit_code $EXIT_CODE 0 "Fix mode completes"
 assert_contains "$OUTPUT" "package Ugly {" "Fixed has proper spacing"
 
 # ============================================================
+# TEST 15: Upsert no duplication (Bug fix: element deduplication)
+# ============================================================
+echo ""
+echo "--- Test 15: Upsert no duplication ---"
+
+cat > "$WORKDIR/upsert_test.sysml" << 'EOF'
+package P {
+    part x { }
+}
+EOF
+
+# Apply the same fragment twice - should not create duplicates
+echo 'part x { attribute a : String; }' | "$PARSER" -P --set - --at 'P' "$WORKDIR/upsert_test.sysml" 2>&1
+echo 'part x { attribute a : String; }' | "$PARSER" -P --set - --at 'P' "$WORKDIR/upsert_test.sysml" 2>&1
+
+OUTPUT=$("$PARSER" -P -f sysml "$WORKDIR/upsert_test.sysml" 2>&1)
+# Count occurrences of "part x" - should be exactly 1
+count=$(echo "$OUTPUT" | grep -c 'part x' || true)
+
+if [ "$count" -eq 1 ]; then
+    pass "Upsert creates exactly one element"
+else
+    fail "Upsert creates exactly one element" "1 occurrence" "$count occurrences"
+fi
+
+# ============================================================
+# TEST 16: JSON output for modification counts
+# ============================================================
+echo ""
+echo "--- Test 16: JSON output for modification counts ---"
+
+cat > "$WORKDIR/json_output_test.sysml" << 'EOF'
+package Q {
+    part x { }
+}
+EOF
+
+OUTPUT=$(echo 'part y { }' | "$PARSER" -P --set - --at 'Q' -f json "$WORKDIR/json_output_test.sysml" 2>&1)
+
+assert_contains "$OUTPUT" '"added":1' "JSON reports added count"
+assert_contains "$OUTPUT" '"replaced":0' "JSON reports replaced count"
+assert_contains "$OUTPUT" '"deleted":0' "JSON reports deleted count"
+
+# ============================================================
+# TEST 17: Children preserved during replace
+# ============================================================
+echo ""
+echo "--- Test 17: Children preserved during replace ---"
+
+cat > "$WORKDIR/preserve_children.sysml" << 'EOF'
+package R {
+    part parent {
+        part child1 { }
+        part child2 { }
+    }
+}
+EOF
+
+# Replace parent with new attributes - children should be preserved
+echo 'part parent { attribute name : String; }' | "$PARSER" -P --set - --at 'R' "$WORKDIR/preserve_children.sysml" 2>&1
+
+OUTPUT=$("$PARSER" -P -f sysml "$WORKDIR/preserve_children.sysml" 2>&1)
+assert_contains "$OUTPUT" "part child1" "Child 1 preserved after parent replace"
+assert_contains "$OUTPUT" "part child2" "Child 2 preserved after parent replace"
+assert_contains "$OUTPUT" "attribute name" "New attribute added to parent"
+
+# ============================================================
+# TEST 18: Debug logging with SYSML2_DEBUG_MODIFY
+# ============================================================
+echo ""
+echo "--- Test 18: Debug logging ---"
+
+cat > "$WORKDIR/debug_test.sysml" << 'EOF'
+package Debug {
+    part existing { }
+}
+EOF
+
+OUTPUT=$(echo 'part existing { attribute x : String; }' | SYSML2_DEBUG_MODIFY=1 "$PARSER" -P --set - --at 'Debug' "$WORKDIR/debug_test.sysml" 2>&1)
+
+assert_contains "$OUTPUT" "DEBUG:" "Debug logging works when SYSML2_DEBUG_MODIFY=1"
+assert_contains "$OUTPUT" "exists=" "Debug logging shows existence check"
+
+# ============================================================
 # Summary
 # ============================================================
 echo ""

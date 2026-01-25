@@ -856,6 +856,12 @@ static int run_modify_mode(
         fprintf(stderr, "  Elements replaced: %zu\n", total_replaced);
     }
 
+    /* JSON output for modification results when -f json */
+    if (options->output_format == SYSML2_OUTPUT_JSON) {
+        printf("{\"added\":%zu,\"replaced\":%zu,\"deleted\":%zu}\n",
+               total_added, total_replaced, total_deleted);
+    }
+
     /* Pass 5: Write modified files (unless dry-run) */
     if (!options->dry_run) {
         for (size_t i = 0; i < options->input_file_count; i++) {
