@@ -951,29 +951,79 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
     size_t remove_count = 0;
     size_t remove_capacity = 0;
 
-    /* Step 2a: Only remove elements that are being REPLACED (matched by ID)
-     * plus their direct children (one level only).
+    /* Step 2a: Only remove elements that are being REPLACED (matched by ID).
      *
-     * This is the key difference from "full replacement" - we keep existing
-     * elements that are NOT being replaced by the fragment.
+     * Children of replaced elements are preserved unless they are also being
+     * replaced (i.e., the fragment has an element with the same remapped ID).
+     * This enables incremental updates: replacing a parent while keeping
+     * existing children that aren't in the fragment.
+     *
+     * We track replaced IDs separately from deleted IDs because replaced
+     * elements should NOT cascade deletion to their children.
      */
     for (size_t i = 0; i < replaced_count; i++) {
         add_to_id_set(replaced_ids[i], &ids_to_remove, &remove_count, &remove_capacity, arena);
+    }
 
-        /* Also remove direct children (one level only, not grandchildren).
-         * This handles the common case where the fragment includes the complete
-         * element definition with new children.
-         */
+    /* Step 2b: Only remove children that are also being replaced by fragment.
+     *
+     * Check each child of a replaced element: if the fragment has a matching
+     * element (same local name under the same parent), remove the base child.
+     * This prevents duplicates while preserving children not in the fragment.
+     *
+     * We track these separately for cascade purposes.
+     */
+    const char **children_to_remove = NULL;
+    size_t children_remove_count = 0;
+    size_t children_remove_capacity = 0;
+
+    for (size_t i = 0; i < replaced_count; i++) {
         for (size_t j = 0; j < working_base->element_count; j++) {
             SysmlNode *node = working_base->elements[j];
-            if (node && node->id && node->parent_id &&
-                strcmp(node->parent_id, replaced_ids[i]) == 0) {
-                add_to_id_set(node->id, &ids_to_remove, &remove_count, &remove_capacity, arena);
+            if (!node || !node->id || !node->parent_id) continue;
+            if (strcmp(node->parent_id, replaced_ids[i]) != 0) continue;
+
+            /* Check if fragment has a child with the same name under the
+             * corresponding parent. The fragment parent has a shorter ID
+             * (without target_scope prefix). */
+            const char *child_name = node->name;
+            if (!child_name) continue;
+
+            /* Find the fragment element corresponding to replaced_ids[i] */
+            for (size_t k = 0; k < fragment->element_count; k++) {
+                SysmlNode *frag_elem = fragment->elements[k];
+                if (!frag_elem) continue;
+
+                /* Check if this fragment element's remapped ID matches replaced_ids[i] */
+                const char *frag_remapped_id = sysml2_modify_remap_id(
+                    frag_elem->id, target_scope, arena, intern);
+                if (!frag_remapped_id || strcmp(frag_remapped_id, replaced_ids[i]) != 0)
+                    continue;
+
+                /* Found the fragment parent. Now check its children in fragment. */
+                for (size_t m = 0; m < fragment->element_count; m++) {
+                    SysmlNode *frag_child = fragment->elements[m];
+                    if (!frag_child || !frag_child->parent_id) continue;
+                    if (strcmp(frag_child->parent_id, frag_elem->id) != 0) continue;
+
+                    /* Fragment has a child of the replaced element */
+                    if (frag_child->name && strcmp(frag_child->name, child_name) == 0) {
+                        /* This base child will be replaced by fragment child */
+                        add_to_id_set(node->id, &ids_to_remove, &remove_count, &remove_capacity, arena);
+                        add_to_id_set(node->id, &children_to_remove, &children_remove_count, &children_remove_capacity, arena);
+                        break;
+                    }
+                }
+                break;
             }
         }
     }
 
-    /* Step 2b: Cascade deletion to all descendants of removed children */
+    /* Step 2c: Cascade deletion only from explicitly matched children (not replaced parents).
+     *
+     * Replaced parents preserve their children (unless also matched by name).
+     * Only children that are being replaced should cascade to their descendants.
+     */
     bool changed = true;
     while (changed) {
         changed = false;
@@ -982,8 +1032,10 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
             if (!node || !node->id) continue;
             if (id_in_set(node->id, ids_to_remove, remove_count)) continue;
 
-            if (node->parent_id && id_in_set(node->parent_id, ids_to_remove, remove_count)) {
+            /* Only cascade from children_to_remove, not from replaced_ids */
+            if (node->parent_id && id_in_set(node->parent_id, children_to_remove, children_remove_count)) {
                 add_to_id_set(node->id, &ids_to_remove, &remove_count, &remove_capacity, arena);
+                add_to_id_set(node->id, &children_to_remove, &children_remove_count, &children_remove_capacity, arena);
                 changed = true;
             }
         }
@@ -1023,15 +1075,26 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
     /* Step 4: Copy non-removed base elements
      *
      * HYBRID MODE: Preserve all elements that weren't marked for removal.
-     * This includes the target scope element with all its metadata intact.
-     * We don't clear metadata because the hybrid approach preserves existing
-     * content that isn't being replaced.
+     * For the target scope element, clear metadata arrays to prevent
+     * accumulation from previous upserts - fragment elements will bring
+     * their own fresh metadata.
      */
     for (size_t i = 0; i < working_base->element_count; i++) {
         SysmlNode *node = working_base->elements[i];
         if (!node || !node->id) continue;
 
         if (!id_in_set(node->id, ids_to_remove, remove_count)) {
+            /* For the target scope element itself, clear metadata arrays to prevent
+             * accumulation from previous upserts. The fragment elements will bring
+             * their own metadata which will be written fresh. */
+            if (target_scope && strcmp(node->id, target_scope) == 0) {
+                node->prefix_applied_metadata = NULL;
+                node->prefix_applied_metadata_count = 0;
+                /* Also clear body metadata and leading trivia to prevent accumulation */
+                node->metadata = NULL;
+                node->metadata_count = 0;
+                node->leading_trivia = NULL;
+            }
             result->elements[result->element_count++] = node;
         }
     }

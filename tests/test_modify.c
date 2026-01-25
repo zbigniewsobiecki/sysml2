@@ -10,6 +10,9 @@
 #include "sysml2/ast.h"
 #include "sysml2/query.h"
 #include "sysml2/modify.h"
+#include "sysml2/pipeline.h"
+#include "sysml2/sysml_writer.h"
+#include "sysml2/cli.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -1066,6 +1069,535 @@ TEST(find_containing_file) {
     sysml2_arena_destroy(&arena);
 }
 
+/* ========== Shorthand Feature Regression Tests ========== */
+
+/* Helper: Parse SysML from string and return model */
+static SysmlSemanticModel *parse_sysml_string(
+    Sysml2Arena *arena,
+    Sysml2Intern *intern,
+    const char *input
+) {
+    Sysml2CliOptions options = {0};
+    options.parse_only = true;
+    options.no_resolve = true;
+
+    Sysml2PipelineContext *ctx = sysml2_pipeline_create(arena, intern, &options);
+    if (!ctx) return NULL;
+
+    SysmlSemanticModel *model = NULL;
+    Sysml2Result result = sysml2_pipeline_process_input(
+        ctx, "<test>", input, strlen(input), &model
+    );
+
+    sysml2_pipeline_destroy(ctx);
+
+    return (result == SYSML2_OK) ? model : NULL;
+}
+
+/* Test: Shorthand feature value doesn't leak to sibling elements */
+TEST(shorthand_value_no_leak_to_sibling) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    const char *input =
+        "package TestPkg {\n"
+        "    part parent : ParentType {\n"
+        "        :>> name = \"Parent Name\";\n"
+        "        part child : ChildType { }\n"
+        "    }\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    /* Write model back to string */
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* The child should NOT have the parent's shorthand value leaked to it */
+    /* Look for 'child : ChildType = "Parent Name"' which would be the bug */
+    ASSERT(strstr(output, "child : ChildType = \"Parent Name\"") == NULL);
+
+    /* The child should appear without a default value */
+    ASSERT(strstr(output, "part child : ChildType") != NULL);
+
+    /* The shorthand feature should still be present in the body */
+    ASSERT(strstr(output, ":>> name = \"Parent Name\";") != NULL);
+
+    free(output);
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+/* Test: Shorthand feature preserved in body, not moved to parent's default value */
+TEST(shorthand_feature_preserved_in_body) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    const char *input =
+        "package TestPkg {\n"
+        "    part http_client : ExternalDependency {\n"
+        "        :>> version = \"^8.11.0\";\n"
+        "    }\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    /* Write model back to string */
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* The http_client should NOT have a default value at the declaration level */
+    /* Bug would be: 'http_client : ExternalDependency = "^8.11.0" {' */
+    ASSERT(strstr(output, "http_client : ExternalDependency = \"^8.11.0\"") == NULL);
+
+    /* The shorthand feature should be preserved inside the body */
+    ASSERT(strstr(output, ":>> version = \"^8.11.0\";") != NULL);
+
+    free(output);
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+/* ========== Metadata Accumulation Regression Tests ========== */
+
+/* Test: Metadata on target scope is cleared to prevent accumulation */
+TEST(merge_no_metadata_accumulation) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Base model: Pkg with prefix_applied_metadata, Pkg::A */
+    SysmlNode base_nodes[2];
+    memset(base_nodes, 0, sizeof(base_nodes));
+    base_nodes[0].id = "Pkg";
+    base_nodes[0].name = "Pkg";
+    base_nodes[0].kind = SYSML_KIND_PACKAGE;
+
+    /* Simulate accumulated @SourceFile on package from prior upsert */
+    SysmlMetadataUsage *old_meta = sysml2_arena_alloc(&arena, sizeof(SysmlMetadataUsage));
+    memset(old_meta, 0, sizeof(SysmlMetadataUsage));
+    old_meta->type_ref = "SourceFile";
+    base_nodes[0].prefix_applied_metadata = sysml2_arena_alloc(&arena, sizeof(SysmlMetadataUsage *));
+    base_nodes[0].prefix_applied_metadata[0] = old_meta;
+    base_nodes[0].prefix_applied_metadata_count = 1;
+
+    base_nodes[1].id = "Pkg::A";
+    base_nodes[1].name = "A";
+    base_nodes[1].kind = SYSML_KIND_PART_DEF;
+    base_nodes[1].parent_id = "Pkg";
+
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 2, NULL, 0);
+
+    /* Fragment: A with its own @SourceFile */
+    SysmlNode frag_nodes[1];
+    memset(frag_nodes, 0, sizeof(frag_nodes));
+    frag_nodes[0].id = "A";
+    frag_nodes[0].name = "A";
+    frag_nodes[0].kind = SYSML_KIND_PART_DEF;
+
+    SysmlMetadataUsage *new_meta = sysml2_arena_alloc(&arena, sizeof(SysmlMetadataUsage));
+    memset(new_meta, 0, sizeof(SysmlMetadataUsage));
+    new_meta->type_ref = "SourceFile";
+    frag_nodes[0].prefix_applied_metadata = sysml2_arena_alloc(&arena, sizeof(SysmlMetadataUsage *));
+    frag_nodes[0].prefix_applied_metadata[0] = new_meta;
+    frag_nodes[0].prefix_applied_metadata_count = 1;
+
+    SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 1, NULL, 0);
+
+    /* Merge into Pkg */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+    );
+
+    ASSERT_NOT_NULL(result);
+
+    /* Verify: Package should have NO prefix_applied_metadata (cleared) */
+    for (size_t i = 0; i < result->element_count; i++) {
+        if (strcmp(result->elements[i]->id, "Pkg") == 0) {
+            ASSERT_EQ(result->elements[i]->prefix_applied_metadata_count, 0);
+        }
+    }
+
+    /* Verify: Pkg::A should have exactly 1 @SourceFile (from fragment) */
+    for (size_t i = 0; i < result->element_count; i++) {
+        if (strcmp(result->elements[i]->id, "Pkg::A") == 0) {
+            ASSERT_EQ(result->elements[i]->prefix_applied_metadata_count, 1);
+        }
+    }
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+/* Test: Non-target scopes preserve their metadata during merge */
+TEST(merge_preserves_sibling_metadata) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Base model: Pkg, Pkg::A with metadata, Pkg::B (sibling) with metadata */
+    SysmlNode base_nodes[3];
+    memset(base_nodes, 0, sizeof(base_nodes));
+    base_nodes[0].id = "Pkg";
+    base_nodes[0].name = "Pkg";
+    base_nodes[0].kind = SYSML_KIND_PACKAGE;
+
+    base_nodes[1].id = "Pkg::A";
+    base_nodes[1].name = "A";
+    base_nodes[1].kind = SYSML_KIND_PART_DEF;
+    base_nodes[1].parent_id = "Pkg";
+
+    /* B has metadata that should be preserved (not being replaced) */
+    base_nodes[2].id = "Pkg::B";
+    base_nodes[2].name = "B";
+    base_nodes[2].kind = SYSML_KIND_PART_DEF;
+    base_nodes[2].parent_id = "Pkg";
+
+    SysmlMetadataUsage *b_meta = sysml2_arena_alloc(&arena, sizeof(SysmlMetadataUsage));
+    memset(b_meta, 0, sizeof(SysmlMetadataUsage));
+    b_meta->type_ref = "PreservedMeta";
+    base_nodes[2].prefix_applied_metadata = sysml2_arena_alloc(&arena, sizeof(SysmlMetadataUsage *));
+    base_nodes[2].prefix_applied_metadata[0] = b_meta;
+    base_nodes[2].prefix_applied_metadata_count = 1;
+
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 3, NULL, 0);
+
+    /* Fragment: A replacement (only A, not B) */
+    SysmlNode frag_nodes[1];
+    memset(frag_nodes, 0, sizeof(frag_nodes));
+    frag_nodes[0].id = "A";
+    frag_nodes[0].name = "A";
+    frag_nodes[0].kind = SYSML_KIND_PART_DEF;
+
+    SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 1, NULL, 0);
+
+    /* Merge into Pkg */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+    );
+
+    ASSERT_NOT_NULL(result);
+
+    /* Verify: Pkg::B still has its metadata (sibling not touched) */
+    for (size_t i = 0; i < result->element_count; i++) {
+        if (strcmp(result->elements[i]->id, "Pkg::B") == 0) {
+            ASSERT_EQ(result->elements[i]->prefix_applied_metadata_count, 1);
+            ASSERT_STR_EQ(result->elements[i]->prefix_applied_metadata[0]->type_ref, "PreservedMeta");
+        }
+    }
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+/* Test: Body metadata on target scope is also cleared */
+TEST(merge_clears_body_metadata) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Base model: Pkg with body metadata */
+    SysmlNode base_nodes[1];
+    memset(base_nodes, 0, sizeof(base_nodes));
+    base_nodes[0].id = "Pkg";
+    base_nodes[0].name = "Pkg";
+    base_nodes[0].kind = SYSML_KIND_PACKAGE;
+
+    /* Add body metadata to package */
+    SysmlMetadataUsage *body_meta = sysml2_arena_alloc(&arena, sizeof(SysmlMetadataUsage));
+    memset(body_meta, 0, sizeof(SysmlMetadataUsage));
+    body_meta->type_ref = "OldBodyMeta";
+    base_nodes[0].metadata = sysml2_arena_alloc(&arena, sizeof(SysmlMetadataUsage *));
+    base_nodes[0].metadata[0] = body_meta;
+    base_nodes[0].metadata_count = 1;
+
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 1, NULL, 0);
+
+    /* Fragment: new element */
+    SysmlNode frag_nodes[1];
+    memset(frag_nodes, 0, sizeof(frag_nodes));
+    frag_nodes[0].id = "NewElem";
+    frag_nodes[0].name = "NewElem";
+    frag_nodes[0].kind = SYSML_KIND_PART_DEF;
+
+    SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 1, NULL, 0);
+
+    /* Merge into Pkg */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+    );
+
+    ASSERT_NOT_NULL(result);
+
+    /* Verify: Package body metadata is cleared */
+    for (size_t i = 0; i < result->element_count; i++) {
+        if (strcmp(result->elements[i]->id, "Pkg") == 0) {
+            ASSERT_EQ(result->elements[i]->metadata_count, 0);
+        }
+    }
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+/* Test: Leading trivia on target scope is cleared */
+TEST(merge_clears_leading_trivia) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Base model: Pkg with leading trivia */
+    SysmlNode base_nodes[1];
+    memset(base_nodes, 0, sizeof(base_nodes));
+    base_nodes[0].id = "Pkg";
+    base_nodes[0].name = "Pkg";
+    base_nodes[0].kind = SYSML_KIND_PACKAGE;
+
+    /* Add leading trivia to package */
+    SysmlTrivia *trivia = sysml2_arena_alloc(&arena, sizeof(SysmlTrivia));
+    memset(trivia, 0, sizeof(SysmlTrivia));
+    trivia->kind = SYSML_TRIVIA_BLOCK_COMMENT;
+    trivia->text = "/* accumulated comment */";
+    trivia->next = NULL;
+    base_nodes[0].leading_trivia = trivia;
+
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 1, NULL, 0);
+
+    /* Fragment: new element */
+    SysmlNode frag_nodes[1];
+    memset(frag_nodes, 0, sizeof(frag_nodes));
+    frag_nodes[0].id = "NewElem";
+    frag_nodes[0].name = "NewElem";
+    frag_nodes[0].kind = SYSML_KIND_PART_DEF;
+
+    SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 1, NULL, 0);
+
+    /* Merge into Pkg */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+    );
+
+    ASSERT_NOT_NULL(result);
+
+    /* Verify: Package leading trivia is cleared */
+    for (size_t i = 0; i < result->element_count; i++) {
+        if (strcmp(result->elements[i]->id, "Pkg") == 0) {
+            ASSERT_NULL(result->elements[i]->leading_trivia);
+        }
+    }
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+/* Test: Multiple upserts to same file - simulated accumulation scenario */
+TEST(merge_repeated_upserts_no_accumulation) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Start with empty Pkg */
+    SysmlNode base_nodes[1];
+    memset(base_nodes, 0, sizeof(base_nodes));
+    base_nodes[0].id = "Pkg";
+    base_nodes[0].name = "Pkg";
+    base_nodes[0].kind = SYSML_KIND_PACKAGE;
+
+    SysmlSemanticModel *model = create_test_model(&arena, &intern, base_nodes, 1, NULL, 0);
+
+    /* Simulate 3 upserts with metadata */
+    for (int round = 0; round < 3; round++) {
+        SysmlNode frag_nodes[1];
+        memset(frag_nodes, 0, sizeof(frag_nodes));
+        frag_nodes[0].id = "Elem";
+        frag_nodes[0].name = "Elem";
+        frag_nodes[0].kind = SYSML_KIND_PART_DEF;
+
+        /* Each upsert brings @SourceFile */
+        SysmlMetadataUsage *meta = sysml2_arena_alloc(&arena, sizeof(SysmlMetadataUsage));
+        memset(meta, 0, sizeof(SysmlMetadataUsage));
+        meta->type_ref = "SourceFile";
+        frag_nodes[0].prefix_applied_metadata = sysml2_arena_alloc(&arena, sizeof(SysmlMetadataUsage *));
+        frag_nodes[0].prefix_applied_metadata[0] = meta;
+        frag_nodes[0].prefix_applied_metadata_count = 1;
+
+        SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 1, NULL, 0);
+
+        size_t added = 0, replaced = 0;
+        model = sysml2_modify_merge_fragment(
+            model, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        );
+        ASSERT_NOT_NULL(model);
+    }
+
+    /* After 3 rounds, Pkg should have 0 metadata (cleared each time) */
+    for (size_t i = 0; i < model->element_count; i++) {
+        if (strcmp(model->elements[i]->id, "Pkg") == 0) {
+            ASSERT_EQ(model->elements[i]->prefix_applied_metadata_count, 0);
+        }
+    }
+
+    /* And Pkg::Elem should have exactly 1 @SourceFile (not 3) */
+    for (size_t i = 0; i < model->element_count; i++) {
+        if (strcmp(model->elements[i]->id, "Pkg::Elem") == 0) {
+            ASSERT_EQ(model->elements[i]->prefix_applied_metadata_count, 1);
+        }
+    }
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+/* Test: Children of replaced parent are preserved if not in fragment */
+TEST(merge_preserves_children_of_replaced_parent) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Base model: Pkg, Pkg::Parent, Pkg::Parent::Child1, Pkg::Parent::Child2 */
+    SysmlNode base_nodes[4];
+    memset(base_nodes, 0, sizeof(base_nodes));
+    base_nodes[0].id = "Pkg";
+    base_nodes[0].name = "Pkg";
+    base_nodes[0].kind = SYSML_KIND_PACKAGE;
+
+    base_nodes[1].id = "Pkg::Parent";
+    base_nodes[1].name = "Parent";
+    base_nodes[1].kind = SYSML_KIND_PART_USAGE;
+    base_nodes[1].parent_id = "Pkg";
+
+    base_nodes[2].id = "Pkg::Parent::Child1";
+    base_nodes[2].name = "Child1";
+    base_nodes[2].kind = SYSML_KIND_PART_USAGE;
+    base_nodes[2].parent_id = "Pkg::Parent";
+
+    base_nodes[3].id = "Pkg::Parent::Child2";
+    base_nodes[3].name = "Child2";
+    base_nodes[3].kind = SYSML_KIND_PART_USAGE;
+    base_nodes[3].parent_id = "Pkg::Parent";
+
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 4, NULL, 0);
+
+    /* Fragment: Parent with new attribute (no children) */
+    SysmlNode frag_nodes[2];
+    memset(frag_nodes, 0, sizeof(frag_nodes));
+    frag_nodes[0].id = "Parent";
+    frag_nodes[0].name = "Parent";
+    frag_nodes[0].kind = SYSML_KIND_PART_USAGE;
+
+    frag_nodes[1].id = "Parent::NewAttr";
+    frag_nodes[1].name = "NewAttr";
+    frag_nodes[1].kind = SYSML_KIND_ATTRIBUTE_USAGE;
+    frag_nodes[1].parent_id = "Parent";
+
+    SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 2, NULL, 0);
+
+    /* Merge into Pkg */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+    );
+
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ(replaced, 1);  /* Parent was replaced */
+    ASSERT_EQ(added, 1);     /* NewAttr was added */
+
+    /* Verify: Child1 and Child2 are preserved */
+    bool found_child1 = false, found_child2 = false, found_new_attr = false;
+    for (size_t i = 0; i < result->element_count; i++) {
+        if (strcmp(result->elements[i]->id, "Pkg::Parent::Child1") == 0) found_child1 = true;
+        if (strcmp(result->elements[i]->id, "Pkg::Parent::Child2") == 0) found_child2 = true;
+        if (strcmp(result->elements[i]->id, "Pkg::Parent::NewAttr") == 0) found_new_attr = true;
+    }
+    ASSERT_TRUE(found_child1);
+    ASSERT_TRUE(found_child2);
+    ASSERT_TRUE(found_new_attr);
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+/* Test: Child with same name as fragment child is replaced */
+TEST(merge_replaces_matching_children) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Base model: Pkg, Pkg::Parent, Pkg::Parent::Attr (ATTRIBUTE) */
+    SysmlNode base_nodes[3];
+    memset(base_nodes, 0, sizeof(base_nodes));
+    base_nodes[0].id = "Pkg";
+    base_nodes[0].name = "Pkg";
+    base_nodes[0].kind = SYSML_KIND_PACKAGE;
+
+    base_nodes[1].id = "Pkg::Parent";
+    base_nodes[1].name = "Parent";
+    base_nodes[1].kind = SYSML_KIND_PART_USAGE;
+    base_nodes[1].parent_id = "Pkg";
+
+    base_nodes[2].id = "Pkg::Parent::Attr";
+    base_nodes[2].name = "Attr";
+    base_nodes[2].kind = SYSML_KIND_ATTRIBUTE_USAGE;
+    base_nodes[2].parent_id = "Pkg::Parent";
+    base_nodes[2].documentation = "Old doc";
+
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 3, NULL, 0);
+
+    /* Fragment: Parent with Attr (same name, different content) */
+    SysmlNode frag_nodes[2];
+    memset(frag_nodes, 0, sizeof(frag_nodes));
+    frag_nodes[0].id = "Parent";
+    frag_nodes[0].name = "Parent";
+    frag_nodes[0].kind = SYSML_KIND_PART_USAGE;
+
+    frag_nodes[1].id = "Parent::Attr";
+    frag_nodes[1].name = "Attr";
+    frag_nodes[1].kind = SYSML_KIND_ATTRIBUTE_USAGE;
+    frag_nodes[1].parent_id = "Parent";
+    frag_nodes[1].documentation = "New doc";
+
+    SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 2, NULL, 0);
+
+    /* Merge into Pkg */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+    );
+
+    ASSERT_NOT_NULL(result);
+
+    /* Verify: Attr is replaced (has new doc) */
+    for (size_t i = 0; i < result->element_count; i++) {
+        if (strcmp(result->elements[i]->id, "Pkg::Parent::Attr") == 0) {
+            ASSERT_STR_EQ(result->elements[i]->documentation, "New doc");
+        }
+    }
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -1122,6 +1654,21 @@ int main(void) {
 
     /* Find containing file tests */
     RUN_TEST(find_containing_file);
+
+    /* Shorthand feature regression tests */
+    RUN_TEST(shorthand_value_no_leak_to_sibling);
+    RUN_TEST(shorthand_feature_preserved_in_body);
+
+    /* Metadata accumulation regression tests */
+    RUN_TEST(merge_no_metadata_accumulation);
+    RUN_TEST(merge_preserves_sibling_metadata);
+    RUN_TEST(merge_clears_body_metadata);
+    RUN_TEST(merge_clears_leading_trivia);
+    RUN_TEST(merge_repeated_upserts_no_accumulation);
+
+    /* Child preservation tests */
+    RUN_TEST(merge_preserves_children_of_replaced_parent);
+    RUN_TEST(merge_replaces_matching_children);
 
     printf("\n%d/%d tests passed.\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;

@@ -1752,6 +1752,9 @@ void sysml2_capture_shorthand_feature(SysmlBuildContext *ctx, const char *text, 
     stmt->raw_text = trim_and_intern(ctx, text, len);
 
     add_pending_stmt(ctx, stmt);
+
+    /* Clear pending modifiers since they're embedded in raw_text */
+    sysml2_build_clear_pending_modifiers(ctx);
 }
 
 /*

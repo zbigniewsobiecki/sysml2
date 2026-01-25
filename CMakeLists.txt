@@ -94,7 +94,11 @@ add_executable(test_query tests/test_query.c)
 target_link_libraries(test_query sysml2_core)
 
 # Modify unit tests
-add_executable(test_modify tests/test_modify.c)
+add_executable(test_modify
+    src/sysml_parser.c
+    tests/test_modify.c
+)
+target_include_directories(test_modify PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(test_modify sysml2_core)
 
 # PackCC-generated parser test
