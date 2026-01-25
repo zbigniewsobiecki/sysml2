@@ -40,6 +40,25 @@ static int tests_passed = 0;
 #define ASSERT_NULL(a) ASSERT((a) == NULL)
 #define ASSERT_NOT_NULL(a) ASSERT((a) != NULL)
 
+/* Test fixture macros for arena/intern setup and teardown */
+#define FIXTURE_SETUP() \
+    Sysml2Arena arena; \
+    sysml2_arena_init(&arena); \
+    Sysml2Intern intern; \
+    sysml2_intern_init(&intern, &arena)
+
+#define FIXTURE_TEARDOWN() \
+    sysml2_intern_destroy(&intern); \
+    sysml2_arena_destroy(&arena)
+
+/* Arena-only fixture for tests that don't need intern */
+#define FIXTURE_ARENA_SETUP() \
+    Sysml2Arena arena; \
+    sysml2_arena_init(&arena)
+
+#define FIXTURE_ARENA_TEARDOWN() \
+    sysml2_arena_destroy(&arena)
+
 /* ========== Kind to JSON Type Tests ========== */
 
 TEST(kind_to_json_type_package) {
@@ -161,10 +180,7 @@ TEST(kind_is_relationship) {
 /* ========== Build Context Tests ========== */
 
 TEST(build_context_create) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test.sysml");
     ASSERT_NOT_NULL(ctx);
@@ -173,29 +189,23 @@ TEST(build_context_create) {
     ASSERT_EQ(ctx->relationship_count, 0);
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(build_context_source_name) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "myfile.sysml");
     ASSERT_STR_EQ(ctx->source_name, "myfile.sysml");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Scope Stack Tests ========== */
 
 TEST(scope_push_pop) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -214,14 +224,11 @@ TEST(scope_push_pop) {
     ASSERT_NULL(sysml2_build_current_scope(ctx));
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(scope_depth) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -240,14 +247,11 @@ TEST(scope_depth) {
     ASSERT_EQ(ctx->scope_depth, 2);
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(scope_pop_at_root_is_safe) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -257,16 +261,13 @@ TEST(scope_pop_at_root_is_safe) {
     ASSERT_EQ(ctx->scope_depth, 0);
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== ID Generation Tests ========== */
 
 TEST(make_id_at_root) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -274,14 +275,11 @@ TEST(make_id_at_root) {
     ASSERT_STR_EQ(id, "MyPackage");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(make_id_in_scope) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -290,14 +288,11 @@ TEST(make_id_in_scope) {
     ASSERT_STR_EQ(id, "Parent::Child");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(make_id_nested) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -307,14 +302,11 @@ TEST(make_id_nested) {
     ASSERT_STR_EQ(id, "Pkg::PartDef::attr");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(make_id_anonymous) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -325,14 +317,11 @@ TEST(make_id_anonymous) {
     ASSERT_STR_EQ(id2, "_anon_2");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(make_id_anonymous_in_scope) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -341,14 +330,11 @@ TEST(make_id_anonymous_in_scope) {
     ASSERT_STR_EQ(id, "Pkg::_anon_1");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(make_rel_id) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -359,14 +345,11 @@ TEST(make_rel_id) {
     ASSERT_STR_EQ(id2, "_flow_2");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(make_rel_id_in_scope) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -375,16 +358,13 @@ TEST(make_rel_id_in_scope) {
     ASSERT_STR_EQ(id, "Pkg::_conn_1");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Node Creation Tests ========== */
 
 TEST(node_creation) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -398,14 +378,11 @@ TEST(node_creation) {
     ASSERT_EQ(node->typed_by_count, 0);
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(node_with_parent) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -417,14 +394,11 @@ TEST(node_with_parent) {
     ASSERT_STR_EQ(node->parent_id, "Pkg");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(node_anonymous) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -434,16 +408,13 @@ TEST(node_anonymous) {
     ASSERT_NULL(node->name);
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Element Collection Tests ========== */
 
 TEST(add_element) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -453,14 +424,11 @@ TEST(add_element) {
     ASSERT_EQ(ctx->elements[0], node);
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(add_multiple_elements) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -473,16 +441,13 @@ TEST(add_multiple_elements) {
     ASSERT_EQ(ctx->element_count, 10);
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Type Specialization Tests ========== */
 
 TEST(typed_by_single) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -493,14 +458,11 @@ TEST(typed_by_single) {
     ASSERT_STR_EQ(node->typed_by[0], "Engine");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(typed_by_multiple) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -513,16 +475,13 @@ TEST(typed_by_multiple) {
     ASSERT_STR_EQ(node->typed_by[1], "TypeB");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Specialization Tests ========== */
 
 TEST(specializes_single) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -533,14 +492,11 @@ TEST(specializes_single) {
     ASSERT_STR_EQ(node->specializes[0], "Vehicle");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(specializes_multiple) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -553,14 +509,11 @@ TEST(specializes_multiple) {
     ASSERT_STR_EQ(node->specializes[1], "HighPerformance");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(redefines_single) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -571,14 +524,11 @@ TEST(redefines_single) {
     ASSERT_STR_EQ(node->redefines[0], "baseSpeed");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(references_single) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -589,14 +539,11 @@ TEST(references_single) {
     ASSERT_STR_EQ(node->references[0], "Person");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(mixed_type_relationships) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -616,14 +563,11 @@ TEST(mixed_type_relationships) {
     ASSERT_STR_EQ(node->references[0], "Driver");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(node_initializes_new_fields) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -641,16 +585,13 @@ TEST(node_initializes_new_fields) {
     ASSERT_EQ(node->prefix_metadata_count, 0);
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Metadata Builder Tests ========== */
 
 TEST(metadata_usage_simple) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -661,14 +602,11 @@ TEST(metadata_usage_simple) {
     ASSERT_EQ(meta->about_count, 0);
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(metadata_usage_with_features) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -683,14 +621,11 @@ TEST(metadata_usage_with_features) {
     ASSERT_STR_EQ(meta->features[1]->value, "42");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(add_prefix_metadata_single) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -701,14 +636,11 @@ TEST(add_prefix_metadata_single) {
     ASSERT_STR_EQ(node->prefix_metadata[0], "SourceLink");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(add_prefix_metadata_multiple) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -721,14 +653,11 @@ TEST(add_prefix_metadata_multiple) {
     ASSERT_STR_EQ(node->prefix_metadata[1], "SourceLink");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(add_metadata_to_node) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -743,16 +672,13 @@ TEST(add_metadata_to_node) {
     ASSERT_STR_EQ(node->metadata[0]->features[0]->name, "filePath");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Relationship Tests ========== */
 
 TEST(relationship_creation) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -766,14 +692,11 @@ TEST(relationship_creation) {
     ASSERT_STR_EQ(rel->id, "_conn_1");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(relationship_flow) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -783,14 +706,11 @@ TEST(relationship_flow) {
     ASSERT_STR_EQ(rel->id, "_flow_1");
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(add_relationship) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test");
 
@@ -802,16 +722,13 @@ TEST(add_relationship) {
     ASSERT_EQ(ctx->relationships[0], rel);
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Finalize Tests ========== */
 
 TEST(build_finalize) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test.sysml");
 
@@ -830,7 +747,7 @@ TEST(build_finalize) {
     ASSERT_EQ(model->relationship_count, 1);
 
     sysml2_build_context_destroy(ctx);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== JSON Escape String Tests ========== */

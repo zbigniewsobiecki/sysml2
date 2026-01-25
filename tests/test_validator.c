@@ -41,6 +41,17 @@ static int tests_passed = 0;
 #define ASSERT_NULL(a) ASSERT((a) == NULL)
 #define ASSERT_NOT_NULL(a) ASSERT((a) != NULL)
 
+/* Test fixture macros for arena/intern setup and teardown */
+#define FIXTURE_SETUP() \
+    Sysml2Arena arena; \
+    sysml2_arena_init(&arena); \
+    Sysml2Intern intern; \
+    sysml2_intern_init(&intern, &arena)
+
+#define FIXTURE_TEARDOWN() \
+    sysml2_intern_destroy(&intern); \
+    sysml2_arena_destroy(&arena)
+
 /* ========== Test Helpers ========== */
 
 typedef struct {
@@ -66,10 +77,7 @@ static void test_ctx_destroy(TestContext *ctx) {
 /* ========== Symbol Table Tests ========== */
 
 TEST(symtab_init) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     Sysml2SymbolTable symtab;
     sysml2_symtab_init(&symtab, &arena, &intern);
@@ -80,14 +88,11 @@ TEST(symtab_init) {
     ASSERT_EQ(symtab.scope_count, 0);
 
     sysml2_symtab_destroy(&symtab);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(symtab_get_or_create_scope) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     Sysml2SymbolTable symtab;
     sysml2_symtab_init(&symtab, &arena, &intern);
@@ -107,14 +112,11 @@ TEST(symtab_get_or_create_scope) {
     ASSERT_EQ(pkg, pkg2);
 
     sysml2_symtab_destroy(&symtab);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(symtab_nested_scopes) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     Sysml2SymbolTable symtab;
     sysml2_symtab_init(&symtab, &arena, &intern);
@@ -130,14 +132,11 @@ TEST(symtab_nested_scopes) {
     ASSERT_EQ(nested->parent->parent, symtab.root_scope);
 
     sysml2_symtab_destroy(&symtab);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(symtab_add_symbol) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     Sysml2SymbolTable symtab;
     sysml2_symtab_init(&symtab, &arena, &intern);
@@ -159,14 +158,11 @@ TEST(symtab_add_symbol) {
     ASSERT_NULL(not_found);
 
     sysml2_symtab_destroy(&symtab);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(symtab_duplicate_returns_existing) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     Sysml2SymbolTable symtab;
     sysml2_symtab_init(&symtab, &arena, &intern);
@@ -179,14 +175,11 @@ TEST(symtab_duplicate_returns_existing) {
     ASSERT_EQ(sym1, sym2); /* Should return existing */
 
     sysml2_symtab_destroy(&symtab);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(symtab_resolve_simple) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     Sysml2SymbolTable symtab;
     sysml2_symtab_init(&symtab, &arena, &intern);
@@ -200,14 +193,11 @@ TEST(symtab_resolve_simple) {
     ASSERT_STR_EQ(found->name, "Engine");
 
     sysml2_symtab_destroy(&symtab);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(symtab_resolve_parent_scope) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     Sysml2SymbolTable symtab;
     sysml2_symtab_init(&symtab, &arena, &intern);
@@ -224,14 +214,11 @@ TEST(symtab_resolve_parent_scope) {
     ASSERT_STR_EQ(found->name, "GlobalType");
 
     sysml2_symtab_destroy(&symtab);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(symtab_resolve_qualified) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     Sysml2SymbolTable symtab;
     sysml2_symtab_init(&symtab, &arena, &intern);
@@ -247,7 +234,7 @@ TEST(symtab_resolve_qualified) {
     ASSERT_STR_EQ(found->qualified_id, "Pkg::Engine");
 
     sysml2_symtab_destroy(&symtab);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Type Compatibility Tests ========== */
@@ -595,10 +582,7 @@ TEST(validate_suggestions) {
 /* ========== Find Similar Names Tests ========== */
 
 TEST(find_similar_basic) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     Sysml2SymbolTable symtab;
     sysml2_symtab_init(&symtab, &arena, &intern);
@@ -615,7 +599,7 @@ TEST(find_similar_basic) {
     ASSERT_STR_EQ(suggestions[0], "Engine");
 
     sysml2_symtab_destroy(&symtab);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Main ========== */

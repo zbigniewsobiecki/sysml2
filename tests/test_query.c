@@ -40,11 +40,18 @@ static int tests_passed = 0;
 #define ASSERT_NULL(a) ASSERT((a) == NULL)
 #define ASSERT_NOT_NULL(a) ASSERT((a) != NULL)
 
+/* Test fixture macros for arena setup and teardown */
+#define FIXTURE_ARENA_SETUP() \
+    Sysml2Arena arena; \
+    sysml2_arena_init(&arena)
+
+#define FIXTURE_ARENA_TEARDOWN() \
+    sysml2_arena_destroy(&arena)
+
 /* ========== Pattern Parsing Tests ========== */
 
 TEST(parse_exact_pattern) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2QueryPattern *p = sysml2_query_parse("Pkg::Element", &arena);
     ASSERT_NOT_NULL(p);
@@ -52,12 +59,11 @@ TEST(parse_exact_pattern) {
     ASSERT_STR_EQ(p->base_path, "Pkg::Element");
     ASSERT_NULL(p->next);
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(parse_direct_wildcard_pattern) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2QueryPattern *p = sysml2_query_parse("Pkg::*", &arena);
     ASSERT_NOT_NULL(p);
@@ -65,12 +71,11 @@ TEST(parse_direct_wildcard_pattern) {
     ASSERT_STR_EQ(p->base_path, "Pkg");
     ASSERT_NULL(p->next);
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(parse_recursive_wildcard_pattern) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2QueryPattern *p = sysml2_query_parse("Pkg::**", &arena);
     ASSERT_NOT_NULL(p);
@@ -78,36 +83,33 @@ TEST(parse_recursive_wildcard_pattern) {
     ASSERT_STR_EQ(p->base_path, "Pkg");
     ASSERT_NULL(p->next);
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(parse_nested_exact_pattern) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2QueryPattern *p = sysml2_query_parse("DataModel::Entities::Car", &arena);
     ASSERT_NOT_NULL(p);
     ASSERT_EQ(p->kind, SYSML2_QUERY_EXACT);
     ASSERT_STR_EQ(p->base_path, "DataModel::Entities::Car");
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(parse_nested_direct_pattern) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2QueryPattern *p = sysml2_query_parse("DataModel::Entities::*", &arena);
     ASSERT_NOT_NULL(p);
     ASSERT_EQ(p->kind, SYSML2_QUERY_DIRECT);
     ASSERT_STR_EQ(p->base_path, "DataModel::Entities");
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(parse_multi_patterns) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     const char *patterns[] = {"Pkg::A", "Pkg::B", "Other::*"};
     Sysml2QueryPattern *p = sysml2_query_parse_multi(patterns, 3, &arena);
@@ -124,77 +126,70 @@ TEST(parse_multi_patterns) {
     ASSERT_STR_EQ(p->next->next->base_path, "Other");
     ASSERT_NULL(p->next->next->next);
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 /* ========== Pattern Matching Tests ========== */
 
 TEST(match_exact_success) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2QueryPattern *p = sysml2_query_parse("Pkg::Element", &arena);
     ASSERT_TRUE(sysml2_query_matches(p, "Pkg::Element"));
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(match_exact_failure_different) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2QueryPattern *p = sysml2_query_parse("Pkg::Element", &arena);
     ASSERT_FALSE(sysml2_query_matches(p, "Pkg::Other"));
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(match_exact_failure_child) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2QueryPattern *p = sysml2_query_parse("Pkg::Element", &arena);
     ASSERT_FALSE(sysml2_query_matches(p, "Pkg::Element::Child"));
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(match_direct_success) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2QueryPattern *p = sysml2_query_parse("Pkg::*", &arena);
     ASSERT_TRUE(sysml2_query_matches(p, "Pkg::A"));
     ASSERT_TRUE(sysml2_query_matches(p, "Pkg::B"));
     ASSERT_TRUE(sysml2_query_matches(p, "Pkg::Element"));
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(match_direct_failure_grandchild) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2QueryPattern *p = sysml2_query_parse("Pkg::*", &arena);
     ASSERT_FALSE(sysml2_query_matches(p, "Pkg::A::B"));
     ASSERT_FALSE(sysml2_query_matches(p, "Pkg::Element::Child"));
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(match_direct_failure_base) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2QueryPattern *p = sysml2_query_parse("Pkg::*", &arena);
     ASSERT_FALSE(sysml2_query_matches(p, "Pkg"));  /* The base itself doesn't match */
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(match_recursive_success) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2QueryPattern *p = sysml2_query_parse("Pkg::**", &arena);
     ASSERT_TRUE(sysml2_query_matches(p, "Pkg"));  /* Base matches for recursive */
@@ -203,23 +198,21 @@ TEST(match_recursive_success) {
     ASSERT_TRUE(sysml2_query_matches(p, "Pkg::A::B::C"));
     ASSERT_TRUE(sysml2_query_matches(p, "Pkg::Element::Child::Grandchild"));
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(match_recursive_failure_other_pkg) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2QueryPattern *p = sysml2_query_parse("Pkg::**", &arena);
     ASSERT_FALSE(sysml2_query_matches(p, "Other::A"));
     ASSERT_FALSE(sysml2_query_matches(p, "PkgExtra::A"));  /* Prefix but not same */
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(match_any_patterns) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     const char *patterns[] = {"A::X", "B::*", "C::**"};
     Sysml2QueryPattern *p = sysml2_query_parse_multi(patterns, 3, &arena);
@@ -241,48 +234,44 @@ TEST(match_any_patterns) {
     ASSERT_FALSE(sysml2_query_matches_any(p, "D::X"));
     ASSERT_FALSE(sysml2_query_matches_any(p, "Other"));
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 /* ========== Parent Path Tests ========== */
 
 TEST(parent_path_nested) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     const char *parent = sysml2_query_parent_path("A::B::C", &arena);
     ASSERT_NOT_NULL(parent);
     ASSERT_STR_EQ(parent, "A::B");
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(parent_path_top_level) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     const char *parent = sysml2_query_parent_path("TopLevel", &arena);
     ASSERT_NULL(parent);
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(parent_path_one_level) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     const char *parent = sysml2_query_parent_path("Parent::Child", &arena);
     ASSERT_NOT_NULL(parent);
     ASSERT_STR_EQ(parent, "Parent");
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 /* ========== Query Execution Tests ========== */
 
 TEST(execute_exact_query) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     /* Create a simple model */
     SysmlSemanticModel model = {0};
@@ -305,12 +294,11 @@ TEST(execute_exact_query) {
     ASSERT_EQ(result->element_count, 1);
     ASSERT_STR_EQ(result->elements[0]->id, "Pkg::A");
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(execute_direct_query) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     /* Create a model with nested structure */
     SysmlSemanticModel model = {0};
@@ -343,12 +331,11 @@ TEST(execute_direct_query) {
     ASSERT_TRUE(found_a);
     ASSERT_TRUE(found_b);
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(execute_recursive_query) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     /* Create a model with nested structure */
     SysmlSemanticModel model = {0};
@@ -372,12 +359,11 @@ TEST(execute_recursive_query) {
     ASSERT_NOT_NULL(result);
     ASSERT_EQ(result->element_count, 4);  /* Pkg, Pkg::A, Pkg::A::Child, Pkg::A::Child::Deep */
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(execute_multi_pattern_query) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     /* Create a model */
     SysmlSemanticModel model = {0};
@@ -401,12 +387,11 @@ TEST(execute_multi_pattern_query) {
     ASSERT_NOT_NULL(result);
     ASSERT_EQ(result->element_count, 2);
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(result_contains) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     SysmlSemanticModel model = {0};
     SysmlNode nodes[2] = {
@@ -426,7 +411,7 @@ TEST(result_contains) {
     ASSERT_FALSE(sysml2_query_result_contains(result, "Pkg"));
     ASSERT_FALSE(sysml2_query_result_contains(result, "Other"));
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 /* ========== Main ========== */

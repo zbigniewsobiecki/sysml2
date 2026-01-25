@@ -45,6 +45,25 @@ static int tests_passed = 0;
 #define ASSERT_NULL(a) ASSERT((a) == NULL)
 #define ASSERT_NOT_NULL(a) ASSERT((a) != NULL)
 
+/* Test fixture macros for arena/intern setup and teardown */
+#define FIXTURE_SETUP() \
+    Sysml2Arena arena; \
+    sysml2_arena_init(&arena); \
+    Sysml2Intern intern; \
+    sysml2_intern_init(&intern, &arena)
+
+#define FIXTURE_TEARDOWN() \
+    sysml2_intern_destroy(&intern); \
+    sysml2_arena_destroy(&arena)
+
+/* Arena-only fixture for tests that don't need intern */
+#define FIXTURE_ARENA_SETUP() \
+    Sysml2Arena arena; \
+    sysml2_arena_init(&arena)
+
+#define FIXTURE_ARENA_TEARDOWN() \
+    sysml2_arena_destroy(&arena)
+
 /* Helper: Create a simple model for testing */
 static SysmlSemanticModel *create_test_model(
     Sysml2Arena *arena,
@@ -86,8 +105,7 @@ static SysmlSemanticModel *create_test_model(
 /* ========== Plan Tests ========== */
 
 TEST(plan_create) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2ModifyPlan *plan = sysml2_modify_plan_create(&arena);
     ASSERT_NOT_NULL(plan);
@@ -95,12 +113,11 @@ TEST(plan_create) {
     ASSERT_NULL(plan->set_ops);
     ASSERT_FALSE(plan->dry_run);
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(plan_add_delete_exact) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2ModifyPlan *plan = sysml2_modify_plan_create(&arena);
     Sysml2Result result = sysml2_modify_plan_add_delete(plan, "Pkg::Element");
@@ -110,12 +127,11 @@ TEST(plan_add_delete_exact) {
     ASSERT_EQ(plan->delete_patterns->kind, SYSML2_QUERY_EXACT);
     ASSERT_STR_EQ(plan->delete_patterns->base_path, "Pkg::Element");
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(plan_add_delete_recursive) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2ModifyPlan *plan = sysml2_modify_plan_create(&arena);
     Sysml2Result result = sysml2_modify_plan_add_delete(plan, "Pkg::**");
@@ -125,12 +141,11 @@ TEST(plan_add_delete_recursive) {
     ASSERT_EQ(plan->delete_patterns->kind, SYSML2_QUERY_RECURSIVE);
     ASSERT_STR_EQ(plan->delete_patterns->base_path, "Pkg");
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 TEST(plan_add_multiple_deletes) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
+    FIXTURE_ARENA_SETUP();
 
     Sysml2ModifyPlan *plan = sysml2_modify_plan_create(&arena);
     sysml2_modify_plan_add_delete(plan, "A::X");
@@ -144,7 +159,7 @@ TEST(plan_add_multiple_deletes) {
     ASSERT_NOT_NULL(plan->delete_patterns->next->next);
     ASSERT_EQ(plan->delete_patterns->next->next->kind, SYSML2_QUERY_RECURSIVE);
 
-    sysml2_arena_destroy(&arena);
+    FIXTURE_ARENA_TEARDOWN();
 }
 
 /* ========== ID Helper Tests ========== */
@@ -167,38 +182,27 @@ TEST(get_local_name) {
 }
 
 TEST(remap_id_toplevel) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     const char *result = sysml2_modify_remap_id(NULL, "Target", &arena, &intern);
     ASSERT_STR_EQ(result, "Target");
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(remap_id_nested) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     const char *result = sysml2_modify_remap_id("A::B", "Target", &arena, &intern);
     ASSERT_STR_EQ(result, "Target::A::B");
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Delete Tests ========== */
 
 TEST(delete_exact_element) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Create model: Pkg, Pkg::A, Pkg::B */
     SysmlNode nodes[3] = {
@@ -226,15 +230,11 @@ TEST(delete_exact_element) {
     }
     ASSERT_FALSE(found_a);
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(delete_cascades_to_children) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Create model: Pkg, Pkg::A, Pkg::A::Child */
     SysmlNode nodes[3] = {
@@ -255,15 +255,11 @@ TEST(delete_cascades_to_children) {
     ASSERT_EQ(deleted_count, 2);  /* A and Child */
     ASSERT_EQ(result->element_count, 1);  /* Only Pkg remains */
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(delete_direct_children_only) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Create model: Pkg, Pkg::A, Pkg::B, Pkg::A::Child */
     SysmlNode nodes[4] = {
@@ -285,15 +281,11 @@ TEST(delete_direct_children_only) {
     ASSERT_EQ(deleted_count, 3);  /* A, B, and A::Child (cascaded) */
     ASSERT_EQ(result->element_count, 1);  /* Only Pkg remains */
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(delete_recursive) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Create model: Root, Pkg, Pkg::A, Pkg::A::Child */
     SysmlNode nodes[4] = {
@@ -315,15 +307,11 @@ TEST(delete_recursive) {
     ASSERT_EQ(deleted_count, 3);  /* Pkg, A, Child */
     ASSERT_EQ(result->element_count, 1);  /* Only Root remains */
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(delete_removes_relationships) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Create model with relationship */
     SysmlNode nodes[3] = {
@@ -346,15 +334,11 @@ TEST(delete_removes_relationships) {
     ASSERT_NOT_NULL(result);
     ASSERT_EQ(result->relationship_count, 0);  /* Relationship removed */
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(delete_nonexistent_returns_copy) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Create model */
     SysmlNode nodes[2] = {
@@ -374,17 +358,13 @@ TEST(delete_nonexistent_returns_copy) {
     ASSERT_EQ(deleted_count, 0);  /* Nothing deleted */
     ASSERT_EQ(result->element_count, 2);  /* All elements preserved */
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Scope Tests ========== */
 
 TEST(scope_exists_true) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlNode nodes[2] = {
         {.id = "Pkg", .name = "Pkg", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
@@ -395,15 +375,11 @@ TEST(scope_exists_true) {
     ASSERT_TRUE(sysml2_modify_scope_exists(model, "Pkg"));
     ASSERT_TRUE(sysml2_modify_scope_exists(model, "Pkg::A"));
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(scope_exists_false) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     SysmlNode nodes[1] = {
         {.id = "Pkg", .name = "Pkg", .kind = SYSML_KIND_PACKAGE, .parent_id = NULL},
@@ -413,15 +389,11 @@ TEST(scope_exists_false) {
     ASSERT_FALSE(sysml2_modify_scope_exists(model, "Other"));
     ASSERT_FALSE(sysml2_modify_scope_exists(model, "Pkg::A"));
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(create_scope_chain) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Empty model */
     SysmlSemanticModel empty = {0};
@@ -438,17 +410,13 @@ TEST(create_scope_chain) {
     ASSERT_TRUE(sysml2_modify_scope_exists(result, "A::B"));
     ASSERT_TRUE(sysml2_modify_scope_exists(result, "A::B::C"));
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Merge Tests ========== */
 
 TEST(merge_into_existing_scope) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Base model: Pkg */
     SysmlNode base_nodes[1] = {
@@ -476,15 +444,11 @@ TEST(merge_into_existing_scope) {
     /* Verify Pkg::NewDef exists */
     ASSERT_TRUE(sysml2_modify_scope_exists(result, "Pkg::NewDef"));
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(merge_replaces_existing) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Base model: Pkg, Pkg::A (PART_DEF) */
     SysmlNode base_nodes[2] = {
@@ -517,15 +481,11 @@ TEST(merge_replaces_existing) {
         }
     }
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(merge_with_create_scope) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Empty base model */
     SysmlSemanticModel base = {0};
@@ -549,15 +509,11 @@ TEST(merge_with_create_scope) {
     ASSERT_TRUE(sysml2_modify_scope_exists(result, "A::B"));
     ASSERT_TRUE(sysml2_modify_scope_exists(result, "A::B::NewDef"));
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(merge_without_create_scope_fails) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Empty base model */
     SysmlSemanticModel base = {0};
@@ -577,15 +533,11 @@ TEST(merge_without_create_scope_fails) {
 
     ASSERT_NULL(result);  /* Should fail */
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(merge_remaps_relationships) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Base model: Pkg */
     SysmlNode base_nodes[1] = {
@@ -616,17 +568,13 @@ TEST(merge_remaps_relationships) {
     ASSERT_STR_EQ(result->relationships[0]->source, "Pkg::A");
     ASSERT_STR_EQ(result->relationships[0]->target, "Pkg::B");
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Additional Delete Tests ========== */
 
 TEST(delete_preserves_unrelated_sibling) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Create model: Pkg, Pkg::A, Pkg::B, Pkg::C */
     SysmlNode nodes[4] = {
@@ -659,15 +607,11 @@ TEST(delete_preserves_unrelated_sibling) {
     ASSERT_FALSE(found_b);
     ASSERT_TRUE(found_c);
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(delete_handles_root_level_elements) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Create model with two root packages */
     SysmlNode nodes[2] = {
@@ -688,15 +632,11 @@ TEST(delete_handles_root_level_elements) {
     ASSERT_EQ(result->element_count, 1);  /* Only PkgB remains */
     ASSERT_STR_EQ(result->elements[0]->id, "PkgB");
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(delete_handles_empty_model) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Empty model */
     SysmlSemanticModel model = {0};
@@ -713,15 +653,11 @@ TEST(delete_handles_empty_model) {
     ASSERT_EQ(deleted_count, 0);
     ASSERT_EQ(result->element_count, 0);
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(delete_relationship_when_source_deleted) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Model: A :> B */
     SysmlNode nodes[3] = {
@@ -745,15 +681,11 @@ TEST(delete_relationship_when_source_deleted) {
     ASSERT_EQ(result->relationship_count, 0);  /* Relationship removed */
     ASSERT_EQ(result->element_count, 2);  /* Pkg and B remain */
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(delete_relationship_when_target_deleted) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Model: A :> B */
     SysmlNode nodes[3] = {
@@ -777,15 +709,11 @@ TEST(delete_relationship_when_target_deleted) {
     ASSERT_EQ(result->relationship_count, 0);  /* Relationship removed */
     ASSERT_EQ(result->element_count, 2);  /* Pkg and A remain */
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(delete_import_when_owner_deleted) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Model: Pkg imports Target */
     SysmlNode nodes[2] = {
@@ -808,15 +736,11 @@ TEST(delete_import_when_owner_deleted) {
     ASSERT_EQ(result->relationship_count, 0);  /* Import removed with owner */
     ASSERT_EQ(result->element_count, 1);  /* Only Target remains */
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(delete_multiple_patterns_no_double_count) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Create model: Pkg, Pkg::A, Pkg::B */
     SysmlNode nodes[3] = {
@@ -841,17 +765,13 @@ TEST(delete_multiple_patterns_no_double_count) {
     ASSERT_EQ(deleted_count, 2);  /* A and B, not 3 */
     ASSERT_EQ(result->element_count, 1);  /* Only Pkg remains */
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Additional Merge Tests ========== */
 
 TEST(merge_empty_fragment) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Base model: Pkg */
     SysmlNode base_nodes[1] = {
@@ -877,15 +797,11 @@ TEST(merge_empty_fragment) {
     }
     /* Or it may return NULL for empty fragment - both are acceptable */
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(merge_remap_deep_nesting) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Base: A::B */
     SysmlNode base_nodes[2] = {
@@ -916,15 +832,11 @@ TEST(merge_remap_deep_nesting) {
     ASSERT_TRUE(sysml2_modify_scope_exists(result, "A::B::X::Y"));
     ASSERT_TRUE(sysml2_modify_scope_exists(result, "A::B::X::Y::Z"));
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(merge_preserves_element_properties) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Base: Pkg */
     SysmlNode base_nodes[1] = {
@@ -955,15 +867,11 @@ TEST(merge_preserves_element_properties) {
         }
     }
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(merge_relationship_remap_both_endpoints) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Base: Pkg */
     SysmlNode base_nodes[1] = {
@@ -994,15 +902,11 @@ TEST(merge_relationship_remap_both_endpoints) {
     ASSERT_STR_EQ(result->relationships[0]->source, "Pkg::A");
     ASSERT_STR_EQ(result->relationships[0]->target, "Pkg::B");
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 TEST(merge_import_source_remapped) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Base: Pkg, External */
     SysmlNode base_nodes[2] = {
@@ -1035,17 +939,13 @@ TEST(merge_import_source_remapped) {
     /* (All fragment IDs get remapped to the target scope) */
     ASSERT_NOT_NULL(result->relationships[0]->target);
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Find Containing File Tests ========== */
 
 TEST(find_containing_file) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Model 1: A */
     SysmlNode nodes1[1] = {
@@ -1065,8 +965,7 @@ TEST(find_containing_file) {
     ASSERT_EQ(sysml2_modify_find_containing_file("B", models, 2), 1);
     ASSERT_EQ(sysml2_modify_find_containing_file("C", models, 2), -1);
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Shorthand Feature Regression Tests ========== */
@@ -1096,10 +995,7 @@ static SysmlSemanticModel *parse_sysml_string(
 
 /* Test: Shorthand feature value doesn't leak to sibling elements */
 TEST(shorthand_value_no_leak_to_sibling) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     const char *input =
         "package TestPkg {\n"
@@ -1129,16 +1025,12 @@ TEST(shorthand_value_no_leak_to_sibling) {
     ASSERT(strstr(output, ":>> name = \"Parent Name\";") != NULL);
 
     free(output);
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* Test: Shorthand feature preserved in body, not moved to parent's default value */
 TEST(shorthand_feature_preserved_in_body) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     const char *input =
         "package TestPkg {\n"
@@ -1164,18 +1056,14 @@ TEST(shorthand_feature_preserved_in_body) {
     ASSERT(strstr(output, ":>> version = \"^8.11.0\";") != NULL);
 
     free(output);
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Import Order and Comment Preservation Tests ========== */
 
 /* Test: Import order is preserved during write (not alphabetically sorted) */
 TEST(import_order_preserved_during_write) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Input with specific import order: ZModule before AModule */
     const char *input =
@@ -1210,16 +1098,12 @@ TEST(import_order_preserved_during_write) {
     ASSERT(a_pos < m_pos);
 
     free(output);
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* Test: Line comments are not duplicated during upsert */
 TEST(no_comment_duplication_during_upsert) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Input with a line comment */
     const char *input =
@@ -1251,18 +1135,14 @@ TEST(no_comment_duplication_during_upsert) {
     ASSERT_EQ(comment_count, 1);
 
     free(output);
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Metadata Accumulation Regression Tests ========== */
 
 /* Test: Metadata on target scope is cleared to prevent accumulation */
 TEST(merge_no_metadata_accumulation) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Base model: Pkg with prefix_applied_metadata, Pkg::A */
     SysmlNode base_nodes[2];
@@ -1324,16 +1204,12 @@ TEST(merge_no_metadata_accumulation) {
         }
     }
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* Test: Non-target scopes preserve their metadata during merge */
 TEST(merge_preserves_sibling_metadata) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Base model: Pkg, Pkg::A with metadata, Pkg::B (sibling) with metadata */
     SysmlNode base_nodes[3];
@@ -1387,16 +1263,12 @@ TEST(merge_preserves_sibling_metadata) {
         }
     }
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* Test: Body metadata on target scope is also cleared */
 TEST(merge_clears_body_metadata) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Base model: Pkg with body metadata */
     SysmlNode base_nodes[1];
@@ -1439,16 +1311,12 @@ TEST(merge_clears_body_metadata) {
         }
     }
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* Test: Trailing trivia on target scope is cleared */
 TEST(merge_clears_trailing_trivia) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Base model: Pkg with trailing trivia */
     SysmlNode base_nodes[1];
@@ -1491,16 +1359,12 @@ TEST(merge_clears_trailing_trivia) {
         }
     }
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* Test: Leading trivia on target scope is cleared */
 TEST(merge_clears_leading_trivia) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Base model: Pkg with leading trivia */
     SysmlNode base_nodes[1];
@@ -1543,16 +1407,12 @@ TEST(merge_clears_leading_trivia) {
         }
     }
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* Test: Multiple upserts to same file - simulated accumulation scenario */
 TEST(merge_repeated_upserts_no_accumulation) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Start with empty Pkg */
     SysmlNode base_nodes[1];
@@ -1602,16 +1462,12 @@ TEST(merge_repeated_upserts_no_accumulation) {
         }
     }
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* Test: Comments are stable across multiple upserts (no duplication, no movement) */
 TEST(upsert_comment_stability) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Input with comments in various positions */
     const char *input =
@@ -1666,16 +1522,12 @@ TEST(upsert_comment_stability) {
     ASSERT_EQ(count_second, 1);
 
     free(output);
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* Test: Children of replaced parent are preserved if not in fragment */
 TEST(merge_preserves_children_of_replaced_parent) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Base model: Pkg, Pkg::Parent, Pkg::Parent::Child1, Pkg::Parent::Child2 */
     SysmlNode base_nodes[4];
@@ -1736,16 +1588,12 @@ TEST(merge_preserves_children_of_replaced_parent) {
     ASSERT_TRUE(found_child2);
     ASSERT_TRUE(found_new_attr);
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* Test: Child with same name as fragment child is replaced */
 TEST(merge_replaces_matching_children) {
-    Sysml2Arena arena;
-    sysml2_arena_init(&arena);
-    Sysml2Intern intern;
-    sysml2_intern_init(&intern, &arena);
+    FIXTURE_SETUP();
 
     /* Base model: Pkg, Pkg::Parent, Pkg::Parent::Attr (ATTRIBUTE) */
     SysmlNode base_nodes[3];
@@ -1797,8 +1645,7 @@ TEST(merge_replaces_matching_children) {
         }
     }
 
-    sysml2_intern_destroy(&intern);
-    sysml2_arena_destroy(&arena);
+    FIXTURE_TEARDOWN();
 }
 
 /* ========== Main ========== */
