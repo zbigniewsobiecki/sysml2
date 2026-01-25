@@ -2498,6 +2498,230 @@ TEST(merge_new_packages_append_at_end) {
     FIXTURE_TEARDOWN();
 }
 
+/* Test: Comments are not duplicated during parse + write round-trip */
+TEST(writer_no_comment_duplication) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "part def BackendApp {\n"
+        "    :>> port = 3000;\n"
+        "\n"
+        "    // Presentation Layer\n"
+        "    part authRouter;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Count occurrences of the comment */
+    int count = 0;
+    const char *pos = output;
+    while ((pos = strstr(pos, "// Presentation Layer")) != NULL) {
+        count++;
+        pos++;
+    }
+
+    /* Should have exactly 1 comment, not 2 */
+    ASSERT_EQ(count, 1);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Multiple shorthand features followed by part with comment */
+TEST(writer_multiple_shorthand_then_part_comment) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "part def Config {\n"
+        "    :>> host = \"localhost\";\n"
+        "    :>> port = 8080;\n"
+        "\n"
+        "    // Child component\n"
+        "    part child;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Comment should appear exactly once, not duplicated */
+    int count = 0;
+    const char *pos = output;
+    while ((pos = strstr(pos, "// Child component")) != NULL) {
+        count++;
+        pos++;
+    }
+
+    ASSERT_EQ(count, 1);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Different shorthand operators (:> vs :>>) with comments */
+TEST(writer_shorthand_variants_comments) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "part def MyPart {\n"
+        "    :> basePart : Base;\n"
+        "\n"
+        "    // Redefinition comment\n"
+        "    :>> name = \"test\";\n"
+        "\n"
+        "    // Child part comment\n"
+        "    part child;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Each comment should appear exactly once */
+    int redef_count = 0, child_count = 0;
+    const char *pos = output;
+    while ((pos = strstr(pos, "// Redefinition comment")) != NULL) {
+        redef_count++;
+        pos++;
+    }
+    pos = output;
+    while ((pos = strstr(pos, "// Child part comment")) != NULL) {
+        child_count++;
+        pos++;
+    }
+
+    ASSERT_EQ(redef_count, 1);
+    ASSERT_EQ(child_count, 1);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Double round-trip preserves single comments */
+TEST(writer_double_roundtrip_no_accumulation) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "part def Test {\n"
+        "    :>> value = 42;\n"
+        "\n"
+        "    // Important comment\n"
+        "    part child;\n"
+        "}\n";
+
+    /* First round-trip */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+
+    char *output1 = NULL;
+    Sysml2Result result1 = sysml2_sysml_write_string(model1, &output1);
+    ASSERT_EQ(result1, SYSML2_OK);
+    ASSERT_NOT_NULL(output1);
+
+    /* Second round-trip - parse the output and write again */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+
+    char *output2 = NULL;
+    Sysml2Result result2 = sysml2_sysml_write_string(model2, &output2);
+    ASSERT_EQ(result2, SYSML2_OK);
+    ASSERT_NOT_NULL(output2);
+
+    /* Count comments in final output - should still be exactly 1 */
+    int count = 0;
+    const char *pos = output2;
+    while ((pos = strstr(pos, "// Important comment")) != NULL) {
+        count++;
+        pos++;
+    }
+
+    ASSERT_EQ(count, 1);
+
+    free(output1);
+    free(output2);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Comments after connect statements don't duplicate */
+TEST(writer_connect_statement_comment) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "part def System {\n"
+        "    part a;\n"
+        "    part b;\n"
+        "    connect a to b;\n"
+        "\n"
+        "    // After connection\n"
+        "    part c;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    int count = 0;
+    const char *pos = output;
+    while ((pos = strstr(pos, "// After connection")) != NULL) {
+        count++;
+        pos++;
+    }
+
+    ASSERT_EQ(count, 1);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Shorthand feature without trailing comment preserved correctly */
+TEST(writer_shorthand_no_trailing_comment) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "part def Simple {\n"
+        "    :>> x = 1;\n"
+        "    :>> y = 2;\n"
+        "    part z;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify shorthand features are present */
+    ASSERT(strstr(output, ":>> x = 1;") != NULL);
+    ASSERT(strstr(output, ":>> y = 2;") != NULL);
+    ASSERT(strstr(output, "part z;") != NULL);
+
+    /* Verify no spurious line comments appeared */
+    ASSERT(strstr(output, "//") == NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -2600,6 +2824,14 @@ int main(void) {
     /* Enum literal and element ordering regression tests */
     RUN_TEST(writer_enum_literals_no_keyword);
     RUN_TEST(merge_new_packages_append_at_end);
+
+    /* Comment duplication regression tests */
+    RUN_TEST(writer_no_comment_duplication);
+    RUN_TEST(writer_multiple_shorthand_then_part_comment);
+    RUN_TEST(writer_shorthand_variants_comments);
+    RUN_TEST(writer_double_roundtrip_no_accumulation);
+    RUN_TEST(writer_connect_statement_comment);
+    RUN_TEST(writer_shorthand_no_trailing_comment);
 
     printf("\n%d/%d tests passed.\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;

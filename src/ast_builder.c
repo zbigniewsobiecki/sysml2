@@ -117,6 +117,9 @@ SysmlBuildContext *sysml2_build_context_create(
     ctx->comment_counter = 0;
     ctx->rep_counter = 0;
 
+    /* Initialize last captured trivia offset (SIZE_MAX means none captured yet) */
+    ctx->last_line_comment_offset = SIZE_MAX;
+
     return ctx;
 }
 
@@ -635,6 +638,18 @@ SysmlTrivia *sysml2_build_trivia(
 void sysml2_build_add_pending_trivia(SysmlBuildContext *ctx, SysmlTrivia *trivia) {
     if (!ctx || !trivia) return;
 
+    /* For line comments, check if this is a duplicate of an existing pending comment.
+     * This handles PEG backtracking that causes the same comment to be captured multiple times. */
+    if (trivia->kind == SYSML_TRIVIA_LINE_COMMENT && trivia->text) {
+        for (SysmlTrivia *t = ctx->pending_trivia_head; t; t = t->next) {
+            if (t->kind == SYSML_TRIVIA_LINE_COMMENT && t->text &&
+                (t->text == trivia->text || strcmp(t->text, trivia->text) == 0)) {
+                /* Duplicate comment already in pending list - skip */
+                return;
+            }
+        }
+    }
+
     if (ctx->pending_trivia_tail) {
         ctx->pending_trivia_tail->next = trivia;
         ctx->pending_trivia_tail = trivia;
@@ -649,12 +664,44 @@ void sysml2_build_add_pending_trivia(SysmlBuildContext *ctx, SysmlTrivia *trivia
  */
 void sysml2_build_attach_pending_trivia(SysmlBuildContext *ctx, SysmlNode *node) {
     if (!ctx || !node) return;
+    if (!ctx->pending_trivia_head) return;
 
-    if (ctx->pending_trivia_head) {
-        node->leading_trivia = ctx->pending_trivia_head;
-        ctx->pending_trivia_head = NULL;
-        ctx->pending_trivia_tail = NULL;
+    /* Deduplicate LINE_COMMENT entries with same text.
+     * This handles cases where PEG backtracking causes the same
+     * comment to be captured multiple times.
+     * We use a simple O(n^2) algorithm: for each comment, remove all
+     * subsequent comments with the same text.
+     * Since texts are interned, we use pointer comparison for efficiency. */
+    for (SysmlTrivia *curr = ctx->pending_trivia_head; curr; curr = curr->next) {
+        if (curr->kind != SYSML_TRIVIA_LINE_COMMENT || !curr->text) {
+            continue;
+        }
+
+        /* Remove all subsequent duplicates of this comment */
+        SysmlTrivia *prev = curr;
+        SysmlTrivia *scan = curr->next;
+        while (scan) {
+            /* Use pointer equality for interned strings, fall back to strcmp */
+            bool is_dup = (scan->kind == SYSML_TRIVIA_LINE_COMMENT && scan->text &&
+                          (curr->text == scan->text || strcmp(curr->text, scan->text) == 0));
+            if (is_dup) {
+                /* Found duplicate - remove it */
+                prev->next = scan->next;
+                if (scan == ctx->pending_trivia_tail) {
+                    ctx->pending_trivia_tail = prev;
+                }
+                scan = prev->next;
+            } else {
+                prev = scan;
+                scan = scan->next;
+            }
+        }
     }
+
+    /* Now attach the deduplicated trivia */
+    node->leading_trivia = ctx->pending_trivia_head;
+    ctx->pending_trivia_head = NULL;
+    ctx->pending_trivia_tail = NULL;
 }
 
 /*
@@ -991,6 +1038,13 @@ void sysml2_capture_line_comment(struct Sysml2ParserContext *pctx, size_t start_
     ParserCtx *ctx = (ParserCtx *)pctx;
     SysmlBuildContext *build_ctx = ctx->build_ctx;
     if (!build_ctx) return;
+
+    /* Prevent duplicate capture from PEG backtracking.
+     * If we already captured a comment at this offset, skip. */
+    if (build_ctx->last_line_comment_offset == start_offset) {
+        return;
+    }
+    build_ctx->last_line_comment_offset = start_offset;
 
     /* Convert offsets to pointers */
     const char *start = ctx->input + start_offset;
@@ -1861,7 +1915,17 @@ void sysml2_capture_shorthand_feature(SysmlBuildContext *ctx, const char *text, 
     SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_SHORTHAND_FEATURE);
     if (!stmt) return;
 
-    stmt->raw_text = trim_and_intern(ctx, text, len);
+    /* The captured text may include trailing whitespace/comments after the semicolon
+     * due to SEMICOLON <- ';' _ in the grammar. Find the last semicolon and truncate there. */
+    size_t trimmed_len = len;
+    for (size_t i = len; i > 0; i--) {
+        if (text[i-1] == ';') {
+            trimmed_len = i;
+            break;
+        }
+    }
+
+    stmt->raw_text = trim_and_intern(ctx, text, trimmed_len);
 
     add_pending_stmt(ctx, stmt);
 

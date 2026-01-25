@@ -126,6 +126,9 @@ typedef struct SysmlBuildContext {
     /* Counter for generating unique comment/rep IDs */
     size_t comment_counter;
     size_t rep_counter;
+
+    /* Last captured trivia offset to prevent PEG backtracking duplicates */
+    size_t last_line_comment_offset;
 } SysmlBuildContext;
 
 /*
