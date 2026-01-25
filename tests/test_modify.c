@@ -1865,6 +1865,7 @@ int main(void) {
     /* Import order and comment preservation tests */
     RUN_TEST(import_order_preserved_during_write);
     RUN_TEST(no_comment_duplication_during_upsert);
+    RUN_TEST(upsert_comment_stability);
 
     /* Metadata accumulation regression tests */
     RUN_TEST(merge_no_metadata_accumulation);
