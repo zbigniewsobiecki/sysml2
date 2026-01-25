@@ -929,33 +929,19 @@ static void add_pending_metadata(SysmlBuildContext *ctx, SysmlMetadataUsage *met
 }
 
 /*
- * Finish building a metadata usage and attach to current scope's node
- * or add to pending if no node exists yet
+ * Finish building a metadata usage and add to pending for the next element.
+ *
+ * Prefix metadata (@Type {...}) before an element definition belongs to
+ * that element, not the containing scope. Always add to pending so it
+ * gets attached to the next node created.
+ *
+ * Note: This is different from doc comments (doc /∗ ... ∗/) which ARE
+ * owned by the containing scope - those use sysml2_capture_documentation().
  */
 void sysml2_build_end_metadata(SysmlBuildContext *ctx) {
     if (!ctx || !ctx->current_metadata) return;
 
-    /* Find the current scope's node (most recently added element in current scope) */
-    const char *current_scope = sysml2_build_current_scope(ctx);
-    bool attached = false;
-
-    if (current_scope) {
-        /* Find the node with this ID */
-        for (size_t i = ctx->element_count; i > 0; i--) {
-            SysmlNode *node = ctx->elements[i - 1];
-            if (node->id == current_scope) {
-                sysml2_build_add_metadata(ctx, node, ctx->current_metadata);
-                attached = true;
-                break;
-            }
-        }
-    }
-
-    /* If no node to attach to, add to pending for next node */
-    if (!attached) {
-        add_pending_metadata(ctx, ctx->current_metadata);
-    }
-
+    add_pending_metadata(ctx, ctx->current_metadata);
     ctx->current_metadata = NULL;
 }
 

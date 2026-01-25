@@ -109,12 +109,45 @@ add_executable(test_packcc_parser
 target_include_directories(test_packcc_parser PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(test_packcc_parser sysml2_core)
 
+# Import resolver unit tests
+add_executable(test_import_resolver
+    src/sysml_parser.c
+    tests/test_import_resolver.c
+)
+target_include_directories(test_import_resolver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(test_import_resolver sysml2_core)
+
+# Diagnostic unit tests
+add_executable(test_diagnostic tests/test_diagnostic.c)
+target_link_libraries(test_diagnostic sysml2_core)
+
+# JSON writer unit tests
+add_executable(test_json_writer tests/test_json_writer.c)
+target_link_libraries(test_json_writer sysml2_core)
+
+# SysML writer unit tests
+add_executable(test_sysml_writer
+    src/sysml_parser.c
+    tests/test_sysml_writer.c
+)
+target_include_directories(test_sysml_writer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(test_sysml_writer sysml2_core)
+
+# Memory (arena/intern) unit tests
+add_executable(test_memory tests/test_memory.c)
+target_link_libraries(test_memory sysml2_core)
+
 # Add tests
 add_test(NAME lexer_tests COMMAND test_lexer)
 add_test(NAME ast_tests COMMAND test_ast)
 add_test(NAME validator_tests COMMAND test_validator)
 add_test(NAME query_tests COMMAND test_query)
 add_test(NAME modify_tests COMMAND test_modify)
+add_test(NAME import_resolver_tests COMMAND test_import_resolver)
+add_test(NAME diagnostic_tests COMMAND test_diagnostic)
+add_test(NAME json_writer_tests COMMAND test_json_writer)
+add_test(NAME sysml_writer_tests COMMAND test_sysml_writer)
+add_test(NAME memory_tests COMMAND test_memory)
 
 # PackCC parser tests - valid syntax files
 file(GLOB PACKCC_VALID_FIXTURES
@@ -219,10 +252,18 @@ add_test(NAME cli_exit_codes
         $<TARGET_FILE:sysml2>
 )
 
+# Ensure tests run without external library path pollution
+get_property(all_tests DIRECTORY PROPERTY TESTS)
+set_tests_properties(${all_tests} PROPERTIES
+    ENVIRONMENT "SYSML2_LIBRARY_PATH="
+)
+
 # Custom target for running tests
 add_custom_target(check
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS test_lexer test_ast test_validator test_query test_modify test_packcc_parser sysml2
+    DEPENDS test_lexer test_ast test_validator test_query test_modify test_packcc_parser
+            test_import_resolver test_diagnostic test_json_writer test_sysml_writer test_memory
+            sysml2
 )
 
 # Print configuration summary
