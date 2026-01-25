@@ -60,6 +60,23 @@ static int compare_body_elements(const void *a, const void *b) {
 }
 
 /*
+ * Comparison: sort top-level nodes by source position
+ * Elements with no position (loc.offset == 0) go last
+ */
+static int compare_nodes_by_position(const void *a, const void *b) {
+    const SysmlNode *na = *(const SysmlNode **)a;
+    const SysmlNode *nb = *(const SysmlNode **)b;
+
+    /* Elements with no position go last (new elements from fragments) */
+    if (na->loc.offset == 0 && nb->loc.offset == 0) return 0;
+    if (na->loc.offset == 0) return 1;  /* a goes after b */
+    if (nb->loc.offset == 0) return -1; /* b goes after a */
+
+    return (na->loc.offset < nb->loc.offset) ? -1 :
+           (na->loc.offset > nb->loc.offset) ? 1 : 0;
+}
+
+/*
  * Internal writer state
  */
 typedef struct {
@@ -428,11 +445,16 @@ static void write_statement(Sysml2Writer *w, const SysmlStatement *stmt) {
                 fputs(" if ", w->out);
                 fputs(stmt->guard, w->out);
             }
-            fputs(" then ", w->out);
             if (stmt->target.target) {
+                fputs(" then ", w->out);
                 fputs(stmt->target.target, w->out);
+                fputs(";", w->out);
+            } else {
+                /* No target - check if source already ends with semicolon */
+                if (!stmt->source.target || stmt->source.target[strlen(stmt->source.target) - 1] != ';') {
+                    fputs(";", w->out);
+                }
             }
-            fputs(";", w->out);
             break;
 
         case SYSML_STMT_ENTRY:
@@ -1362,6 +1384,11 @@ Sysml2Result sysml2_sysml_write(
     /* Get top-level elements (parent = NULL) */
     const SysmlNode **children = NULL;
     size_t child_count = get_children(model, NULL, &children);
+
+    /* Sort top-level elements by source position to preserve original order */
+    if (child_count > 1) {
+        qsort((void *)children, child_count, sizeof(SysmlNode*), compare_nodes_by_position);
+    }
 
     /* Write top-level imports */
     for (size_t i = 0; i < import_count; i++) {

@@ -2722,6 +2722,154 @@ TEST(writer_shorthand_no_trailing_comment) {
     FIXTURE_TEARDOWN();
 }
 
+/* Test: Succession without target preserves "first X;" syntax */
+TEST(writer_succession_no_target) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "action def CreateCustomer {\n"
+        "    first persistCustomer;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Should have "first persistCustomer;" NOT "first persistCustomer then ;" */
+    ASSERT(strstr(output, "first persistCustomer;") != NULL);
+    ASSERT(strstr(output, "then ;") == NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Succession with target preserves "first X then Y;" syntax */
+TEST(writer_succession_with_target) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "action def Flow {\n"
+        "    first step1 then step2;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Should have complete succession */
+    ASSERT(strstr(output, "first step1 then step2;") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Multiple round-trips don't corrupt successions */
+TEST(writer_succession_roundtrip_stability) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "action def Process {\n"
+        "    first a;\n"
+        "    first b then c;\n"
+        "}\n";
+
+    /* Round 1 */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+    char *output1 = NULL;
+    Sysml2Result result1 = sysml2_sysml_write_string(model1, &output1);
+    ASSERT_EQ(result1, SYSML2_OK);
+    ASSERT_NOT_NULL(output1);
+
+    /* Round 2 - re-parse output1 */
+    Sysml2Arena arena2;
+    sysml2_arena_init(&arena2);
+    Sysml2Intern intern2;
+    sysml2_intern_init(&intern2, &arena2);
+
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena2, &intern2, output1);
+    ASSERT_NOT_NULL(model2);
+    char *output2 = NULL;
+    Sysml2Result result2 = sysml2_sysml_write_string(model2, &output2);
+    ASSERT_EQ(result2, SYSML2_OK);
+    ASSERT_NOT_NULL(output2);
+
+    /* Outputs should be identical */
+    ASSERT(strcmp(output1, output2) == 0);
+
+    /* Should NOT have "then ;" pattern */
+    ASSERT(strstr(output2, "then ;") == NULL);
+
+    free(output1);
+    free(output2);
+    sysml2_arena_destroy(&arena2);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Element order preserved when upserting into existing scope */
+TEST(merge_preserves_element_order) {
+    FIXTURE_SETUP();
+
+    const char *base =
+        "package Container {\n"
+        "    package First { part a; }\n"
+        "    package Second { part b; }\n"
+        "    package Third { part c; }\n"
+        "}\n";
+
+    const char *fragment =
+        "package Second {\n"
+        "    part newPart;\n"
+        "}\n";
+
+    SysmlSemanticModel *base_model = parse_sysml_string(&arena, &intern, base);
+    ASSERT_NOT_NULL(base_model);
+
+    SysmlSemanticModel *frag_model = parse_sysml_string(&arena, &intern, fragment);
+    ASSERT_NOT_NULL(frag_model);
+
+    Sysml2Arena result_arena;
+    sysml2_arena_init(&result_arena);
+    Sysml2Intern result_intern;
+    sysml2_intern_init(&result_intern, &result_arena);
+
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base_model, frag_model, "Container", true, &result_arena, &result_intern, &added, &replaced);
+    ASSERT_NOT_NULL(result);
+
+    char *output = NULL;
+    Sysml2Result res = sysml2_sysml_write_string(result, &output);
+    ASSERT_EQ(res, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify order: First should appear before Second, Second before Third */
+    const char *first_pos = strstr(output, "package First");
+    const char *second_pos = strstr(output, "package Second");
+    const char *third_pos = strstr(output, "package Third");
+
+    ASSERT_NOT_NULL(first_pos);
+    ASSERT_NOT_NULL(second_pos);
+    ASSERT_NOT_NULL(third_pos);
+
+    /* Order must be preserved */
+    ASSERT(first_pos < second_pos);
+    ASSERT(second_pos < third_pos);
+
+    free(output);
+    sysml2_intern_destroy(&result_intern);
+    sysml2_arena_destroy(&result_arena);
+    FIXTURE_TEARDOWN();
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -2832,6 +2980,14 @@ int main(void) {
     RUN_TEST(writer_double_roundtrip_no_accumulation);
     RUN_TEST(writer_connect_statement_comment);
     RUN_TEST(writer_shorthand_no_trailing_comment);
+
+    /* Succession statement regression tests */
+    RUN_TEST(writer_succession_no_target);
+    RUN_TEST(writer_succession_with_target);
+    RUN_TEST(writer_succession_roundtrip_stability);
+
+    /* Element reordering regression test */
+    RUN_TEST(merge_preserves_element_order);
 
     printf("\n%d/%d tests passed.\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;

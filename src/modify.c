@@ -1262,15 +1262,155 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
         }
     }
 
-    /* Step 4: Copy non-removed base elements
+    /* Track which fragment elements have been processed (for in-place replacement) */
+    bool *fragment_processed = sysml2_arena_alloc(arena,
+        fragment->element_count * sizeof(bool));
+    if (!fragment_processed && fragment->element_count > 0) return NULL;
+    for (size_t i = 0; i < fragment->element_count; i++) {
+        fragment_processed[i] = false;
+    }
+
+    /* Step 4: Copy base elements, replacing updated elements in-place
      *
      * HYBRID MODE: Preserve all elements that weren't marked for removal.
-     * For the target scope element, only clear metadata if fragment provides
-     * replacement metadata to prevent data loss.
+     * For replaced elements, insert the fragment's version at the same position
+     * to preserve element ordering. This is critical because the writer sorts
+     * body elements by offset, and when all offsets are 0, it falls back to
+     * insertion order (i.e., array position).
      */
     for (size_t i = 0; i < working_base->element_count; i++) {
         SysmlNode *node = working_base->elements[i];
         if (!node || !node->id) continue;
+
+        /* Check if this is a replaced element (not just removed) */
+        if (id_in_set(node->id, replaced_ids, replaced_count)) {
+            /* Find and process the corresponding fragment element in-place */
+            for (size_t fi = 0; fi < fragment->element_count; fi++) {
+                if (fragment_processed[fi]) continue;
+                SysmlNode *frag_node = fragment->elements[fi];
+                if (!frag_node) continue;
+
+                /* Check if this fragment element replaces the current base element */
+                const char *remapped_id = sysml2_modify_remap_id(
+                    frag_node->id, target_scope, arena, intern);
+                if (!remapped_id || strcmp(remapped_id, node->id) != 0) continue;
+
+                /* Found the replacement - process it in-place */
+                fragment_processed[fi] = true;
+                replaced++;
+
+                SysmlNode *new_node = sysml2_modify_deep_copy_node(
+                    frag_node, target_scope, arena, intern);
+                if (!new_node) return NULL;
+
+                /* Inherit original location to preserve element ordering */
+                new_node->loc = node->loc;
+
+                /* Preserve documentation if fragment has none */
+                if (!new_node->documentation && node->documentation) {
+                    new_node->documentation = node->documentation;
+                }
+
+                /* Preserve prefix_applied_metadata if fragment has none */
+                if (new_node->prefix_applied_metadata_count == 0 &&
+                    node->prefix_applied_metadata_count > 0) {
+                    new_node->prefix_applied_metadata = sysml2_arena_alloc(
+                        arena, node->prefix_applied_metadata_count * sizeof(SysmlMetadataUsage *));
+                    if (new_node->prefix_applied_metadata) {
+                        for (size_t k = 0; k < node->prefix_applied_metadata_count; k++) {
+                            new_node->prefix_applied_metadata[k] =
+                                sysml2_modify_copy_metadata_usage(node->prefix_applied_metadata[k], arena);
+                        }
+                        new_node->prefix_applied_metadata_count = node->prefix_applied_metadata_count;
+                    }
+                }
+
+                /* Preserve body metadata if fragment has none */
+                if (new_node->metadata_count == 0 && node->metadata_count > 0) {
+                    new_node->metadata = sysml2_arena_alloc(
+                        arena, node->metadata_count * sizeof(SysmlMetadataUsage *));
+                    if (new_node->metadata) {
+                        for (size_t k = 0; k < node->metadata_count; k++) {
+                            new_node->metadata[k] =
+                                sysml2_modify_copy_metadata_usage(node->metadata[k], arena);
+                        }
+                        new_node->metadata_count = node->metadata_count;
+                    }
+                }
+
+                /* Union merge body_stmts: fragment statements take precedence,
+                 * preserve original statements not in fragment.
+                 * Only handles shorthand features (SYSML_STMT_SHORTHAND_FEATURE). */
+                if (node->body_stmt_count > 0) {
+                    /* Build set of statement names from fragment */
+                    const char **frag_names = sysml2_arena_alloc(
+                        arena, (new_node->body_stmt_count + 1) * sizeof(const char *));
+                    size_t frag_name_count = 0;
+
+                    if (frag_names) {
+                        for (size_t k = 0; k < new_node->body_stmt_count; k++) {
+                            SysmlStatement *stmt = new_node->body_stmts[k];
+                            if (stmt && stmt->kind == SYSML_STMT_SHORTHAND_FEATURE && stmt->raw_text) {
+                                const char *name = sysml2_extract_shorthand_stmt_name(
+                                    stmt->raw_text, arena, intern);
+                                if (name) {
+                                    frag_names[frag_name_count++] = name;
+                                }
+                            }
+                        }
+                    }
+
+                    /* Count original statements not in fragment */
+                    size_t preserve_count = 0;
+                    for (size_t k = 0; k < node->body_stmt_count; k++) {
+                        SysmlStatement *stmt = node->body_stmts[k];
+                        if (!stmt) continue;
+
+                        if (stmt->kind == SYSML_STMT_SHORTHAND_FEATURE && stmt->raw_text) {
+                            const char *name = sysml2_extract_shorthand_stmt_name(
+                                stmt->raw_text, arena, intern);
+                            if (name && !id_in_set(name, frag_names, frag_name_count)) {
+                                preserve_count++;
+                            }
+                        }
+                    }
+
+                    /* Allocate merged array if we have statements to preserve */
+                    if (preserve_count > 0) {
+                        size_t new_total = new_node->body_stmt_count + preserve_count;
+                        SysmlStatement **merged = sysml2_arena_alloc(
+                            arena, new_total * sizeof(SysmlStatement *));
+
+                        if (merged) {
+                            size_t idx = 0;
+                            for (size_t k = 0; k < new_node->body_stmt_count; k++) {
+                                merged[idx++] = new_node->body_stmts[k];
+                            }
+
+                            for (size_t k = 0; k < node->body_stmt_count; k++) {
+                                SysmlStatement *stmt = node->body_stmts[k];
+                                if (!stmt) continue;
+
+                                if (stmt->kind == SYSML_STMT_SHORTHAND_FEATURE && stmt->raw_text) {
+                                    const char *name = sysml2_extract_shorthand_stmt_name(
+                                        stmt->raw_text, arena, intern);
+                                    if (name && !id_in_set(name, frag_names, frag_name_count)) {
+                                        merged[idx++] = sysml2_modify_copy_statement(stmt, arena);
+                                    }
+                                }
+                            }
+
+                            new_node->body_stmts = merged;
+                            new_node->body_stmt_count = idx;
+                        }
+                    }
+                }
+
+                result->elements[result->element_count++] = new_node;
+                break;  /* Found and processed the replacement */
+            }
+            continue;  /* Skip to next base element */
+        }
 
         if (!id_in_set(node->id, ids_to_remove, remove_count)) {
             /* For the target scope element itself, conditionally clear metadata.
@@ -1306,13 +1446,15 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
         }
     }
 
-    /* Step 5: Add remapped fragment elements (deep copy to avoid pointer aliasing)
+    /* Step 5: Add remaining fragment elements (new elements, not replacements)
      *
-     * When replacing an existing element, preserve metadata from the original
-     * if the fragment element doesn't provide its own metadata. This prevents
-     * data loss when an update doesn't include all the original annotations.
+     * Replacement elements were already processed in Step 4 to preserve order.
+     * This step handles new elements that don't replace existing ones.
      */
     for (size_t i = 0; i < fragment->element_count; i++) {
+        /* Skip elements already processed in Step 4 (replacements) */
+        if (fragment_processed[i]) continue;
+
         SysmlNode *frag_node = fragment->elements[i];
         if (!frag_node) continue;
 
@@ -1320,9 +1462,9 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
         SysmlNode *new_node = sysml2_modify_deep_copy_node(frag_node, target_scope, arena, intern);
         if (!new_node) return NULL;
 
-        /* Check if this was a replacement */
+        /* Check if this was a replacement (shouldn't happen, but handle for safety) */
         if (id_in_set(new_node->id, replaced_ids, replaced_count)) {
-            replaced++;
+            /* This is a fallback - normally replacements are handled in Step 4 */
 
             /* Find original element once for all preservation logic */
             SysmlNode *orig = NULL;
