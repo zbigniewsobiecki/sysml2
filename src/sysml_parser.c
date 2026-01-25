@@ -7402,6 +7402,7 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_DecisionNode(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_JoinNode(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_ForkNode(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_GuardedSuccession(pcc_context_t *ctx);
+static pcc_thunk_chunk_t *pcc_evaluate_rule_ElseSuccession(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_SuccessionMember(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_SuccessionMemberGuarded(pcc_context_t *ctx);
 static pcc_thunk_chunk_t *pcc_evaluate_rule_SuccessionMemberFirst(pcc_context_t *ctx);
@@ -28918,29 +28919,34 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ActionUsageElement(pcc_context_t *ct
     L0008:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_IfAction, &chunk->thunks, NULL)) goto L0009;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ElseSuccession, &chunk->thunks, NULL)) goto L0009;
         goto L0001;
     L0009:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_WhileLoop, &chunk->thunks, NULL)) goto L0010;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_IfAction, &chunk->thunks, NULL)) goto L0010;
         goto L0001;
     L0010:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ForLoop, &chunk->thunks, NULL)) goto L0011;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_WhileLoop, &chunk->thunks, NULL)) goto L0011;
         goto L0001;
     L0011:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ControlNode, &chunk->thunks, NULL)) goto L0012;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ForLoop, &chunk->thunks, NULL)) goto L0012;
         goto L0001;
     L0012:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_SuccessionMember, &chunk->thunks, NULL)) goto L0013;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ControlNode, &chunk->thunks, NULL)) goto L0013;
         goto L0001;
     L0013:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_SuccessionMember, &chunk->thunks, NULL)) goto L0014;
+        goto L0001;
+    L0014:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
         goto L0000;
@@ -33932,14 +33938,32 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_IfThenPart(pcc_context_t *ctx) {
         const size_t p = ctx->cur;
         MARK_VAR_AS_USED
         const size_t n = chunk->thunks.len;
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ActionBodyParameter, &chunk->thunks, NULL)) goto L0004;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0004;
+        {
+            MARK_VAR_AS_USED
+            const size_t p = ctx->cur;
+            MARK_VAR_AS_USED
+            const size_t n = chunk->thunks.len;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0005;
+            goto L0006;
+        L0005:;
+            ctx->cur = p;
+            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        L0006:;
+        }
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_SEMICOLON, &chunk->thunks, NULL)) goto L0004;
         goto L0003;
     L0004:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ActionBodyElement, &chunk->thunks, NULL)) goto L0005;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ActionBodyParameter, &chunk->thunks, NULL)) goto L0007;
         goto L0003;
-    L0005:;
+    L0007:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ActionBodyElement, &chunk->thunks, NULL)) goto L0008;
+        goto L0003;
+    L0008:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
         goto L0000;
@@ -33971,14 +33995,32 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_IfElsePart(pcc_context_t *ctx) {
     L0002:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ActionBodyParameter, &chunk->thunks, NULL)) goto L0003;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0003;
+        {
+            MARK_VAR_AS_USED
+            const size_t p = ctx->cur;
+            MARK_VAR_AS_USED
+            const size_t n = chunk->thunks.len;
+            if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0004;
+            goto L0005;
+        L0004:;
+            ctx->cur = p;
+            pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        L0005:;
+        }
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_SEMICOLON, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
     L0003:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
-        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ActionBodyElement, &chunk->thunks, NULL)) goto L0004;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ActionBodyParameter, &chunk->thunks, NULL)) goto L0006;
         goto L0001;
-    L0004:;
+    L0006:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_ActionBodyElement, &chunk->thunks, NULL)) goto L0007;
+        goto L0001;
+    L0007:;
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
         goto L0000;
@@ -34564,6 +34606,36 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_GuardedSuccession(pcc_context_t *ctx
 L0000:;
     ctx->level--;
     PCC_DEBUG(ctx->auxil, PCC_DBG_NOMATCH, "GuardedSuccession", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
+    pcc_thunk_chunk__destroy(ctx, chunk);
+    return NULL;
+}
+
+static pcc_thunk_chunk_t *pcc_evaluate_rule_ElseSuccession(pcc_context_t *ctx) {
+    pcc_thunk_chunk_t *const chunk = pcc_thunk_chunk__create(ctx);
+    chunk->pos = ctx->cur;
+    PCC_DEBUG(ctx->auxil, PCC_DBG_EVALUATE, "ElseSuccession", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->buffer.len - chunk->pos));
+    ctx->level++;
+    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_ELSE, &chunk->thunks, NULL)) goto L0000;
+    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_QualifiedName, &chunk->thunks, NULL)) goto L0000;
+    {
+        MARK_VAR_AS_USED
+        const size_t p = ctx->cur;
+        MARK_VAR_AS_USED
+        const size_t n = chunk->thunks.len;
+        if (!pcc_apply_rule(ctx, pcc_evaluate_rule_FeatureChain, &chunk->thunks, NULL)) goto L0001;
+        goto L0002;
+    L0001:;
+        ctx->cur = p;
+        pcc_thunk_array__revert(ctx, &chunk->thunks, n);
+    L0002:;
+    }
+    if (!pcc_apply_rule(ctx, pcc_evaluate_rule_SEMICOLON, &chunk->thunks, NULL)) goto L0000;
+    ctx->level--;
+    PCC_DEBUG(ctx->auxil, PCC_DBG_MATCH, "ElseSuccession", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
+    return chunk;
+L0000:;
+    ctx->level--;
+    PCC_DEBUG(ctx->auxil, PCC_DBG_NOMATCH, "ElseSuccession", ctx->level, chunk->pos, (ctx->buffer.buf + chunk->pos), (ctx->cur - chunk->pos));
     pcc_thunk_chunk__destroy(ctx, chunk);
     return NULL;
 }

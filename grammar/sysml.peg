@@ -1762,8 +1762,8 @@ ReferenceUsage <- Direction? KW_REF PrefixMetadata* RefBehavioralKeyword? UsageD
                 / Direction? RefPrefix PrefixMetadata* UsageDeclaration UsageBody
 StructureUsageElement <- AttributeUsage / ItemUsage / PartUsage / PortUsage / ConnectionUsage / FlowUsage / InterfaceUsage
 BehaviorUsageElement <- ActionUsage / StateUsage / ConstraintUsage / CalcUsage
-# GuardedSuccession before IfAction: 'if cond then target;' is succession, not if-then with body
-ActionUsageElement <- ActionUsage / ParameterUsage / PerformActionUsage / SendAction / AcceptAction / AssignmentAction / GuardedSuccession / IfAction / WhileLoop / ForLoop / ControlNode / SuccessionMember
+# GuardedSuccession/ElseSuccession before IfAction: 'if cond then target;' and 'else target;' are successions, not if-then with body
+ActionUsageElement <- ActionUsage / ParameterUsage / PerformActionUsage / SendAction / AcceptAction / AssignmentAction / GuardedSuccession / ElseSuccession / IfAction / WhileLoop / ForLoop / ControlNode / SuccessionMember
 ConstraintUsageElement <- ParameterUsage / ReturnUsage / ConstraintUsage
 RequirementUsageElement <- SubjectUsage / ActorUsage / StakeholderUsage / AssumeConstraint / RequireConstraint / AssertSatisfyUsage / SatisfyUsage / RequirementUsage / ConcernUsage / ConstraintUsage / ObjectiveUsage / FrameUsage / VerifyRequirementUsage / RequirementReference / VerificationUsage / CalcUsage / ActionUsage / AllocationUsage / ParameterUsage / StructureUsageElement
 CalcUsageElement <- CalcUsage / ReturnUsage / ActionUsageElement / ConstraintUsage / StructureUsageElement
@@ -1888,8 +1888,8 @@ TriggerPart <- TriggerKind OwnedExpression
 TriggerKind <- KW_AT / KW_AFTER / KW_WHEN
 AssignmentAction <- KW_ASSIGN < QualifiedName FeatureChain? > COLONEQ < OwnedExpression > SEMICOLON { if (auxil->build_ctx) sysml2_capture_assign(auxil->build_ctx, $1, $1e - $1s, $2, $2e - $2s); }
 IfAction <- KW_IF < OwnedExpression IfThenPart IfElsePart? > { if (auxil->build_ctx) sysml2_capture_if(auxil->build_ctx, $1, $1e - $1s); }
-IfThenPart <- KW_THEN? (ActionBodyParameter / ActionBodyElement)
-IfElsePart <- KW_ELSE (IfAction / ActionBodyParameter / ActionBodyElement)
+IfThenPart <- KW_THEN? (QualifiedName FeatureChain? SEMICOLON / ActionBodyParameter / ActionBodyElement)
+IfElsePart <- KW_ELSE (IfAction / QualifiedName FeatureChain? SEMICOLON / ActionBodyParameter / ActionBodyElement)
 ActionBodyParameter <- (KW_ACTION UsageDeclaration?)? LBRACE ActionBodyItem* RBRACE
 WhileLoop <- WhileLoopWhile / WhileLoopUntil / WhileLoopPlain
 WhileLoopWhile <- KW_WHILE < OwnedExpression (KW_UNTIL OwnedExpression)? (ActionBodyParameter / ActionBody) > { if (auxil->build_ctx) sysml2_capture_while(auxil->build_ctx, $1, $1e - $1s); }
@@ -1903,6 +1903,8 @@ JoinNode <- KW_JOIN < UsageDeclaration? ActionBody > { if (auxil->build_ctx) sys
 ForkNode <- KW_FORK < UsageDeclaration? ActionBody > { if (auxil->build_ctx) sysml2_capture_control_node(auxil->build_ctx, SYSML_STMT_FORK, $1, $1e - $1s); }
 # Guarded succession: first x if cond then y;
 GuardedSuccession <- KW_IF OwnedExpression KW_THEN QualifiedName FeatureChain? SEMICOLON
+# Else succession: else target; (for decision branches)
+ElseSuccession <- KW_ELSE QualifiedName FeatureChain? SEMICOLON
 SuccessionMember <- SuccessionMemberGuarded / SuccessionMemberFirst / SuccessionMemberThen / SuccessionMemberChain
 SuccessionMemberGuarded <- KW_FIRST < QualifiedName FeatureChain? > GuardedSuccession { if (auxil->build_ctx) sysml2_capture_succession(auxil->build_ctx, $1, $1e - $1s, NULL, 0, NULL, 0); }
 SuccessionMemberFirst <- KW_FIRST < SuccessionBody > { if (auxil->build_ctx) sysml2_capture_succession(auxil->build_ctx, $1, $1e - $1s, NULL, 0, NULL, 0); }

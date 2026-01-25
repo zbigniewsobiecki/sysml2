@@ -990,6 +990,19 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
         fputs(keyword, w->out);
     }
 
+    /* For end features, multiplicity comes right after keyword */
+    bool end_feature_mult_written = false;
+    if (node->kind == SYSML_KIND_END_FEATURE && node->multiplicity_lower) {
+        fputs(" [", w->out);
+        fputs(node->multiplicity_lower, w->out);
+        if (node->multiplicity_upper) {
+            fputs("..", w->out);
+            fputs(node->multiplicity_upper, w->out);
+        }
+        fputc(']', w->out);
+        end_feature_mult_written = true;
+    }
+
     /* Write name if present */
     if (node->name) {
         /* Only add space before name if there was a keyword
@@ -1030,14 +1043,19 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
     }
 
     /* : typing last (most specific for usages) */
+    /* End features use compact format (no spaces around colon) */
     for (size_t i = 0; i < node->typed_by_count; i++) {
-        fputs(first_rel ? " : " : ", ", w->out);
+        if (node->kind == SYSML_KIND_END_FEATURE) {
+            fputs(first_rel ? ":" : ", ", w->out);
+        } else {
+            fputs(first_rel ? " : " : ", ", w->out);
+        }
         fputs(node->typed_by[i], w->out);
         first_rel = false;
     }
 
-    /* Write multiplicity */
-    if (node->multiplicity_lower) {
+    /* Write multiplicity (skip for end features - already written after keyword) */
+    if (node->multiplicity_lower && !end_feature_mult_written) {
         fputc('[', w->out);
         fputs(node->multiplicity_lower, w->out);
         if (node->multiplicity_upper) {
