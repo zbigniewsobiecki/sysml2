@@ -933,23 +933,37 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
         }
     }
 
-    /* Collect IDs to remove: replaced elements AND ALL their direct children.
+    /* HYBRID APPROACH: Replace matching elements, ADD new ones, keep others.
      *
-     * When a parent element is replaced, we remove all its direct children
-     * (one level only, not grandchildren) because the fragment provides the
-     * complete new definition. This prevents:
-     *   - Duplicate children (old + new)
-     *   - Orphaned comments and whitespace accumulation
-     *   - Stale attribute values bleeding into parent
+     * When merging a fragment at a target scope, we use "hybrid" semantics:
+     *   1. Named elements: Replace if same ID exists in fragment, ADD if new
+     *   2. Keep existing elements that are NOT being replaced
+     *   3. For replaced elements: also remove their direct children (one level)
+     *
+     * This approach:
+     *   - Supports incremental writes (add one element at a time)
+     *   - Prevents duplicate accumulation (replaced elements are removed first)
+     *   - Preserves content not being modified
+     *
+     * @SourceFile deduplication is handled in Step 5 when adding fragment elements.
      */
     const char **ids_to_remove = NULL;
     size_t remove_count = 0;
     size_t remove_capacity = 0;
 
+    /* Step 2a: Only remove elements that are being REPLACED (matched by ID)
+     * plus their direct children (one level only).
+     *
+     * This is the key difference from "full replacement" - we keep existing
+     * elements that are NOT being replaced by the fragment.
+     */
     for (size_t i = 0; i < replaced_count; i++) {
         add_to_id_set(replaced_ids[i], &ids_to_remove, &remove_count, &remove_capacity, arena);
 
-        /* Remove ALL direct children of replaced elements (one level only) */
+        /* Also remove direct children (one level only, not grandchildren).
+         * This handles the common case where the fragment includes the complete
+         * element definition with new children.
+         */
         for (size_t j = 0; j < working_base->element_count; j++) {
             SysmlNode *node = working_base->elements[j];
             if (node && node->id && node->parent_id &&
@@ -957,6 +971,28 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
                 add_to_id_set(node->id, &ids_to_remove, &remove_count, &remove_capacity, arena);
             }
         }
+    }
+
+    /* Step 2b: Cascade deletion to all descendants of removed children */
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (size_t j = 0; j < working_base->element_count; j++) {
+            SysmlNode *node = working_base->elements[j];
+            if (!node || !node->id) continue;
+            if (id_in_set(node->id, ids_to_remove, remove_count)) continue;
+
+            if (node->parent_id && id_in_set(node->parent_id, ids_to_remove, remove_count)) {
+                add_to_id_set(node->id, &ids_to_remove, &remove_count, &remove_capacity, arena);
+                changed = true;
+            }
+        }
+    }
+
+    /* Debug logging */
+    if (getenv("SYSML2_DEBUG_MODIFY")) {
+        fprintf(stderr, "DEBUG: Hybrid mode at scope '%s': removing %zu elements (replaced: %zu)\n",
+                target_scope, remove_count, replaced_count);
     }
 
     /* Step 3: Allocate new model */
@@ -984,7 +1020,13 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
     result->imports = sysml2_arena_alloc(arena, max_imports * sizeof(SysmlImport *));
     if (!result->imports) return NULL;
 
-    /* Step 4: Copy non-removed base elements */
+    /* Step 4: Copy non-removed base elements
+     *
+     * HYBRID MODE: Preserve all elements that weren't marked for removal.
+     * This includes the target scope element with all its metadata intact.
+     * We don't clear metadata because the hybrid approach preserves existing
+     * content that isn't being replaced.
+     */
     for (size_t i = 0; i < working_base->element_count; i++) {
         SysmlNode *node = working_base->elements[i];
         if (!node || !node->id) continue;
@@ -1050,7 +1092,12 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
         result->relationships[result->relationship_count++] = new_rel;
     }
 
-    /* Step 8: Copy non-affected imports from base */
+    /* Step 8: Copy non-affected imports from base
+     *
+     * HYBRID MODE: Keep imports unless their owner scope was removed.
+     * We do NOT remove all imports owned by the target scope - only those
+     * whose owner was explicitly removed.
+     */
     for (size_t i = 0; i < working_base->import_count; i++) {
         SysmlImport *imp = working_base->imports[i];
         if (!imp) continue;
