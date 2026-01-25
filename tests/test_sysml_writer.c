@@ -357,6 +357,235 @@ TEST(sysml_write_null_output) {
     FIXTURE_TEARDOWN();
 }
 
+/* ========== Succession Statement Tests ========== */
+
+TEST(sysml_write_valid_succession) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "action def TestAction {\n"
+        "    action step1;\n"
+        "    action step2;\n"
+        "    first step1 then step2;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Valid succession should be present */
+    ASSERT(strstr(output, "first step1 then step2;") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+TEST(sysml_write_multiple_successions) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "action def TestAction {\n"
+        "    action step1;\n"
+        "    action step2;\n"
+        "    action step3;\n"
+        "    first step1 then step2;\n"
+        "    first step2 then step3;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Both successions should be present */
+    ASSERT(strstr(output, "first step1 then step2;") != NULL);
+    ASSERT(strstr(output, "first step2 then step3;") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+TEST(sysml_write_no_malformed_succession) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "action def TestAction {\n"
+        "    action step1;\n"
+        "    action step2;\n"
+        "    first step1 then step2;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Should NOT contain malformed patterns */
+    ASSERT(strstr(output, "first  then") == NULL);  /* Empty source */
+    ASSERT(strstr(output, "first then ;") == NULL); /* Empty succession */
+    ASSERT(strstr(output, "then ;;") == NULL);      /* Double semicolons */
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+TEST(sysml_succession_roundtrip_idempotent) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "action def TestAction {\n"
+        "    action step1;\n"
+        "    action step2;\n"
+        "    action step3;\n"
+        "    first step1 then step2;\n"
+        "    first step2 then step3;\n"
+        "}\n";
+
+    /* First parse */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+
+    /* First write */
+    char *output1 = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model1, &output1);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output1);
+
+    /* Second parse (from output1) */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+
+    /* Second write */
+    char *output2 = NULL;
+    result = sysml2_sysml_write_string(model2, &output2);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output2);
+
+    /* Third parse (from output2) */
+    SysmlSemanticModel *model3 = parse_sysml_string(&arena, &intern, output2);
+    ASSERT_NOT_NULL(model3);
+
+    /* Third write */
+    char *output3 = NULL;
+    result = sysml2_sysml_write_string(model3, &output3);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output3);
+
+    /* Idempotency: output2 and output3 must be identical */
+    ASSERT_STR_EQ(output2, output3);
+
+    /* Also verify no malformed successions were introduced */
+    ASSERT(strstr(output3, "first  then") == NULL);
+    ASSERT(strstr(output3, "first then ;") == NULL);
+    ASSERT(strstr(output3, "then ;;") == NULL);
+
+    free(output1);
+    free(output2);
+    free(output3);
+    FIXTURE_TEARDOWN();
+}
+
+TEST(sysml_flow_roundtrip_idempotent) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "action def TestAction {\n"
+        "    in item input : Data;\n"
+        "    out item output : Data;\n"
+        "    action process;\n"
+        "    flow from input to process;\n"
+        "    flow from process to output;\n"
+        "}\n";
+
+    /* First parse */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+
+    /* First write */
+    char *output1 = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model1, &output1);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output1);
+
+    /* Second parse */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+
+    /* Second write */
+    char *output2 = NULL;
+    result = sysml2_sysml_write_string(model2, &output2);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output2);
+
+    /* Idempotency check */
+    ASSERT_STR_EQ(output1, output2);
+
+    free(output1);
+    free(output2);
+    FIXTURE_TEARDOWN();
+}
+
+TEST(sysml_complex_action_roundtrip_idempotent) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package Operations {\n"
+        "    action def ProcessData {\n"
+        "        in item request : Request;\n"
+        "        out item response : Response;\n"
+        "        action validate;\n"
+        "        action transform;\n"
+        "        action persist;\n"
+        "        flow from request to validate;\n"
+        "        flow from validate to transform;\n"
+        "        flow from transform to persist;\n"
+        "        flow from persist to response;\n"
+        "        first validate then transform;\n"
+        "        first transform then persist;\n"
+        "    }\n"
+        "}\n";
+
+    /* First round */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+    char *output1 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model1, &output1), SYSML2_OK);
+
+    /* Second round */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+    char *output2 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model2, &output2), SYSML2_OK);
+
+    /* Third round */
+    SysmlSemanticModel *model3 = parse_sysml_string(&arena, &intern, output2);
+    ASSERT_NOT_NULL(model3);
+    char *output3 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model3, &output3), SYSML2_OK);
+
+    /* Idempotency: second and third outputs must be identical */
+    ASSERT_STR_EQ(output2, output3);
+
+    /* No corruption */
+    ASSERT(strstr(output3, "first  then") == NULL);
+    ASSERT(strstr(output3, "first then ;") == NULL);
+
+    free(output1);
+    free(output2);
+    free(output3);
+    FIXTURE_TEARDOWN();
+}
+
 /* ========== Round-Trip Tests ========== */
 
 TEST(sysml_roundtrip_simple) {
@@ -425,6 +654,14 @@ int main(void) {
     /* Error handling */
     RUN_TEST(sysml_write_null_model);
     RUN_TEST(sysml_write_null_output);
+
+    /* Succession statements */
+    RUN_TEST(sysml_write_valid_succession);
+    RUN_TEST(sysml_write_multiple_successions);
+    RUN_TEST(sysml_write_no_malformed_succession);
+    RUN_TEST(sysml_succession_roundtrip_idempotent);
+    RUN_TEST(sysml_flow_roundtrip_idempotent);
+    RUN_TEST(sysml_complex_action_roundtrip_idempotent);
 
     /* Round-trip */
     RUN_TEST(sysml_roundtrip_simple);

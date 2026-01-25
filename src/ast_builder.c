@@ -1508,11 +1508,18 @@ void sysml2_capture_succession(
 ) {
     if (!ctx) return;
 
+    /* Skip if both source and target are empty (malformed input) */
+    const char *trimmed_source = trim_and_intern(ctx, source, source_len);
+    const char *trimmed_target = trim_and_intern(ctx, target, target_len);
+    if (!trimmed_source && !trimmed_target) {
+        return;
+    }
+
     SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_SUCCESSION);
     if (!stmt) return;
 
-    stmt->source.target = trim_and_intern(ctx, source, source_len);
-    stmt->target.target = trim_and_intern(ctx, target, target_len);
+    stmt->source.target = trimmed_source;
+    stmt->target.target = trimmed_target;
     stmt->guard = trim_and_intern(ctx, guard, guard_len);
 
     add_pending_stmt(ctx, stmt);

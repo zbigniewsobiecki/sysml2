@@ -405,8 +405,23 @@ static void write_statement(Sysml2Writer *w, const SysmlStatement *stmt) {
             break;
 
         case SYSML_STMT_SUCCESSION:
+            /* Skip malformed successions with no source or target */
+            if (!stmt->source.target && !stmt->target.target) {
+                return;  /* Don't write anything, skip newline too */
+            }
             fputs("first ", w->out);
             if (stmt->source.target) {
+                /* Check if source already contains " then " (parser captured full succession) */
+                const char *then_pos = strstr(stmt->source.target, " then ");
+                if (then_pos && !stmt->target.target) {
+                    /* Source contains full succession, write as-is without adding another "then" */
+                    fputs(stmt->source.target, w->out);
+                    /* Already has semicolon if source ends with it */
+                    if (stmt->source.target[strlen(stmt->source.target) - 1] != ';') {
+                        fputs(";", w->out);
+                    }
+                    break;
+                }
                 fputs(stmt->source.target, w->out);
             }
             if (stmt->guard) {
@@ -543,17 +558,34 @@ static void write_statement(Sysml2Writer *w, const SysmlStatement *stmt) {
             break;
 
         case SYSML_STMT_FIRST:
-            fputs("first ", w->out);
-            if (stmt->raw_text) {
-                fputs(stmt->raw_text, w->out);
+            /* Skip malformed first statements with no content */
+            if (!stmt->raw_text || stmt->raw_text[0] == '\0') {
+                return;
             }
+            fputs("first ", w->out);
+            fputs(stmt->raw_text, w->out);
             break;
 
         case SYSML_STMT_THEN:
-            /* Raw text includes keyword, output as-is */
-            if (stmt->raw_text) {
-                fputs(stmt->raw_text, w->out);
+            /* Skip malformed then statements (e.g., "then ;" or "then ;;") */
+            if (!stmt->raw_text || stmt->raw_text[0] == '\0') {
+                return;
             }
+            /* Check for malformed pattern: "then" followed by only whitespace/semicolons */
+            {
+                const char *p = stmt->raw_text;
+                /* Skip leading whitespace */
+                while (*p == ' ' || *p == '\t') p++;
+                /* Skip optional "then" keyword */
+                if (strncmp(p, "then", 4) == 0) p += 4;
+                /* Skip whitespace */
+                while (*p == ' ' || *p == '\t') p++;
+                /* If only semicolons or nothing left, skip this statement */
+                if (*p == '\0' || *p == ';') {
+                    return;
+                }
+            }
+            fputs(stmt->raw_text, w->out);
             break;
 
         case SYSML_STMT_RESULT_EXPR:
