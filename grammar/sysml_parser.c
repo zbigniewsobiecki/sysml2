@@ -28,6 +28,7 @@ void sysml2_capture_variation(SysmlBuildContext *ctx);
 void sysml2_capture_direction(SysmlBuildContext *ctx, SysmlDirection dir);
 void sysml2_capture_import_visibility(SysmlBuildContext *ctx, bool is_private);
 void sysml2_build_alias(SysmlBuildContext *ctx, const char *name, size_t name_len, const char *target, size_t target_len);
+void sysml2_build_alias_with_loc(SysmlBuildContext *ctx, const char *name, size_t name_len, const char *target, size_t target_len, uint32_t offset);
 
 /* Forward declarations for body statement capture functions */
 void sysml2_capture_bind(SysmlBuildContext *ctx, const char *source, size_t source_len, const char *target, size_t target_len);
@@ -485,6 +486,23 @@ static void sysml2_build_push_param(SysmlParserContext *ctx, const char *text, s
     }
 }
 
+/* Capture body-end trivia (comments before closing brace) - called BEFORE RBRACE */
+static void sysml2_capture_body_end_trivia(SysmlParserContext *ctx) {
+    if (!ctx->build_ctx) return;
+
+    /* Find the current scope's node and attach body-end trivia */
+    const char *current_scope = sysml2_build_current_scope(ctx->build_ctx);
+    if (current_scope) {
+        for (size_t i = ctx->build_ctx->element_count; i > 0; i--) {
+            SysmlNode *node = ctx->build_ctx->elements[i - 1];
+            if (node->id == current_scope) {
+                sysml2_build_attach_pending_trailing_trivia(ctx->build_ctx, node);
+                break;
+            }
+        }
+    }
+}
+
 /* Pop scope - attach pending statements to current scope node before popping */
 static void sysml2_pop(SysmlParserContext *ctx) {
     if (!ctx->build_ctx) return;
@@ -496,6 +514,7 @@ static void sysml2_pop(SysmlParserContext *ctx) {
             SysmlNode *node = ctx->build_ctx->elements[i - 1];
             if (node->id == current_scope) {
                 sysml2_attach_pending_stmts(ctx->build_ctx, node);
+                /* NOTE: Trailing trivia is captured by sysml2_capture_body_end_trivia BEFORE RBRACE */
                 break;
             }
         }
@@ -505,11 +524,11 @@ static void sysml2_pop(SysmlParserContext *ctx) {
 }
 
 /* Build import and add to model */
-static void sysml2_build_import(SysmlParserContext *ctx, const char *text, size_t len) {
+static void sysml2_build_import(SysmlParserContext *ctx, const char *text, size_t len, size_t offset) {
     if (!ctx->build_ctx || !text || len == 0) return;
 
     /* Skip leading whitespace */
-    while (len > 0 && (*text == ' ' || *text == '\t' || *text == '\n' || *text == '\r')) { text++; len--; }
+    while (len > 0 && (*text == ' ' || *text == '\t' || *text == '\n' || *text == '\r')) { text++; len--; offset++; }
     if (len == 0) return;
 
     /* Trim trailing whitespace */
@@ -538,7 +557,7 @@ static void sysml2_build_import(SysmlParserContext *ctx, const char *text, size_
     /* Intern the target */
     const char *target = sysml2_intern_n(ctx->build_ctx->intern, text, target_len);
     if (target) {
-        sysml2_build_add_import(ctx->build_ctx, kind, target);
+        sysml2_build_add_import_with_loc(ctx->build_ctx, kind, target, (uint32_t)offset);
     }
 }
 
@@ -2003,6 +2022,20 @@ static void pcc_action_LibraryPackage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #undef auxil
 }
 
+static void pcc_action_PackageBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
 static void pcc_action_Import_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
@@ -2012,7 +2045,7 @@ static void pcc_action_Import_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_import(auxil, _1, _1e - _1s);
+    sysml2_build_import(auxil, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2035,7 +2068,7 @@ static void pcc_action_Alias_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_i
 #define _2 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[1])
 #define _2s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[1]->range.start))
 #define _2e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[1]->range.end))
-    if (auxil->build_ctx) sysml2_build_alias(auxil->build_ctx, _1, _1e - _1s, _2, _2e - _2s);
+    if (auxil->build_ctx) sysml2_build_alias_with_loc(auxil->build_ctx, _1, _1e - _1s, _2, _2e - _2s, _1s);
 #undef _2e
 #undef _2s
 #undef _2
@@ -2089,6 +2122,20 @@ static void pcc_action_NamespaceDefinition_1(sysml2_context_t *__pcc_ctx, pcc_th
 #undef auxil
 }
 
+static void pcc_action_NamespaceBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
 static void pcc_action_TypeDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
@@ -2122,6 +2169,20 @@ static void pcc_action_TypeDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #undef _1e
 #undef _1s
 #undef _1
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
+static void pcc_action_KerMLTypeBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
 #undef _0e
 #undef _0s
 #undef _0
@@ -2449,6 +2510,20 @@ static void pcc_action_BehaviorDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thu
 #undef auxil
 }
 
+static void pcc_action_KerMLBehaviorBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
 static void pcc_action_FunctionDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
@@ -2482,6 +2557,20 @@ static void pcc_action_FunctionDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thu
 #undef _1e
 #undef _1s
 #undef _1
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
+static void pcc_action_KerMLFunctionBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
 #undef _0e
 #undef _0s
 #undef _0
@@ -3629,6 +3718,20 @@ static void pcc_action_OccurrenceDefinitionShorthand_1(sysml2_context_t *__pcc_c
 #undef auxil
 }
 
+static void pcc_action_OccurrenceDefinitionBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
 static void pcc_action_ItemDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
@@ -3829,6 +3932,20 @@ static void pcc_action_InterfaceDefinition_1(sysml2_context_t *__pcc_ctx, pcc_th
 #undef auxil
 }
 
+static void pcc_action_InterfaceBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
 static void pcc_action_PortDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
@@ -3862,6 +3979,20 @@ static void pcc_action_PortDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #undef _1e
 #undef _1s
 #undef _1
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
+static void pcc_action_PortDefinitionBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
 #undef _0e
 #undef _0s
 #undef _0
@@ -3969,6 +4100,20 @@ static void pcc_action_ActionDefinition_2(sysml2_context_t *__pcc_ctx, pcc_thunk
 #undef auxil
 }
 
+static void pcc_action_ActionBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
 static void pcc_action_StateDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
@@ -4022,6 +4167,20 @@ static void pcc_action_StateDefinition_2(sysml2_context_t *__pcc_ctx, pcc_thunk_
 #undef _1e
 #undef _1s
 #undef _1
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
+static void pcc_action_StateBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
 #undef _0e
 #undef _0s
 #undef _0
@@ -4149,6 +4308,20 @@ static void pcc_action_ConstraintDefinition_1(sysml2_context_t *__pcc_ctx, pcc_t
 #undef auxil
 }
 
+static void pcc_action_ConstraintBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
 static void pcc_action_RequirementDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
@@ -4182,6 +4355,20 @@ static void pcc_action_RequirementDefinition_1(sysml2_context_t *__pcc_ctx, pcc_
 #undef _1e
 #undef _1s
 #undef _1
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
+static void pcc_action_RequirementBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
 #undef _0e
 #undef _0s
 #undef _0
@@ -4269,6 +4456,20 @@ static void pcc_action_CalcDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #undef auxil
 }
 
+static void pcc_action_CalcBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
 static void pcc_action_CaseDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
@@ -4302,6 +4503,20 @@ static void pcc_action_CaseDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #undef _1e
 #undef _1s
 #undef _1
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
+static void pcc_action_CaseBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
 #undef _0e
 #undef _0s
 #undef _0
@@ -4469,6 +4684,20 @@ static void pcc_action_ViewDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #undef auxil
 }
 
+static void pcc_action_ViewBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
 static void pcc_action_ViewpointDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
@@ -4582,6 +4811,20 @@ static void pcc_action_MetadataDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thu
 #undef _1e
 #undef _1s
 #undef _1
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
+static void pcc_action_DefinitionBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
 #undef _0e
 #undef _0s
 #undef _0
@@ -4742,6 +4985,20 @@ static void pcc_action_OccurrenceUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_
 #undef _1e
 #undef _1s
 #undef _1
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
+static void pcc_action_OccurrenceUsageBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
 #undef _0e
 #undef _0s
 #undef _0
@@ -6368,6 +6625,20 @@ static void pcc_action_Multiplicity_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *
 #undef _1e
 #undef _1s
 #undef _1
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
+static void pcc_action_UsageBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    sysml2_capture_body_end_trivia(auxil);
 #undef _0e
 #undef _0s
 #undef _0
@@ -17030,6 +17301,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_PackageBody(pcc_context_t *ctx) {
                 break;
             }
         }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_PackageBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
+        }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
     L0003:;
@@ -17778,6 +18056,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_NamespaceBody(pcc_context_t *ctx) {
                 break;
             }
         }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_NamespaceBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
+        }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
     L0003:;
@@ -18317,6 +18602,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_KerMLTypeBody(pcc_context_t *ctx) {
                 pcc_thunk_array__revert(ctx, &chunk->thunks, n);
                 break;
             }
+        }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_KerMLTypeBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
         }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
@@ -19126,6 +19418,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_KerMLBehaviorBody(pcc_context_t *ctx
                 break;
             }
         }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_KerMLBehaviorBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
+        }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
     L0003:;
@@ -19294,6 +19593,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_KerMLFunctionBody(pcc_context_t *ctx
             ctx->cur = p;
             pcc_thunk_array__revert(ctx, &chunk->thunks, n);
         L0006:;
+        }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_KerMLFunctionBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
         }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
@@ -24368,6 +24674,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_OccurrenceDefinitionBody(pcc_context
                 break;
             }
         }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_OccurrenceDefinitionBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
+        }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
     L0003:;
@@ -24904,6 +25217,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_InterfaceBody(pcc_context_t *ctx) {
                 break;
             }
         }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_InterfaceBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
+        }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
     L0003:;
@@ -25096,6 +25416,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_PortDefinitionBody(pcc_context_t *ct
                 pcc_thunk_array__revert(ctx, &chunk->thunks, n);
                 break;
             }
+        }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_PortDefinitionBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
         }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
@@ -25435,6 +25762,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ActionBody(pcc_context_t *ctx) {
                 break;
             }
         }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_ActionBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
+        }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
     L0003:;
@@ -25680,6 +26014,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_StateBody(pcc_context_t *ctx) {
                 pcc_thunk_array__revert(ctx, &chunk->thunks, n);
                 break;
             }
+        }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_StateBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
         }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
@@ -26441,6 +26782,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ConstraintBody(pcc_context_t *ctx) {
             pcc_thunk_array__revert(ctx, &chunk->thunks, n);
         L0006:;
         }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_ConstraintBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
+        }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
     L0003:;
@@ -26595,6 +26943,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_RequirementBody(pcc_context_t *ctx) 
                 pcc_thunk_array__revert(ctx, &chunk->thunks, n);
                 break;
             }
+        }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_RequirementBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
         }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
@@ -26941,6 +27296,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_CalcBody(pcc_context_t *ctx) {
             pcc_thunk_array__revert(ctx, &chunk->thunks, n);
         L0006:;
         }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_CalcBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
+        }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
     L0003:;
@@ -27143,6 +27505,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_CaseBody(pcc_context_t *ctx) {
             ctx->cur = p;
             pcc_thunk_array__revert(ctx, &chunk->thunks, n);
         L0006:;
+        }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_CaseBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
         }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
@@ -27538,6 +27907,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ViewBody(pcc_context_t *ctx) {
                 break;
             }
         }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_ViewBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
+        }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
     L0003:;
@@ -27845,6 +28221,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_DefinitionBody(pcc_context_t *ctx) {
                 pcc_thunk_array__revert(ctx, &chunk->thunks, n);
                 break;
             }
+        }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_DefinitionBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
         }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
@@ -29887,6 +30270,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_OccurrenceUsageBody(pcc_context_t *c
                 pcc_thunk_array__revert(ctx, &chunk->thunks, n);
                 break;
             }
+        }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_OccurrenceUsageBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
         }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;
@@ -36798,6 +37188,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_UsageBody(pcc_context_t *ctx) {
                 pcc_thunk_array__revert(ctx, &chunk->thunks, n);
                 break;
             }
+        }
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_UsageBody_0, 0, 0);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
         }
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_RBRACE, &chunk->thunks, NULL)) goto L0003;
         goto L0001;

@@ -10,6 +10,56 @@
 #include <string.h>
 
 /*
+ * Body element kinds for unified sorting
+ */
+typedef enum {
+    BODY_ELEM_DOC,
+    BODY_ELEM_METADATA,
+    BODY_ELEM_IMPORT,
+    BODY_ELEM_ALIAS,
+    BODY_ELEM_STATEMENT,
+    BODY_ELEM_CHILD,
+    BODY_ELEM_COMMENT,
+    BODY_ELEM_TEXTUAL_REP,
+} BodyElementKind;
+
+/*
+ * Unified body element for source-order sorting
+ */
+typedef struct {
+    BodyElementKind kind;
+    uint32_t offset;           /* loc.offset for sorting */
+    size_t insertion_order;    /* For stable sort when offset=0 */
+    union {
+        const char *doc_text;
+        SysmlMetadataUsage *metadata;
+        const SysmlImport *import;
+        const SysmlAlias *alias;
+        SysmlStatement *statement;
+        const SysmlNode *child;
+        SysmlNamedComment *comment;
+        SysmlTextualRep *textual_rep;
+    } data;
+} BodyElement;
+
+/*
+ * Comparison: valid offsets first (ascending), offset=0 at end
+ */
+static int compare_body_elements(const void *a, const void *b) {
+    const BodyElement *ea = a, *eb = b;
+
+    if (ea->offset > 0 && eb->offset > 0) {
+        if (ea->offset != eb->offset)
+            return (ea->offset < eb->offset) ? -1 : 1;
+    } else if (ea->offset > 0) return -1;
+    else if (eb->offset > 0) return 1;
+
+    /* Same/zero offset: preserve insertion order */
+    return (ea->insertion_order < eb->insertion_order) ? -1 :
+           (ea->insertion_order > eb->insertion_order) ? 1 : 0;
+}
+
+/*
  * Internal writer state
  */
 typedef struct {
@@ -162,18 +212,7 @@ static int compare_imports(const void *a, const void *b) {
     return strcmp(target_a, target_b);
 }
 
-/*
- * Comparison function for sorting aliases alphabetically by name
- */
-static int compare_aliases(const void *a, const void *b) {
-    const SysmlAlias *alias_a = *(const SysmlAlias **)a;
-    const SysmlAlias *alias_b = *(const SysmlAlias **)b;
-
-    const char *name_a = alias_a->name ? alias_a->name : "";
-    const char *name_b = alias_b->name ? alias_b->name : "";
-
-    return strcmp(name_a, name_b);
-}
+/* compare_aliases removed - aliases now preserve source order */
 
 
 /*
@@ -254,10 +293,8 @@ static size_t get_imports(const SysmlSemanticModel *model, const char *scope_id,
         }
     }
 
-    /* Sort imports alphabetically by target */
-    if (count > 1) {
-        qsort(imports, count, sizeof(SysmlImport *), compare_imports);
-    }
+    /* Preserve original import order instead of sorting alphabetically.
+     * Sorting was causing imports to be reordered during upsert operations. */
 
     *out_imports = imports;
     return count;
@@ -734,19 +771,21 @@ static size_t get_aliases(const SysmlSemanticModel *model, const char *scope_id,
         }
     }
 
-    /* Sort aliases alphabetically by name */
-    if (count > 1) {
-        qsort(aliases, count, sizeof(SysmlAlias *), compare_aliases);
-    }
+    /* Preserve original alias order instead of sorting alphabetically.
+     * Sorting was causing aliases to be reordered during upsert operations. */
 
     *out_aliases = aliases;
     return count;
 }
 
 /*
- * Write a body with children
+ * Collect all body elements into unified array for source-order sorting
  */
-static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemanticModel *model) {
+static BodyElement *collect_body_elements(
+    const SysmlNode *node,
+    const SysmlSemanticModel *model,
+    size_t *out_count
+) {
     /* Get imports for this scope */
     const SysmlImport **imports = NULL;
     size_t import_count = get_imports(model, node->id, &imports);
@@ -759,102 +798,260 @@ static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
     const SysmlNode **children = NULL;
     size_t child_count = get_children(model, node->id, &children);
 
-    bool has_doc = (node->documentation != NULL);
-    bool has_body_stmts = (node->body_stmt_count > 0);
-    bool has_comments = (node->comment_count > 0);
-    bool has_reps = (node->textual_rep_count > 0);
-    bool has_result_expr = (node->result_expression != NULL);
+    /* Count total elements */
+    size_t total = 0;
+    if (node->documentation) total++;
+    total += node->metadata_count;
+    total += import_count;
+    total += alias_count;
+    total += node->body_stmt_count;
+    total += child_count;
+    total += node->comment_count;
+    total += node->textual_rep_count;
 
-    if (import_count == 0 && alias_count == 0 && child_count == 0 &&
-        node->metadata_count == 0 && !has_doc && !has_body_stmts &&
-        !has_comments && !has_reps && !has_result_expr) {
+    if (total == 0) {
+        free((void *)imports);
+        free((void *)aliases);
+        free((void *)children);
+        *out_count = 0;
+        return NULL;
+    }
+
+    /* Allocate elements array */
+    BodyElement *elements = malloc(total * sizeof(BodyElement));
+    if (!elements) {
+        free((void *)imports);
+        free((void *)aliases);
+        free((void *)children);
+        *out_count = 0;
+        return NULL;
+    }
+
+    size_t idx = 0;
+    size_t insertion_order = 0;
+
+    /* Add documentation */
+    if (node->documentation) {
+        elements[idx].kind = BODY_ELEM_DOC;
+        elements[idx].offset = node->doc_loc.offset;
+        elements[idx].insertion_order = insertion_order++;
+        elements[idx].data.doc_text = node->documentation;
+        idx++;
+    }
+
+    /* Add metadata */
+    for (size_t i = 0; i < node->metadata_count; i++) {
+        elements[idx].kind = BODY_ELEM_METADATA;
+        elements[idx].offset = node->metadata[i]->loc.offset;
+        elements[idx].insertion_order = insertion_order++;
+        elements[idx].data.metadata = node->metadata[i];
+        idx++;
+    }
+
+    /* Add imports */
+    for (size_t i = 0; i < import_count; i++) {
+        elements[idx].kind = BODY_ELEM_IMPORT;
+        elements[idx].offset = imports[i]->loc.offset;
+        elements[idx].insertion_order = insertion_order++;
+        elements[idx].data.import = imports[i];
+        idx++;
+    }
+
+    /* Add aliases */
+    for (size_t i = 0; i < alias_count; i++) {
+        elements[idx].kind = BODY_ELEM_ALIAS;
+        elements[idx].offset = aliases[i]->loc.offset;
+        elements[idx].insertion_order = insertion_order++;
+        elements[idx].data.alias = aliases[i];
+        idx++;
+    }
+
+    /* Add body statements */
+    for (size_t i = 0; i < node->body_stmt_count; i++) {
+        elements[idx].kind = BODY_ELEM_STATEMENT;
+        elements[idx].offset = node->body_stmts[i]->loc.offset;
+        elements[idx].insertion_order = insertion_order++;
+        elements[idx].data.statement = node->body_stmts[i];
+        idx++;
+    }
+
+    /* Add children */
+    for (size_t i = 0; i < child_count; i++) {
+        elements[idx].kind = BODY_ELEM_CHILD;
+        elements[idx].offset = children[i]->loc.offset;
+        elements[idx].insertion_order = insertion_order++;
+        elements[idx].data.child = children[i];
+        idx++;
+    }
+
+    /* Add named comments */
+    for (size_t i = 0; i < node->comment_count; i++) {
+        elements[idx].kind = BODY_ELEM_COMMENT;
+        elements[idx].offset = node->comments[i]->loc.offset;
+        elements[idx].insertion_order = insertion_order++;
+        elements[idx].data.comment = node->comments[i];
+        idx++;
+    }
+
+    /* Add textual representations */
+    for (size_t i = 0; i < node->textual_rep_count; i++) {
+        elements[idx].kind = BODY_ELEM_TEXTUAL_REP;
+        elements[idx].offset = node->textual_reps[i]->loc.offset;
+        elements[idx].insertion_order = insertion_order++;
+        elements[idx].data.textual_rep = node->textual_reps[i];
+        idx++;
+    }
+
+    free((void *)imports);
+    free((void *)aliases);
+    free((void *)children);
+
+    *out_count = idx;
+    return elements;
+}
+
+/*
+ * Write single body element based on kind
+ */
+static void write_body_element(
+    Sysml2Writer *w,
+    const BodyElement *elem,
+    const SysmlSemanticModel *model
+) {
+    switch (elem->kind) {
+        case BODY_ELEM_DOC:
+            write_indent(w);
+            fputs("doc ", w->out);
+            fputs(elem->data.doc_text, w->out);
+            write_newline(w);
+            break;
+
+        case BODY_ELEM_METADATA: {
+            SysmlMetadataUsage *m = elem->data.metadata;
+            write_indent(w);
+            fputc('@', w->out);
+            fputs(m->type_ref, w->out);
+
+            if (m->feature_count > 0) {
+                fputs(" {", w->out);
+                write_newline(w);
+                w->indent_level++;
+                for (size_t j = 0; j < m->feature_count; j++) {
+                    SysmlMetadataFeature *f = m->features[j];
+                    if (!f) continue;
+                    write_indent(w);
+                    fputs(":>> ", w->out);
+                    fputs(f->name, w->out);
+                    if (f->value) {
+                        fputs(" = ", w->out);
+                        fputs(f->value, w->out);
+                    }
+                    fputc(';', w->out);
+                    write_newline(w);
+                }
+                w->indent_level--;
+                write_indent(w);
+                fputc('}', w->out);
+            } else {
+                fputc(';', w->out);
+            }
+            write_newline(w);
+            break;
+        }
+
+        case BODY_ELEM_IMPORT:
+            write_import(w, elem->data.import);
+            break;
+
+        case BODY_ELEM_ALIAS:
+            write_alias(w, elem->data.alias);
+            break;
+
+        case BODY_ELEM_STATEMENT:
+            write_statement(w, elem->data.statement);
+            break;
+
+        case BODY_ELEM_CHILD:
+            write_node(w, elem->data.child, model);
+            break;
+
+        case BODY_ELEM_COMMENT:
+            write_named_comment(w, elem->data.comment);
+            break;
+
+        case BODY_ELEM_TEXTUAL_REP:
+            write_textual_rep(w, elem->data.textual_rep);
+            break;
+    }
+}
+
+/*
+ * Write a body with children - source-ordered implementation
+ */
+static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemanticModel *model) {
+    size_t count = 0;
+    BodyElement *elements = collect_body_elements(node, model, &count);
+
+    bool has_result = (node->result_expression != NULL);
+
+    if (count == 0 && !has_result) {
         /* Empty body: use semicolon */
         fputc(';', w->out);
         if (node->trailing_trivia) {
             write_trailing_trivia(w, node->trailing_trivia);
         }
         write_newline(w);
-    } else {
-        /* Non-empty body: use braces */
-        fputs(" {", w->out);
-        if (node->trailing_trivia) {
-            write_trailing_trivia(w, node->trailing_trivia);
-        }
-        write_newline(w);
+        return;
+    }
 
-        w->indent_level++;
+    /* Non-empty body: use braces */
+    fputs(" {", w->out);
+    write_newline(w);
+    w->indent_level++;
 
-        /* Write documentation first if present */
-        if (has_doc) {
-            write_indent(w);
-            fputs("doc ", w->out);
-            fputs(node->documentation, w->out);
-            write_newline(w);
-            if (node->metadata_count > 0 || import_count > 0 || alias_count > 0 || child_count > 0) {
-                write_newline(w);
-            }
-        }
+    /* Sort by source position */
+    if (count > 1) {
+        qsort(elements, count, sizeof(BodyElement), compare_body_elements);
+    }
 
-        /* Write applied metadata (inside the body) */
-        if (node->metadata_count > 0) {
-            write_applied_metadata(w, node);
-            if (import_count > 0 || alias_count > 0 || child_count > 0) {
-                write_newline(w);
-            }
-        }
+    /* Write in sorted order */
+    for (size_t i = 0; i < count; i++) {
+        write_body_element(w, &elements[i], model);
+    }
 
-        /* Write imports */
-        for (size_t i = 0; i < import_count; i++) {
-            write_import(w, imports[i]);
-        }
-
-        /* Write aliases */
-        for (size_t i = 0; i < alias_count; i++) {
-            write_alias(w, aliases[i]);
-        }
-
-        /* Add blank line between imports/aliases and members if both present */
-        if ((import_count > 0 || alias_count > 0) && (child_count > 0 || has_body_stmts)) {
-            write_newline(w);
-        }
-
-        /* Write body statements (relationship statements, control flow, etc.) */
-        for (size_t i = 0; i < node->body_stmt_count; i++) {
-            write_statement(w, node->body_stmts[i]);
-        }
-
-        /* Write children */
-        for (size_t i = 0; i < child_count; i++) {
-            write_node(w, children[i], model);
-        }
-
-        /* Write named comments */
-        for (size_t i = 0; i < node->comment_count; i++) {
-            write_named_comment(w, node->comments[i]);
-        }
-
-        /* Write textual representations */
-        for (size_t i = 0; i < node->textual_rep_count; i++) {
-            write_textual_rep(w, node->textual_reps[i]);
-        }
-
-        /* Write result expression (at end) */
-        if (node->result_expression) {
-            write_indent(w);
-            fputs(node->result_expression, w->out);
-            write_newline(w);
-        }
-
-        w->indent_level--;
-
+    /* Result expression always last (semantic requirement for calc/constraint bodies) */
+    if (has_result) {
         write_indent(w);
-        fputc('}', w->out);
+        fputs(node->result_expression, w->out);
         write_newline(w);
     }
 
-    free((void *)imports);
-    free((void *)aliases);
-    free((void *)children);
+    /* Write trailing trivia (comments at end of body before closing brace) */
+    if (node->trailing_trivia) {
+        for (SysmlTrivia *t = node->trailing_trivia; t; t = t->next) {
+            if (t->kind == SYSML_TRIVIA_BLANK_LINE) {
+                write_newline(w);  /* Preserve blank line */
+            } else if (t->kind == SYSML_TRIVIA_LINE_COMMENT) {
+                write_indent(w);
+                fputs("// ", w->out);
+                if (t->text) fputs(t->text, w->out);
+                write_newline(w);
+            } else if (t->kind == SYSML_TRIVIA_BLOCK_COMMENT) {
+                write_indent(w);
+                fputs("/* ", w->out);
+                if (t->text) fputs(t->text, w->out);
+                fputs(" */", w->out);
+                write_newline(w);
+            }
+        }
+    }
+
+    w->indent_level--;
+    write_indent(w);
+    fputc('}', w->out);
+    write_newline(w);
+
+    free(elements);
 }
 
 /*

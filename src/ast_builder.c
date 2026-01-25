@@ -288,6 +288,7 @@ SysmlNode *sysml2_build_node(
 
     node->loc = SYSML2_LOC_INVALID;
     node->documentation = NULL;
+    node->doc_loc = SYSML2_LOC_INVALID;
     node->metadata = NULL;
     node->metadata_count = 0;
     node->prefix_metadata = NULL;
@@ -537,6 +538,18 @@ void sysml2_build_add_import(
     SysmlNodeKind kind,
     const char *target
 ) {
+    sysml2_build_add_import_with_loc(ctx, kind, target, 0);
+}
+
+/*
+ * Add an import declaration with source location
+ */
+void sysml2_build_add_import_with_loc(
+    SysmlBuildContext *ctx,
+    SysmlNodeKind kind,
+    const char *target,
+    uint32_t offset
+) {
     if (!ctx || !target) return;
 
     ensure_import_capacity(ctx);
@@ -553,7 +566,9 @@ void sysml2_build_add_import(
     imp->owner_scope = sysml2_build_current_scope(ctx);
     imp->is_private = ctx->pending_import_private;
     imp->is_public_explicit = ctx->pending_import_public;
-    imp->loc = SYSML2_LOC_INVALID;
+    imp->loc.offset = offset;
+    imp->loc.line = 0;
+    imp->loc.column = 0;
 
     /* Reset pending import visibility */
     ctx->pending_import_private = false;
@@ -643,6 +658,75 @@ void sysml2_build_attach_pending_trivia(SysmlBuildContext *ctx, SysmlNode *node)
 }
 
 /*
+ * Check if a node has any children (elements whose parent_id matches this node's id)
+ */
+static bool has_child_elements(SysmlBuildContext *ctx, const SysmlNode *node) {
+    if (!ctx || !node || !node->id) return false;
+    for (size_t i = 0; i < ctx->element_count; i++) {
+        SysmlNode *child = ctx->elements[i];
+        if (child && child->parent_id && child->parent_id == node->id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/*
+ * Attach pending trivia as trailing trivia (for comments at end of body before closing brace)
+ *
+ * Logic:
+ * - If trivia starts with blank line AND node has children (braced body): attach as body-end trivia
+ * - If trivia starts with blank line AND node has no children: leave pending (belongs to parent)
+ * - If no blank line: attach as same-line trailing trivia
+ * - Trailing blank line (after content) is left pending for next element (it's after the `}`)
+ */
+void sysml2_build_attach_pending_trailing_trivia(SysmlBuildContext *ctx, SysmlNode *node) {
+    if (!ctx || !node) return;
+    if (!ctx->pending_trivia_head) return;
+
+    SysmlTrivia *first = ctx->pending_trivia_head;
+    bool has_blank_line = (first->kind == SYSML_TRIVIA_BLANK_LINE);
+    /* Check if node has any body content indicating a braced body */
+    bool has_body_content = (node->body_stmt_count > 0 || node->comment_count > 0 ||
+                             node->textual_rep_count > 0 || node->documentation != NULL ||
+                             has_child_elements(ctx, node));
+
+    if (has_blank_line) {
+        if (has_body_content) {
+            /* Braced body with content - attach trivia but leave trailing blank line pending.
+             * The trailing blank line is from after the `}`, not body-end content. */
+
+            /* Find the last non-blank-line trivia after the initial blank line */
+            SysmlTrivia *last_content = NULL;
+            for (SysmlTrivia *t = first->next; t; t = t->next) {
+                if (t->kind != SYSML_TRIVIA_BLANK_LINE) {
+                    last_content = t;
+                }
+            }
+
+            if (last_content) {
+                /* Stop the list after the last content item */
+                SysmlTrivia *after_content = last_content->next;
+                last_content->next = NULL;
+                node->trailing_trivia = first;
+                ctx->pending_trivia_head = after_content;
+                if (!after_content) {
+                    ctx->pending_trivia_tail = NULL;
+                }
+            }
+            /* If no content after first blank line, don't attach anything */
+        }
+        /* Else: semicolon body or empty - leave pending for parent */
+        return;
+    }
+
+    /* No blank line - this is same-line trailing trivia, attach to this node */
+    node->trailing_trivia = ctx->pending_trivia_head;
+    ctx->pending_trivia_head = NULL;
+    ctx->pending_trivia_tail = NULL;
+}
+
+/*
  * Create a metadata usage
  */
 SysmlMetadataUsage *sysml2_build_metadata_usage(
@@ -659,6 +743,7 @@ SysmlMetadataUsage *sysml2_build_metadata_usage(
     meta->about_count = 0;
     meta->features = NULL;
     meta->feature_count = 0;
+    meta->loc = SYSML2_LOC_INVALID;
 
     return meta;
 }
@@ -1062,6 +1147,20 @@ void sysml2_capture_documentation(struct Sysml2ParserContext *pctx, size_t start
     const char *start = ctx->input + start_offset;
     size_t len = end_offset - start_offset;
 
+    /* Trim to end at the closing delimiter since grammar captures trailing trivia */
+    if (len > 2) {
+        const char *end_marker = NULL;
+        for (size_t i = len - 1; i > 0; i--) {
+            if (start[i] == '/' && start[i-1] == '*') {
+                end_marker = start + i + 1;
+                break;
+            }
+        }
+        if (end_marker) {
+            len = end_marker - start;
+        }
+    }
+
     /* Intern the documentation text (includes delimiters) */
     const char *interned_text = len > 0 ? sysml2_intern_n(build_ctx->intern, start, len) : NULL;
 
@@ -1072,6 +1171,10 @@ void sysml2_capture_documentation(struct Sysml2ParserContext *pctx, size_t start
             SysmlNode *node = build_ctx->elements[i - 1];
             if (node->id == current_scope) {
                 node->documentation = interned_text;
+                /* Capture source location for ordering */
+                node->doc_loc.offset = (uint32_t)start_offset;
+                node->doc_loc.line = 0;  /* Not tracked */
+                node->doc_loc.column = 0;
                 break;
             }
         }
@@ -1095,6 +1198,20 @@ void sysml2_build_alias(
     size_t name_len,
     const char *target,
     size_t target_len
+) {
+    sysml2_build_alias_with_loc(ctx, name, name_len, target, target_len, 0);
+}
+
+/*
+ * Build an alias with source location
+ */
+void sysml2_build_alias_with_loc(
+    SysmlBuildContext *ctx,
+    const char *name,
+    size_t name_len,
+    const char *target,
+    size_t target_len,
+    uint32_t offset
 ) {
     if (!ctx || !name || !target) return;
 
@@ -1120,7 +1237,9 @@ void sysml2_build_alias(
     alias->name = sysml2_intern_n(ctx->intern, name, name_len);
     alias->target = sysml2_intern_n(ctx->intern, target, target_len);
     alias->owner_scope = sysml2_build_current_scope(ctx);
-    alias->loc = SYSML2_LOC_INVALID;
+    alias->loc.offset = offset;
+    alias->loc.line = 0;
+    alias->loc.column = 0;
 
     ctx->aliases[ctx->alias_count++] = alias;
 }

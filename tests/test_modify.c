@@ -1168,6 +1168,93 @@ TEST(shorthand_feature_preserved_in_body) {
     sysml2_arena_destroy(&arena);
 }
 
+/* ========== Import Order and Comment Preservation Tests ========== */
+
+/* Test: Import order is preserved during write (not alphabetically sorted) */
+TEST(import_order_preserved_during_write) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Input with specific import order: ZModule before AModule */
+    const char *input =
+        "package TestPkg {\n"
+        "    import ZModule::*;\n"
+        "    import AModule::*;\n"
+        "    import MModule::*;\n"
+        "    part def MyPart { }\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    /* Write model back to string */
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify imports are NOT alphabetically sorted */
+    /* ZModule should appear BEFORE AModule (original order preserved) */
+    char *z_pos = strstr(output, "import ZModule");
+    char *a_pos = strstr(output, "import AModule");
+    char *m_pos = strstr(output, "import MModule");
+
+    ASSERT_NOT_NULL(z_pos);
+    ASSERT_NOT_NULL(a_pos);
+    ASSERT_NOT_NULL(m_pos);
+
+    /* ZModule should come before AModule, and AModule before MModule */
+    ASSERT(z_pos < a_pos);
+    ASSERT(a_pos < m_pos);
+
+    free(output);
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+/* Test: Line comments are not duplicated during upsert */
+TEST(no_comment_duplication_during_upsert) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Input with a line comment */
+    const char *input =
+        "package TestPkg {\n"
+        "    import SomeModule::*;\n"
+        "\n"
+        "    // Important comment about the element below\n"
+        "    part def MyElement { }\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    /* Write model back to string */
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Count occurrences of the comment - should be exactly 1 */
+    int comment_count = 0;
+    const char *search = "// Important comment";
+    char *pos = output;
+    while ((pos = strstr(pos, search)) != NULL) {
+        comment_count++;
+        pos += strlen(search);
+    }
+
+    ASSERT_EQ(comment_count, 1);
+
+    free(output);
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
 /* ========== Metadata Accumulation Regression Tests ========== */
 
 /* Test: Metadata on target scope is cleared to prevent accumulation */
@@ -1349,6 +1436,58 @@ TEST(merge_clears_body_metadata) {
     for (size_t i = 0; i < result->element_count; i++) {
         if (strcmp(result->elements[i]->id, "Pkg") == 0) {
             ASSERT_EQ(result->elements[i]->metadata_count, 0);
+        }
+    }
+
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+/* Test: Trailing trivia on target scope is cleared */
+TEST(merge_clears_trailing_trivia) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Base model: Pkg with trailing trivia */
+    SysmlNode base_nodes[1];
+    memset(base_nodes, 0, sizeof(base_nodes));
+    base_nodes[0].id = "Pkg";
+    base_nodes[0].name = "Pkg";
+    base_nodes[0].kind = SYSML_KIND_PACKAGE;
+
+    /* Add trailing trivia to package */
+    SysmlTrivia *trivia = sysml2_arena_alloc(&arena, sizeof(SysmlTrivia));
+    memset(trivia, 0, sizeof(SysmlTrivia));
+    trivia->kind = SYSML_TRIVIA_LINE_COMMENT;
+    trivia->text = "// accumulated trailing comment";
+    trivia->next = NULL;
+    base_nodes[0].trailing_trivia = trivia;
+
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 1, NULL, 0);
+
+    /* Fragment: new element */
+    SysmlNode frag_nodes[1];
+    memset(frag_nodes, 0, sizeof(frag_nodes));
+    frag_nodes[0].id = "NewElem";
+    frag_nodes[0].name = "NewElem";
+    frag_nodes[0].kind = SYSML_KIND_PART_DEF;
+
+    SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 1, NULL, 0);
+
+    /* Merge into Pkg */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+    );
+
+    ASSERT_NOT_NULL(result);
+
+    /* Verify: Package trailing trivia is cleared */
+    for (size_t i = 0; i < result->element_count; i++) {
+        if (strcmp(result->elements[i]->id, "Pkg") == 0) {
+            ASSERT_NULL(result->elements[i]->trailing_trivia);
         }
     }
 
@@ -1659,10 +1798,15 @@ int main(void) {
     RUN_TEST(shorthand_value_no_leak_to_sibling);
     RUN_TEST(shorthand_feature_preserved_in_body);
 
+    /* Import order and comment preservation tests */
+    RUN_TEST(import_order_preserved_during_write);
+    RUN_TEST(no_comment_duplication_during_upsert);
+
     /* Metadata accumulation regression tests */
     RUN_TEST(merge_no_metadata_accumulation);
     RUN_TEST(merge_preserves_sibling_metadata);
     RUN_TEST(merge_clears_body_metadata);
+    RUN_TEST(merge_clears_trailing_trivia);
     RUN_TEST(merge_clears_leading_trivia);
     RUN_TEST(merge_repeated_upserts_no_accumulation);
 

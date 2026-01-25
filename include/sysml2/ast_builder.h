@@ -306,6 +306,21 @@ void sysml2_build_add_import(
 );
 
 /*
+ * Add an import declaration with source location
+ *
+ * @param ctx Build context
+ * @param kind Import kind (IMPORT, IMPORT_ALL, IMPORT_RECURSIVE)
+ * @param target Target qualified name (what is being imported)
+ * @param offset Source byte offset for ordering
+ */
+void sysml2_build_add_import_with_loc(
+    SysmlBuildContext *ctx,
+    SysmlNodeKind kind,
+    const char *target,
+    uint32_t offset
+);
+
+/*
  * Finalize the build and return the semantic model
  *
  * After calling this, the build context should not be used.
@@ -336,6 +351,16 @@ void sysml2_build_add_pending_trivia(SysmlBuildContext *ctx, SysmlTrivia *trivia
  * @param node Node to attach trivia to
  */
 void sysml2_build_attach_pending_trivia(SysmlBuildContext *ctx, SysmlNode *node);
+
+/**
+ * Attach pending trivia as trailing trivia of a node
+ *
+ * Used for comments at end of body before closing brace.
+ *
+ * @param ctx Build context
+ * @param node Node to attach trailing trivia to
+ */
+void sysml2_build_attach_pending_trailing_trivia(SysmlBuildContext *ctx, SysmlNode *node);
 
 /*
  * Create a trivia node
@@ -477,6 +502,25 @@ void sysml2_build_alias(
     size_t name_len,
     const char *target,
     size_t target_len
+);
+
+/*
+ * Capture an alias declaration with source location
+ *
+ * @param ctx Build context
+ * @param name Alias name
+ * @param name_len Length of name
+ * @param target Target qualified name
+ * @param target_len Length of target
+ * @param offset Source byte offset for ordering
+ */
+void sysml2_build_alias_with_loc(
+    SysmlBuildContext *ctx,
+    const char *name,
+    size_t name_len,
+    const char *target,
+    size_t target_len,
+    uint32_t offset
 );
 
 /*

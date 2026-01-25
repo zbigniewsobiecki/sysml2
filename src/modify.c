@@ -1090,10 +1090,11 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
             if (target_scope && strcmp(node->id, target_scope) == 0) {
                 node->prefix_applied_metadata = NULL;
                 node->prefix_applied_metadata_count = 0;
-                /* Also clear body metadata and leading trivia to prevent accumulation */
+                /* Also clear body metadata and trivia to prevent accumulation */
                 node->metadata = NULL;
                 node->metadata_count = 0;
                 node->leading_trivia = NULL;
+                node->trailing_trivia = NULL;
             }
             result->elements[result->element_count++] = node;
         }

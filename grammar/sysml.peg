@@ -339,6 +339,7 @@ void sysml2_capture_variation(SysmlBuildContext *ctx);
 void sysml2_capture_direction(SysmlBuildContext *ctx, SysmlDirection dir);
 void sysml2_capture_import_visibility(SysmlBuildContext *ctx, bool is_private);
 void sysml2_build_alias(SysmlBuildContext *ctx, const char *name, size_t name_len, const char *target, size_t target_len);
+void sysml2_build_alias_with_loc(SysmlBuildContext *ctx, const char *name, size_t name_len, const char *target, size_t target_len, uint32_t offset);
 
 /* Forward declarations for body statement capture functions */
 void sysml2_capture_bind(SysmlBuildContext *ctx, const char *source, size_t source_len, const char *target, size_t target_len);
@@ -796,6 +797,23 @@ static void sysml2_build_push_param(SysmlParserContext *ctx, const char *text, s
     }
 }
 
+/* Capture body-end trivia (comments before closing brace) - called BEFORE RBRACE */
+static void sysml2_capture_body_end_trivia(SysmlParserContext *ctx) {
+    if (!ctx->build_ctx) return;
+
+    /* Find the current scope's node and attach body-end trivia */
+    const char *current_scope = sysml2_build_current_scope(ctx->build_ctx);
+    if (current_scope) {
+        for (size_t i = ctx->build_ctx->element_count; i > 0; i--) {
+            SysmlNode *node = ctx->build_ctx->elements[i - 1];
+            if (node->id == current_scope) {
+                sysml2_build_attach_pending_trailing_trivia(ctx->build_ctx, node);
+                break;
+            }
+        }
+    }
+}
+
 /* Pop scope - attach pending statements to current scope node before popping */
 static void sysml2_pop(SysmlParserContext *ctx) {
     if (!ctx->build_ctx) return;
@@ -807,6 +825,7 @@ static void sysml2_pop(SysmlParserContext *ctx) {
             SysmlNode *node = ctx->build_ctx->elements[i - 1];
             if (node->id == current_scope) {
                 sysml2_attach_pending_stmts(ctx->build_ctx, node);
+                /* NOTE: Trailing trivia is captured by sysml2_capture_body_end_trivia BEFORE RBRACE */
                 break;
             }
         }
@@ -816,11 +835,11 @@ static void sysml2_pop(SysmlParserContext *ctx) {
 }
 
 /* Build import and add to model */
-static void sysml2_build_import(SysmlParserContext *ctx, const char *text, size_t len) {
+static void sysml2_build_import(SysmlParserContext *ctx, const char *text, size_t len, size_t offset) {
     if (!ctx->build_ctx || !text || len == 0) return;
 
     /* Skip leading whitespace */
-    while (len > 0 && (*text == ' ' || *text == '\t' || *text == '\n' || *text == '\r')) { text++; len--; }
+    while (len > 0 && (*text == ' ' || *text == '\t' || *text == '\n' || *text == '\r')) { text++; len--; offset++; }
     if (len == 0) return;
 
     /* Trim trailing whitespace */
@@ -849,7 +868,7 @@ static void sysml2_build_import(SysmlParserContext *ctx, const char *text, size_
     /* Intern the target */
     const char *target = sysml2_intern_n(ctx->build_ctx->intern, text, target_len);
     if (target) {
-        sysml2_build_add_import(ctx->build_ctx, kind, target);
+        sysml2_build_add_import_with_loc(ctx->build_ctx, kind, target, (uint32_t)offset);
     }
 }
 
@@ -1316,11 +1335,11 @@ FilterPackageMember <- KW_FILTER OwnedExpression SEMICOLON
 # Packages
 Package <- PrefixMetadata* KW_PACKAGE < Identification > { sysml2_build_push(auxil, SYSML_KIND_PACKAGE, $1, $1e - $1s); } PackageBody { sysml2_pop(auxil); }
 LibraryPackage <- KW_STANDARD? KW_LIBRARY PrefixMetadata* KW_PACKAGE < Identification > { sysml2_build_push(auxil, SYSML_KIND_LIBRARY_PACKAGE, $1, $1e - $1s); } PackageBody { sysml2_pop(auxil); }
-PackageBody <- SEMICOLON / LBRACE PackageBodyElement* RBRACE
+PackageBody <- SEMICOLON / LBRACE PackageBodyElement* { sysml2_capture_body_end_trivia(auxil); } RBRACE
 
 # Imports
 # Note: visibility (private/public) is captured by MemberPrefix before Import is matched
-Import <- KW_IMPORT KW_ALL? < ImportDeclaration > { sysml2_build_import(auxil, $1, $1e - $1s); } ImportFilter? RelationshipBody
+Import <- KW_IMPORT KW_ALL? < ImportDeclaration > { sysml2_build_import(auxil, $1, $1e - $1s, $1s); } ImportFilter? RelationshipBody
 ImportDeclaration <- NamespaceImport / MembershipImport
 MembershipImport <- QualifiedName (COLONCOLON STARSTAR)?
 NamespaceImport <- QualifiedName (COLONCOLON_STAR COLONCOLON_STARSTAR? / COLONCOLON_STARSTAR)
@@ -1331,7 +1350,7 @@ ImportFilterElement <- LBRACKET (MetadataFilterElement / OwnedExpression) RBRACK
 MetadataFilterElement <- AT QualifiedName &RBRACKET
 
 # Alias
-Alias <- KW_ALIAS < (ShortName NAME / ShortName / NAME) > KW_FOR < QualifiedName > { if (auxil->build_ctx) sysml2_build_alias(auxil->build_ctx, $1, $1e - $1s, $2, $2e - $2s); } RelationshipBody
+Alias <- KW_ALIAS < (ShortName NAME / ShortName / NAME) > KW_FOR < QualifiedName > { if (auxil->build_ctx) sysml2_build_alias_with_loc(auxil->build_ctx, $1, $1e - $1s, $2, $2e - $2s, $1s); } RelationshipBody
 
 # Dependency: dependency [name from] client to supplier { feature e; }
 Dependency <- PrefixMetadata* KW_DEPENDENCY (Identification KW_FROM)? QualifiedName (COMMA QualifiedName)* KW_TO QualifiedName (COMMA QualifiedName)* DependencyBody
@@ -1358,7 +1377,7 @@ KerMLTypePrefix <- AbstractModifier? PrefixMetadata*
 NamespaceDefinition <- KerMLTypePrefix KW_NAMESPACE < Identification >
     { sysml2_build_push(auxil, SYSML_KIND_NAMESPACE, $1, $1e - $1s); }
     NamespaceBody { sysml2_pop(auxil); }
-NamespaceBody <- SEMICOLON / LBRACE NamespaceBodyElement* RBRACE
+NamespaceBody <- SEMICOLON / LBRACE NamespaceBodyElement* { sysml2_capture_body_end_trivia(auxil); } RBRACE
 NamespaceBodyElement <- MemberPrefix (KerMLDefinitionElement / KerMLFeatureElement
                                      / Import / Alias / AnnotatingElement)
 
@@ -1375,7 +1394,7 @@ DisjoiningPart <- KW_DISJOINT KW_FROM QualifiedName FeatureChain? (COMMA Qualifi
 UnioningPart <- KW_UNIONS QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)*
 IntersectingPart <- KW_INTERSECTS QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)*
 DifferencingPart <- KW_DIFFERENCES QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)*
-KerMLTypeBody <- SEMICOLON / LBRACE KerMLTypeBodyElement* RBRACE
+KerMLTypeBody <- SEMICOLON / LBRACE KerMLTypeBodyElement* { sysml2_capture_body_end_trivia(auxil); } RBRACE
 KerMLTypeBodyElement <- MemberPrefix (KerMLDefinitionElement / KerMLParameterMember / KerMLFeatureElement
                                 / ShorthandNamedFeature / Package / Import / Alias / AnnotatingElement)
 # Shorthand named feature: name : Type :>> target; or name = value; or var name = value; (feature keyword implied)
@@ -1424,7 +1443,7 @@ InteractionDefinition <- KerMLTypePrefix KW_INTERACTION < Identification Classif
 BehaviorDefinition <- KerMLTypePrefix KW_BEHAVIOR < Identification ClassifierDeclarationPart? >
     { sysml2_build_push(auxil, SYSML_KIND_BEHAVIOR, $1, $1e - $1s); }
     KerMLBehaviorBody { sysml2_pop(auxil); }
-KerMLBehaviorBody <- SEMICOLON / LBRACE KerMLBehaviorBodyElement* RBRACE
+KerMLBehaviorBody <- SEMICOLON / LBRACE KerMLBehaviorBodyElement* { sysml2_capture_body_end_trivia(auxil); } RBRACE
 KerMLBehaviorBodyElement <- MemberPrefix (KerMLParameterMember / KerMLDefinitionElement
                                     / KerMLFeatureElement / Import / Alias / AnnotatingElement)
 
@@ -1432,7 +1451,7 @@ KerMLBehaviorBodyElement <- MemberPrefix (KerMLParameterMember / KerMLDefinition
 FunctionDefinition <- KerMLTypePrefix KW_FUNCTION < Identification ClassifierDeclarationPart? >
     { sysml2_build_push(auxil, SYSML_KIND_FUNCTION, $1, $1e - $1s); }
     KerMLFunctionBody { sysml2_pop(auxil); }
-KerMLFunctionBody <- SEMICOLON / LBRACE KerMLFunctionBodyElement* ResultExpression? RBRACE
+KerMLFunctionBody <- SEMICOLON / LBRACE KerMLFunctionBodyElement* ResultExpression? { sysml2_capture_body_end_trivia(auxil); } RBRACE
 KerMLFunctionBodyElement <- MemberPrefix (ReturnFeatureMember / KerMLParameterMember / KerMLDefinitionElement
                                     / KerMLFeatureElement / FunctionBodyShorthand / BindUsage / Import / Alias / AnnotatingElement)
 FunctionBodyShorthand <- (COLONGTGT / COLONGT) QualifiedName FeatureChain? (COMMA QualifiedName FeatureChain?)* (COLON QualifiedName Multiplicity?)? FeatureValue? UsageBody
@@ -1665,7 +1684,7 @@ OccurrenceDefinition <- OccurrenceDefinitionExplicit / OccurrenceDefinitionShort
 OccurrenceDefinitionExplicit <- DefinitionPrefix* KW_OCCURRENCE KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_OCCURRENCE_DEF, $1, $1e - $1s); } OccurrenceDefinitionBody { sysml2_pop(auxil); }
 # individual def X :> Y - shorthand for occurrence def with individual prefix
 OccurrenceDefinitionShorthand <- DefinitionPrefix* KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_OCCURRENCE_DEF, $1, $1e - $1s); } OccurrenceDefinitionBody { sysml2_pop(auxil); }
-OccurrenceDefinitionBody <- SEMICOLON / LBRACE OccurrenceDefinitionMember* RBRACE
+OccurrenceDefinitionBody <- SEMICOLON / LBRACE OccurrenceDefinitionMember* { sysml2_capture_body_end_trivia(auxil); } RBRACE
 # ThenMessageUsage for 'then message x of T' syntax in occurrences
 ThenMessageUsage <- KW_THEN MessageUsage
 OccurrenceDefinitionMember <- MemberPrefix (OccurrenceDefinitionElement / PortionUsage / ThenMessageUsage / MessageUsage / BindUsage / EventOccurrenceUsage / EventUsage / ShorthandFeatureMember / SuccessionMember / StructureUsageElement / OccurrenceUsage / Import / Alias / AnnotatingElement)
@@ -1675,22 +1694,22 @@ PartDefinition <- DefinitionPrefix* KW_PART KW_DEF < Identification DefinitionSp
 ConnectionDefinition <- DefinitionPrefix* KW_CONNECTION KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_CONNECTION_DEF, $1, $1e - $1s); } DefinitionBody { sysml2_pop(auxil); }
 FlowDefinition <- DefinitionPrefix* KW_FLOW KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_FLOW_DEF, $1, $1e - $1s); } DefinitionBody { sysml2_pop(auxil); }
 InterfaceDefinition <- DefinitionPrefix* KW_INTERFACE KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_INTERFACE_DEF, $1, $1e - $1s); } InterfaceBody { sysml2_pop(auxil); }
-InterfaceBody <- SEMICOLON / LBRACE InterfaceBodyElement* RBRACE
+InterfaceBody <- SEMICOLON / LBRACE InterfaceBodyElement* { sysml2_capture_body_end_trivia(auxil); } RBRACE
 InterfaceBodyElement <- MemberPrefix (EndMember / DefinitionElement / InterfaceUsageElement / AnnotatingElement)
 InterfaceUsageElement <- UsageElement
 PortDefinition <- DefinitionPrefix* KW_PORT KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_PORT_DEF, $1, $1e - $1s); } PortDefinitionBody { sysml2_pop(auxil); }
-PortDefinitionBody <- SEMICOLON / LBRACE (PortDefinitionMember / ConjugatedPortDefinitionMember)* RBRACE
+PortDefinitionBody <- SEMICOLON / LBRACE (PortDefinitionMember / ConjugatedPortDefinitionMember)* { sysml2_capture_body_end_trivia(auxil); } RBRACE
 PortDefinitionMember <- MemberPrefix (DefinitionElement / PortUsageElement / Alias / AnnotatingElement)
 ConjugatedPortDefinitionMember <- MemberPrefix KW_PORT (TILDE NAME SEMICOLON / ConjugatedPortDeclaration)
 ConjugatedPortDeclaration <- Identification TILDE QualifiedName SEMICOLON
 PortUsageElement <- ParameterUsage / UsageElement
 AllocationDefinition <- DefinitionPrefix* KW_ALLOCATION KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_ALLOCATION_DEF, $1, $1e - $1s); } DefinitionBody { sysml2_pop(auxil); }
 ActionDefinition <- DefinitionPrefix* KW_ACTION KW_DEF < Identification > ActionParameterList? { sysml2_clear_direction(auxil); } DefinitionSpecializations? { sysml2_build_push(auxil, SYSML_KIND_ACTION_DEF, $1, $1e - $1s); } ActionBody { sysml2_pop(auxil); }
-ActionBody <- SEMICOLON / LBRACE ActionBodyItem* RBRACE
+ActionBody <- SEMICOLON / LBRACE ActionBodyItem* { sysml2_capture_body_end_trivia(auxil); } RBRACE
 ActionBodyItem <- MemberPrefix ActionBodyElement
 ActionBodyElement <- DefinitionElement / BindUsage / TerminateAction / SuccessionUsage / StateUsage / CalcUsage / AssertConstraintUsage / VariantUsage / ActionUsageElement / ShorthandFeatureMember / AnnotatingElement / Import / Alias / StructureUsageElement
 StateDefinition <- DefinitionPrefix* KW_STATE KW_DEF < Identification > ActionParameterList? { sysml2_clear_direction(auxil); } DefinitionSpecializations? { sysml2_build_push(auxil, SYSML_KIND_STATE_DEF, $1, $1e - $1s); } StateBody { sysml2_pop(auxil); }
-StateBody <- SEMICOLON / LBRACE StateBodyItem* RBRACE
+StateBody <- SEMICOLON / LBRACE StateBodyItem* { sysml2_capture_body_end_trivia(auxil); } RBRACE
 StateBodyItem <- MemberPrefix StateBodyElement
 StateBodyElement <- DefinitionElement / AssertConstraintUsage / StateUsageElement / AnnotatingElement / Import / Alias
 StateUsageElement <- EntryAction / ExitAction / DoAction / EntryTransition / AcceptTransition / StateUsage / ExhibitStateUsage / TransitionUsage / SuccessionUsage / SuccessionMember / ConstraintUsage / ActionUsageElement
@@ -1704,10 +1723,10 @@ DoAction <- KW_DO < (KW_ACTION UsageDeclaration ActionBody / AssignmentAction / 
 PerformActionUsage <- KW_VARIATION? KW_PERFORM (KW_ACTION UsageDeclaration ActionBody / QualifiedName FeatureChain? FeatureSpecialization* ActionBody)
 EntryTransition <- < KW_ENTRY? TransitionDeclaration TransitionBody > { if (auxil->build_ctx) sysml2_capture_entry_transition(auxil->build_ctx, $1, $1e - $1s); }
 ConstraintDefinition <- DefinitionPrefix* KW_CONSTRAINT KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_DEF, $1, $1e - $1s); } ConstraintBody { sysml2_pop(auxil); }
-ConstraintBody <- SEMICOLON / LBRACE ConstraintBodyElement* ResultExpression? RBRACE
+ConstraintBody <- SEMICOLON / LBRACE ConstraintBodyElement* ResultExpression? { sysml2_capture_body_end_trivia(auxil); } RBRACE
 ConstraintBodyElement <- MemberPrefix (DefinitionElement / ConstraintUsageElement / AnnotatingElement)
 RequirementDefinition <- DefinitionPrefix* KW_REQUIREMENT KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_REQUIREMENT_DEF, $1, $1e - $1s); } RequirementBody { sysml2_pop(auxil); }
-RequirementBody <- SEMICOLON / LBRACE RequirementBodyItem* RBRACE
+RequirementBody <- SEMICOLON / LBRACE RequirementBodyItem* { sysml2_capture_body_end_trivia(auxil); } RBRACE
 RequirementBodyItem <- MemberPrefix RequirementBodyElement
 RequirementBodyElement <- DefinitionElement / VariantUsage / ReturnUsage / ReferenceUsage / RequirementUsageElement / ShorthandFeatureMember / SuccessionMember / AnnotatingElement / Import / Alias
 # Variant can be: variant name;  OR  variant action name;  OR  variant perform name;
@@ -1716,25 +1735,25 @@ VariantUsage <- KW_VARIANT KW_PERFORM QualifiedName FeatureChain? SEMICOLON
               / KW_VARIANT UsageDeclaration UsageBody
 ConcernDefinition <- DefinitionPrefix* KW_CONCERN KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_CONCERN_DEF, $1, $1e - $1s); } RequirementBody { sysml2_pop(auxil); }
 CalcDefinition <- DefinitionPrefix* KW_CALC KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_CALC_DEF, $1, $1e - $1s); } CalcBody { sysml2_pop(auxil); }
-CalcBody <- SEMICOLON / LBRACE CalcBodyItem* ResultExpression? RBRACE
+CalcBody <- SEMICOLON / LBRACE CalcBodyItem* ResultExpression? { sysml2_capture_body_end_trivia(auxil); } RBRACE
 CalcBodyItem <- MemberPrefix CalcBodyElement
 CalcBodyElement <- DefinitionElement / AssertConstraintUsage / CalcUsageElement / AnnotatingElement / Import / Alias / StructureUsageElement
 CaseDefinition <- DefinitionPrefix* KW_CASE KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_CASE_DEF, $1, $1e - $1s); } CaseBody { sysml2_pop(auxil); }
-CaseBody <- SEMICOLON / LBRACE CaseBodyItem* ResultExpression? RBRACE
+CaseBody <- SEMICOLON / LBRACE CaseBodyItem* ResultExpression? { sysml2_capture_body_end_trivia(auxil); } RBRACE
 CaseBodyItem <- MemberPrefix CaseBodyElement
 CaseBodyElement <- DefinitionElement / CaseUsageElement / AnnotatingElement / Import / Alias / StructureUsageElement
 AnalysisDefinition <- DefinitionPrefix* KW_ANALYSIS KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_ANALYSIS_DEF, $1, $1e - $1s); } CaseBody { sysml2_pop(auxil); }
 VerificationDefinition <- DefinitionPrefix* KW_VERIFICATION KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_VERIFICATION_DEF, $1, $1e - $1s); } RequirementBody { sysml2_pop(auxil); }
 UseCaseDefinition <- DefinitionPrefix* KW_USE KW_CASE KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_USE_CASE_DEF, $1, $1e - $1s); } CaseBody { sysml2_pop(auxil); }
 ViewDefinition <- DefinitionPrefix* KW_VIEW KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_VIEW_DEF, $1, $1e - $1s); } ViewBody { sysml2_pop(auxil); }
-ViewBody <- SEMICOLON / LBRACE ViewBodyElement* RBRACE
+ViewBody <- SEMICOLON / LBRACE ViewBodyElement* { sysml2_capture_body_end_trivia(auxil); } RBRACE
 ViewBodyElement <- MemberPrefix (DefinitionElement / ViewUsageElement / Import / Alias / FilterPackageMember / AnnotatingElement)
 ViewpointDefinition <- DefinitionPrefix* KW_VIEWPOINT KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_VIEWPOINT_DEF, $1, $1e - $1s); } RequirementBody { sysml2_pop(auxil); }
 RenderingDefinition <- DefinitionPrefix* KW_RENDERING KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_RENDERING_DEF, $1, $1e - $1s); } ViewBody { sysml2_pop(auxil); }
 MetadataDefinition <- DefinitionPrefix* KW_METADATA KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_METADATA_DEF, $1, $1e - $1s); } DefinitionBody { sysml2_pop(auxil); }
 
 # Definition Body
-DefinitionBody <- SEMICOLON / LBRACE DefinitionBodyItem* RBRACE
+DefinitionBody <- SEMICOLON / LBRACE DefinitionBodyItem* { sysml2_capture_body_end_trivia(auxil); } RBRACE
 DefinitionBodyItem <- MemberPrefix (EndMember / DefinitionElement / KerMLFeatureElement / AssertConstraintUsage / BindUsage / ShorthandFeatureMember / SuccessionMember / UsageElement / Import / Alias / AnnotatingElement)
 DefinitionSpecializations <- DefinitionSpecialization+
 DefinitionSpecialization <- SPECIALIZES QualifiedName (COMMA QualifiedName)*
@@ -1785,7 +1804,7 @@ EventUsage <- UsagePrefix* KW_EVENT QualifiedName FeatureChain? Multiplicity? RE
             / UsagePrefix* KW_EVENT QualifiedName FeatureChain SEMICOLON
             / UsagePrefix* KW_EVENT QualifiedName SEMICOLON
             / UsagePrefix* KW_EVENT UsageDeclaration UsageBody
-OccurrenceUsageBody <- SEMICOLON / LBRACE OccurrenceUsageMember* RBRACE
+OccurrenceUsageBody <- SEMICOLON / LBRACE OccurrenceUsageMember* { sysml2_capture_body_end_trivia(auxil); } RBRACE
 OccurrenceUsageMember <- MemberPrefix (OccurrenceDefinitionElement / AssertConstraintUsage / PortionUsage / EventOccurrenceUsage / EventUsage / OccurrenceUsage / MessageUsage / BindUsage / ShorthandFeatureMember / SuccessionMember / StructureUsageElement / AnnotatingElement)
 ItemUsage <- UsagePrefix* KW_ITEM < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_ITEM_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
 PartUsage <- UsagePrefix* KW_PART < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_PART_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
@@ -1959,7 +1978,7 @@ MultiplicityBounds <- OwnedExpression (DOTDOT (OwnedExpression / STAR))? / STAR
 OrderedNonunique <- (KW_ORDERED KW_NONUNIQUE?) / (KW_NONUNIQUE KW_ORDERED?)
 
 # Usage Body
-UsageBody <- SEMICOLON / LBRACE UsageBodyItem* RBRACE
+UsageBody <- SEMICOLON / LBRACE UsageBodyItem* { sysml2_capture_body_end_trivia(auxil); } RBRACE
 UsageBodyItem <- MemberPrefix (DefinitionElement / AssertConstraintUsage / BindUsage / ShorthandFeatureMember / SuccessionMember / VariantUsage / RequireConstraint / AssumeConstraint / UsageElement / Import / Alias / AnnotatingElement)
 
 # Shorthand feature member like :>> name = value; or :> name = value; or :>> name : Type { }

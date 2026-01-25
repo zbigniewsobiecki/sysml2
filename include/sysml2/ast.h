@@ -352,6 +352,7 @@ typedef struct SysmlMetadataUsage {
     size_t about_count;
     SysmlMetadataFeature **features; /* Attribute assignments */
     size_t feature_count;
+    Sysml2SourceLoc loc;            /* Source location for ordering */
 } SysmlMetadataUsage;
 
 /*
@@ -426,6 +427,7 @@ typedef struct SysmlNode {
 
     /* Documentation comment (doc comment text) */
     const char *documentation;
+    Sysml2SourceLoc doc_loc;      /* Source location for ordering */
 
     /* Applied metadata inside element body (@Metadata { ... }) */
     SysmlMetadataUsage **metadata;
