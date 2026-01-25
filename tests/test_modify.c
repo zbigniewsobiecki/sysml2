@@ -1606,6 +1606,70 @@ TEST(merge_repeated_upserts_no_accumulation) {
     sysml2_arena_destroy(&arena);
 }
 
+/* Test: Comments are stable across multiple upserts (no duplication, no movement) */
+TEST(upsert_comment_stability) {
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+
+    /* Input with comments in various positions */
+    const char *input =
+        "package TestPkg {\n"
+        "    // Comment before first\n"
+        "    part def First { }\n"
+        "\n"
+        "    // Comment before second\n"
+        "    part def Second { }\n"
+        "}\n";
+
+    /* Fragment to upsert */
+    const char *fragment_src =
+        "part def NewPart { }\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    /* Parse fragment */
+    SysmlSemanticModel *fragment = parse_sysml_string(&arena, &intern, fragment_src);
+    ASSERT_NOT_NULL(fragment);
+
+    /* Run 3 upserts */
+    for (int round = 0; round < 3; round++) {
+        size_t added = 0, replaced = 0;
+        model = sysml2_modify_merge_fragment(
+            model, fragment, "TestPkg", false, &arena, &intern, &added, &replaced
+        );
+        ASSERT_NOT_NULL(model);
+    }
+
+    /* Write result to string */
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Count occurrences of each comment - should be exactly 1 each */
+    int count_first = 0, count_second = 0;
+    char *pos = output;
+    while ((pos = strstr(pos, "// Comment before first")) != NULL) {
+        count_first++;
+        pos++;
+    }
+    pos = output;
+    while ((pos = strstr(pos, "// Comment before second")) != NULL) {
+        count_second++;
+        pos++;
+    }
+
+    ASSERT_EQ(count_first, 1);
+    ASSERT_EQ(count_second, 1);
+
+    free(output);
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
 /* Test: Children of replaced parent are preserved if not in fragment */
 TEST(merge_preserves_children_of_replaced_parent) {
     Sysml2Arena arena;
