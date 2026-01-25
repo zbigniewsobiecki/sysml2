@@ -1,13 +1,13 @@
 package EnumTest {
     enum def Status {
-        enum Pending;
-        enum Active;
-        enum Completed;
+        Pending;
+        Active;
+        Completed;
     }
 
     enum def Priority {
-        enum Low;
-        enum Medium;
-        enum High;
+        Low;
+        Medium;
+        High;
     }
 }

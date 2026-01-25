@@ -1048,6 +1048,22 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
         }
     }
 
+    /* Capture wrapper documentation and metadata before unwrapping.
+     * These will be applied to the target scope if fragment has scope metadata. */
+    const char *wrapper_doc = NULL;
+    SysmlMetadataUsage **wrapper_metadata = NULL;
+    size_t wrapper_metadata_count = 0;
+    SysmlMetadataUsage **wrapper_prefix_metadata = NULL;
+    size_t wrapper_prefix_metadata_count = 0;
+
+    if (wrapper_to_unwrap) {
+        wrapper_doc = wrapper_to_unwrap->documentation;
+        wrapper_metadata = wrapper_to_unwrap->metadata;
+        wrapper_metadata_count = wrapper_to_unwrap->metadata_count;
+        wrapper_prefix_metadata = wrapper_to_unwrap->prefix_applied_metadata;
+        wrapper_prefix_metadata_count = wrapper_to_unwrap->prefix_applied_metadata_count;
+    }
+
     /* Step 1: Check if target scope exists (or create it) */
     SysmlSemanticModel *working_base = (SysmlSemanticModel *)base;
     if (!sysml2_modify_scope_exists(base, target_scope)) {
@@ -1211,6 +1227,7 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
 
     SysmlSemanticModel *result = sysml2_arena_alloc(arena, sizeof(SysmlSemanticModel));
     if (!result) return NULL;
+    memset(result, 0, sizeof(SysmlSemanticModel));  /* Zero all fields */
 
     result->source_name = working_base->source_name;
     result->element_count = 0;
@@ -1266,6 +1283,21 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
                     node->metadata = NULL;
                     node->metadata_count = 0;
                 }
+
+                /* Apply wrapper metadata/documentation to target scope if wrapper was unwrapped.
+                 * This preserves scope-level annotations when a fragment uses a wrapper package. */
+                if (wrapper_doc && !node->documentation) {
+                    node->documentation = wrapper_doc;
+                }
+                if (wrapper_metadata_count > 0 && node->metadata_count == 0) {
+                    node->metadata = wrapper_metadata;
+                    node->metadata_count = wrapper_metadata_count;
+                }
+                if (wrapper_prefix_metadata_count > 0 && node->prefix_applied_metadata_count == 0) {
+                    node->prefix_applied_metadata = wrapper_prefix_metadata;
+                    node->prefix_applied_metadata_count = wrapper_prefix_metadata_count;
+                }
+
                 /* Always clear trivia to prevent formatting accumulation */
                 node->leading_trivia = NULL;
                 node->trailing_trivia = NULL;
@@ -1303,6 +1335,11 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
             }
 
             if (orig) {
+                /* Inherit original location to preserve element ordering.
+                 * The writer sorts by loc.offset, so fragment elements with different
+                 * source file offsets would otherwise get reordered. */
+                new_node->loc = orig->loc;
+
                 /* Preserve documentation if fragment has none */
                 if (!new_node->documentation && orig->documentation) {
                     new_node->documentation = orig->documentation;  /* Interned string */
@@ -1410,6 +1447,54 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
             }
         } else {
             added++;
+
+            /* For new elements, we want them to appear after existing siblings
+             * while preserving their relative ordering from the fragment.
+             *
+             * The writer sorts by offset: non-zero first (ascending), then zero (by insertion_order).
+             *
+             * Strategy:
+             * - No existing siblings: keep original offsets (preserve fragment's internal order)
+             * - Siblings have non-zero offsets: shift new element's offset to be after them
+             * - Siblings have offset=0: set new element's offset to 0 (insertion order applies)
+             */
+            if (new_node->parent_id) {
+                uint32_t max_sibling_offset = 0;
+                bool has_sibling = false;
+                bool has_nonzero_sibling = false;
+                for (size_t j = 0; j < result->element_count; j++) {
+                    if (result->elements[j] && result->elements[j]->parent_id &&
+                        strcmp(result->elements[j]->parent_id, new_node->parent_id) == 0) {
+                        has_sibling = true;
+                        if (result->elements[j]->loc.offset > max_sibling_offset) {
+                            max_sibling_offset = result->elements[j]->loc.offset;
+                        }
+                        if (result->elements[j]->loc.offset > 0) {
+                            has_nonzero_sibling = true;
+                        }
+                    }
+                }
+
+                if (!has_sibling) {
+                    /* No existing siblings - keep original offset to preserve
+                     * fragment's internal ordering (children vs body_stmts) */
+                } else if (has_nonzero_sibling) {
+                    /* Siblings have known offsets; shift new element after them */
+                    if (new_node->loc.offset <= max_sibling_offset) {
+                        new_node->loc.offset = max_sibling_offset + 1000 + new_node->loc.offset;
+                    }
+                } else {
+                    /* Siblings exist but use offset=0 (insertion order).
+                     * New element should also use offset=0 to appear after them.
+                     * Also zero out body_stmt offsets for consistent sorting. */
+                    new_node->loc.offset = 0;
+                    for (size_t k = 0; k < new_node->body_stmt_count; k++) {
+                        if (new_node->body_stmts[k]) {
+                            new_node->body_stmts[k]->loc.offset = 0;
+                        }
+                    }
+                }
+            }
         }
 
         result->elements[result->element_count++] = new_node;
@@ -1484,10 +1569,18 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
         SysmlImport *frag_imp = fragment->imports[i];
         if (!frag_imp) continue;
 
-        /* Compute remapped owner scope for duplicate check */
-        const char *new_owner = frag_imp->owner_scope
-            ? sysml2_modify_remap_id(frag_imp->owner_scope, target_scope, arena, intern)
-            : NULL;
+        /* Compute remapped owner scope for duplicate check.
+         * When owner_scope is NULL (e.g., from unwrapped wrapper), map to target_scope
+         * so the import becomes scoped to the target rather than staying top-level. */
+        const char *new_owner;
+        if (frag_imp->owner_scope) {
+            new_owner = sysml2_modify_remap_id(frag_imp->owner_scope, target_scope, arena, intern);
+        } else if (target_scope) {
+            /* Unwrapped imports belong to target scope, not top-level */
+            new_owner = sysml2_intern(intern, target_scope);
+        } else {
+            new_owner = NULL;
+        }
 
         /* Check for duplicate in result */
         bool is_duplicate = false;

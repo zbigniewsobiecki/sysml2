@@ -1215,6 +1215,22 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
     /* Write keyword */
     const char *keyword = sysml2_kind_to_keyword(node->kind);
     bool has_keyword = keyword && keyword[0];
+
+    /* Enum literals (ENUMERATION_USAGE) inside enum defs don't get the "enum" keyword.
+     * In SysML v2, they're written as bare names like "Unit;" not "enum Unit;" */
+    if (has_keyword && node->kind == SYSML_KIND_ENUMERATION_USAGE && node->parent_id) {
+        /* Check if parent is an enumeration def */
+        for (size_t i = 0; i < model->element_count; i++) {
+            if (model->elements[i] && model->elements[i]->id &&
+                strcmp(model->elements[i]->id, node->parent_id) == 0) {
+                if (model->elements[i]->kind == SYSML_KIND_ENUMERATION_DEF) {
+                    has_keyword = false;  /* Skip the keyword */
+                }
+                break;
+            }
+        }
+    }
+
     if (has_keyword) {
         fputs(keyword, w->out);
     }
