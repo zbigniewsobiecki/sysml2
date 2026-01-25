@@ -891,6 +891,96 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
     size_t added = 0;
     size_t replaced = 0;
 
+    /* Step 0: Auto-unwrap scope-matching package wraps (common LLM mistake)
+     *
+     * If the fragment contains a single top-level package with the same name as
+     * the target scope, strip the wrapper prefix from all element IDs and remove
+     * the wrapper. This handles the common LLM pattern:
+     *   --set "package Foo { item def X; }" --at Foo
+     *
+     * Without unwrapping: X gets ID "Foo::Foo::X" (wrong - nested)
+     * With unwrapping:    X gets ID "Foo::X" (correct)
+     */
+    SysmlNode *wrapper_to_unwrap = NULL;
+    size_t top_level_count = 0;
+
+    for (size_t i = 0; i < fragment->element_count; i++) {
+        SysmlNode *node = fragment->elements[i];
+        if (!node) continue;
+
+        /* Check if this is a top-level element (no parent) */
+        if (!node->parent_id || *node->parent_id == '\0') {
+            top_level_count++;
+
+            /* Check if it's a package matching target scope */
+            if (node->kind == SYSML_KIND_PACKAGE && node->name) {
+                const char *target_local = sysml2_modify_get_local_name(target_scope);
+                if (target_local && strcmp(node->name, target_local) == 0) {
+                    wrapper_to_unwrap = node;
+                }
+            }
+        }
+    }
+
+    /* If there's exactly one top-level element and it's a scope-matching package,
+     * strip its prefix from all IDs and remove it from the fragment */
+    if (wrapper_to_unwrap && top_level_count == 1) {
+        const char *wrapper_id = wrapper_to_unwrap->id;
+        size_t wrapper_id_len = wrapper_id ? strlen(wrapper_id) : 0;
+
+        if (getenv("SYSML2_DEBUG_MODIFY")) {
+            fprintf(stderr, "DEBUG: Auto-unwrapping package '%s' (id='%s')\n",
+                    wrapper_to_unwrap->name, wrapper_id ? wrapper_id : "(null)");
+        }
+
+        /* Strip wrapper prefix from all element IDs and parent_ids.
+         * E.g., "Foo::X" becomes "X", "Foo::X::y" becomes "X::y" */
+        for (size_t i = 0; i < fragment->element_count; i++) {
+            SysmlNode *node = fragment->elements[i];
+            if (!node || node == wrapper_to_unwrap) continue;
+
+            /* Strip prefix from ID */
+            if (node->id && wrapper_id && sysml2_modify_id_starts_with(node->id, wrapper_id)) {
+                /* Skip "Foo::" prefix (wrapper_id_len + 2 for "::") */
+                node->id = sysml2_intern(intern, node->id + wrapper_id_len + 2);
+            }
+
+            /* Strip prefix from parent_id, or set to NULL if parent is wrapper */
+            if (node->parent_id) {
+                if (strcmp(node->parent_id, wrapper_id) == 0) {
+                    /* Direct child of wrapper - becomes top-level */
+                    node->parent_id = NULL;
+                } else if (sysml2_modify_id_starts_with(node->parent_id, wrapper_id)) {
+                    /* Grandchild - strip prefix */
+                    node->parent_id = sysml2_intern(intern, node->parent_id + wrapper_id_len + 2);
+                }
+            }
+        }
+
+        /* Strip wrapper prefix from import owner_scopes too */
+        for (size_t i = 0; i < fragment->import_count; i++) {
+            SysmlImport *imp = fragment->imports[i];
+            if (!imp || !imp->owner_scope) continue;
+
+            if (strcmp(imp->owner_scope, wrapper_id) == 0) {
+                /* Import owned by wrapper - becomes top-level (owner_scope = NULL) */
+                imp->owner_scope = NULL;
+            } else if (sysml2_modify_id_starts_with(imp->owner_scope, wrapper_id)) {
+                /* Import owned by nested element - strip prefix */
+                imp->owner_scope = sysml2_intern(intern, imp->owner_scope + wrapper_id_len + 2);
+            }
+        }
+
+        /* Remove the wrapper package from fragment (cast away const for this) */
+        SysmlSemanticModel *mutable_fragment = (SysmlSemanticModel *)fragment;
+        for (size_t i = 0; i < mutable_fragment->element_count; i++) {
+            if (mutable_fragment->elements[i] == wrapper_to_unwrap) {
+                mutable_fragment->elements[i] = NULL;
+                break;
+            }
+        }
+    }
+
     /* Step 1: Check if target scope exists (or create it) */
     SysmlSemanticModel *working_base = (SysmlSemanticModel *)base;
     if (!sysml2_modify_scope_exists(base, target_scope)) {
