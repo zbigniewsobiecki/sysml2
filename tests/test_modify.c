@@ -2923,6 +2923,272 @@ TEST(merge_preserves_element_order) {
     FIXTURE_TEARDOWN();
 }
 
+/* ========== Round-Trip Merge Regression Tests ========== */
+
+/* Test: Shorthand statements with same name are not duplicated across merges */
+TEST(upsert_shorthand_stmt_not_duplicated) {
+    FIXTURE_SETUP();
+
+    /* Base: requirement def R { :>> id = "FR-001"; } */
+    const char *base_src =
+        "package TestPkg {\n"
+        "    requirement def R {\n"
+        "        :>> id = \"FR-001\";\n"
+        "    }\n"
+        "}\n";
+
+    /* Fragment: same requirement with same :>> id */
+    const char *frag_src =
+        "requirement def R {\n"
+        "    :>> id = \"FR-001\";\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, base_src);
+    ASSERT_NOT_NULL(model);
+
+    SysmlSemanticModel *fragment = parse_sysml_string(&arena, &intern, frag_src);
+    ASSERT_NOT_NULL(fragment);
+
+    /* Merge 3 times to trigger potential duplication */
+    for (int round = 0; round < 3; round++) {
+        size_t added = 0, replaced = 0;
+        model = sysml2_modify_merge_fragment(
+            model, fragment, "TestPkg", false, false, &arena, &intern, &added, &replaced
+        );
+        ASSERT_NOT_NULL(model);
+    }
+
+    /* Write model to string */
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Count occurrences of :>> id - should be exactly 1 */
+    int count = 0;
+    const char *pos = output;
+    while ((pos = strstr(pos, ":>> id = \"FR-001\"")) != NULL) {
+        count++;
+        pos++;
+    }
+
+    ASSERT_EQ(count, 1);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Leading comment trivia is not duplicated across merges */
+TEST(upsert_leading_comment_not_duplicated) {
+    FIXTURE_SETUP();
+
+    /* Base: package P { // leading comment\n part def X; } */
+    const char *base_src =
+        "package TestPkg {\n"
+        "    // Functional requirements (to be populated)\n"
+        "    part def First { }\n"
+        "}\n";
+
+    /* Fragment: part def X with same leading comment */
+    const char *frag_src =
+        "// Functional requirements (to be populated)\n"
+        "part def First { }\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, base_src);
+    ASSERT_NOT_NULL(model);
+
+    SysmlSemanticModel *fragment = parse_sysml_string(&arena, &intern, frag_src);
+    ASSERT_NOT_NULL(fragment);
+
+    /* Merge 3 times to trigger potential duplication */
+    for (int round = 0; round < 3; round++) {
+        size_t added = 0, replaced = 0;
+        model = sysml2_modify_merge_fragment(
+            model, fragment, "TestPkg", false, false, &arena, &intern, &added, &replaced
+        );
+        ASSERT_NOT_NULL(model);
+    }
+
+    /* Write model to string */
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Count occurrences of the comment - should be exactly 1 */
+    int count = 0;
+    const char *pos = output;
+    while ((pos = strstr(pos, "// Functional requirements")) != NULL) {
+        count++;
+        pos++;
+    }
+
+    ASSERT_EQ(count, 1);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Blank lines don't accumulate with repeated merges */
+TEST(upsert_blank_lines_stable) {
+    FIXTURE_SETUP();
+
+    /* Base with blank lines between elements */
+    const char *base_src =
+        "package TestPkg {\n"
+        "    part def A { }\n"
+        "\n"
+        "    part def B { }\n"
+        "}\n";
+
+    /* Fragment: part def A */
+    const char *frag_src = "part def A { }\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, base_src);
+    ASSERT_NOT_NULL(model);
+
+    SysmlSemanticModel *fragment = parse_sysml_string(&arena, &intern, frag_src);
+    ASSERT_NOT_NULL(fragment);
+
+    /* Merge 5 times and check output length is stable */
+    char *output2 = NULL;
+    char *output5 = NULL;
+
+    for (int round = 0; round < 5; round++) {
+        size_t added = 0, replaced = 0;
+        model = sysml2_modify_merge_fragment(
+            model, fragment, "TestPkg", false, false, &arena, &intern, &added, &replaced
+        );
+        ASSERT_NOT_NULL(model);
+
+        if (round == 1) {  /* After 2nd merge */
+            Sysml2Result res = sysml2_sysml_write_string(model, &output2);
+            ASSERT_EQ(res, SYSML2_OK);
+        }
+        if (round == 4) {  /* After 5th merge */
+            Sysml2Result res = sysml2_sysml_write_string(model, &output5);
+            ASSERT_EQ(res, SYSML2_OK);
+        }
+    }
+
+    ASSERT_NOT_NULL(output2);
+    ASSERT_NOT_NULL(output5);
+
+    /* Count blank lines in both outputs - should be identical after fix */
+    int blank_lines_2 = 0, blank_lines_5 = 0;
+    for (const char *p = output2; *p; p++) {
+        if (*p == '\n' && (*(p+1) == '\n' || *(p+1) == '\0')) blank_lines_2++;
+    }
+    for (const char *p = output5; *p; p++) {
+        if (*p == '\n' && (*(p+1) == '\n' || *(p+1) == '\0')) blank_lines_5++;
+    }
+
+    /* Blank line count should stay exactly the same (no accumulation) */
+    ASSERT_EQ(blank_lines_2, blank_lines_5);
+
+    /* Outputs should be identical (idempotent after first merge) */
+    ASSERT(strcmp(output2, output5) == 0);
+
+    free(output2);
+    free(output5);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Multiple writes to same element are idempotent */
+TEST(multiple_writes_idempotent) {
+    FIXTURE_SETUP();
+
+    const char *base_src =
+        "package TestPkg {\n"
+        "    part def X {\n"
+        "        :>> name = \"test\";\n"
+        "    }\n"
+        "}\n";
+
+    const char *frag_src =
+        "part def X {\n"
+        "    :>> name = \"test\";\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, base_src);
+    ASSERT_NOT_NULL(model);
+
+    SysmlSemanticModel *fragment = parse_sysml_string(&arena, &intern, frag_src);
+    ASSERT_NOT_NULL(fragment);
+
+    /* Merge and collect outputs after each merge */
+    char *output1 = NULL, *output2 = NULL, *output3 = NULL;
+
+    for (int round = 0; round < 3; round++) {
+        size_t added = 0, replaced = 0;
+        model = sysml2_modify_merge_fragment(
+            model, fragment, "TestPkg", false, false, &arena, &intern, &added, &replaced
+        );
+        ASSERT_NOT_NULL(model);
+
+        char *output = NULL;
+        Sysml2Result res = sysml2_sysml_write_string(model, &output);
+        ASSERT_EQ(res, SYSML2_OK);
+
+        if (round == 0) output1 = output;
+        else if (round == 1) output2 = output;
+        else output3 = output;
+    }
+
+    /* output2 and output3 should be identical (idempotent after first merge) */
+    ASSERT_NOT_NULL(output2);
+    ASSERT_NOT_NULL(output3);
+    ASSERT(strcmp(output2, output3) == 0);
+
+    free(output1);
+    free(output2);
+    free(output3);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Roundtrip parse->write->parse->write is idempotent */
+TEST(roundtrip_write_idempotent) {
+    FIXTURE_SETUP();
+
+    /* Source with various blank line patterns */
+    const char *source =
+        "package TestPkg {\n"
+        "    part def A { }\n"
+        "\n"
+        "    part def B {\n"
+        "        :>> name = \"test\";\n"
+        "    }\n"
+        "\n"
+        "\n"
+        "    part def C { }\n"
+        "}\n";
+
+    /* Parse and write first time */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, source);
+    ASSERT_NOT_NULL(model1);
+
+    char *output1 = NULL;
+    Sysml2Result res = sysml2_sysml_write_string(model1, &output1);
+    ASSERT_EQ(res, SYSML2_OK);
+    ASSERT_NOT_NULL(output1);
+
+    /* Parse output1 and write again */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+
+    char *output2 = NULL;
+    res = sysml2_sysml_write_string(model2, &output2);
+    ASSERT_EQ(res, SYSML2_OK);
+    ASSERT_NOT_NULL(output2);
+
+    /* output1 and output2 should be identical (idempotent) */
+    ASSERT(strcmp(output1, output2) == 0);
+
+    free(output1);
+    free(output2);
+    FIXTURE_TEARDOWN();
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -3042,6 +3308,13 @@ int main(void) {
 
     /* Element reordering regression test */
     RUN_TEST(merge_preserves_element_order);
+
+    /* Round-trip merge regression tests */
+    RUN_TEST(upsert_shorthand_stmt_not_duplicated);
+    RUN_TEST(upsert_leading_comment_not_duplicated);
+    RUN_TEST(upsert_blank_lines_stable);
+    RUN_TEST(multiple_writes_idempotent);
+    RUN_TEST(roundtrip_write_idempotent);
 
     printf("\n%d/%d tests passed.\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;

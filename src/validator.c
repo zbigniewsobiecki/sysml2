@@ -123,6 +123,7 @@ bool sysml2_is_type_compatible(SysmlNodeKind usage_kind, SysmlNodeKind def_kind)
                    def_kind == SYSML_KIND_OCCURRENCE_DEF;
 
         case SYSML_KIND_ACTION_USAGE:
+        case SYSML_KIND_PERFORM_ACTION_USAGE:
             return def_kind == SYSML_KIND_ACTION_DEF ||
                    def_kind == SYSML_KIND_CALC_DEF;
 

@@ -140,9 +140,14 @@ static void write_trivia(Sysml2Writer *w, SysmlTrivia *trivia) {
                 break;
 
             case SYSML_TRIVIA_BLANK_LINE:
-                /* Output count blank lines (or 1 if count is 0) */
-                for (int i = 0; i < (trivia->count > 0 ? trivia->count : 1); i++) {
-                    write_newline(w);
+                /* Output count blank lines, capped to prevent accumulation */
+                {
+                    int count = trivia->count > 0 ? trivia->count : 1;
+                    int max_blank = 2;  /* Maximum 2 consecutive blank lines */
+                    if (count > max_blank) count = max_blank;
+                    for (int i = 0; i < count; i++) {
+                        write_newline(w);
+                    }
                 }
                 break;
         }
@@ -1579,9 +1584,22 @@ Sysml2Result sysml2_sysml_write(
     for (size_t i = 0; i < child_count; i++) {
         write_node(&w, children[i], model);
 
-        /* Add blank line between top-level elements */
+        /* Add blank line between top-level elements, unless next element
+         * already has blank line trivia (to prevent accumulation) */
         if (i + 1 < child_count) {
-            write_newline(&w);
+            const SysmlNode *next = children[i + 1];
+            bool next_has_blank = false;
+            if (next && next->leading_trivia) {
+                for (SysmlTrivia *t = next->leading_trivia; t; t = t->next) {
+                    if (t->kind == SYSML_TRIVIA_BLANK_LINE) {
+                        next_has_blank = true;
+                        break;
+                    }
+                }
+            }
+            if (!next_has_blank) {
+                write_newline(&w);
+            }
         }
     }
 

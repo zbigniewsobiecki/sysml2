@@ -2098,6 +2098,13 @@ void sysml2_capture_textual_rep(
 void sysml2_capture_result_expr(SysmlBuildContext *ctx, const char *expr, size_t len) {
     if (!ctx || !expr || len == 0) return;
 
+    /* Skip if inside a raw constraint body - the expression is already
+     * embedded in the constraint's raw_text and should not be attached
+     * to the parent scope. */
+    if (ctx->raw_constraint_stmt_mark > 0) {
+        return;
+    }
+
     /* Find the current scope's node and attach result expression */
     const char *current_scope = sysml2_build_current_scope(ctx);
     if (current_scope) {

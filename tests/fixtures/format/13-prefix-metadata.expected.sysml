@@ -1,6 +1,5 @@
 metadata def SourceFile;
 
-
 @SourceFile {
     :>> path = "test.ts";
 }

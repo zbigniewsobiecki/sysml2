@@ -681,6 +681,55 @@ static SysmlStatement *sysml2_modify_copy_statement(
 }
 
 /*
+ * Compare two shorthand statements for equivalence, ignoring whitespace.
+ *
+ * Returns true if the statements are semantically equivalent.
+ * This handles cases like:
+ *   ":>> id = \"FR-008\";" vs "    :>> id = \"FR-008\";"
+ */
+static bool sysml2_shorthand_stmt_equivalent(
+    const char *raw_text1,
+    const char *raw_text2
+) {
+    if (!raw_text1 || !raw_text2) return false;
+
+    const char *p1 = raw_text1;
+    const char *p2 = raw_text2;
+
+    /* Skip leading whitespace */
+    while (*p1 && (*p1 == ' ' || *p1 == '\t' || *p1 == '\n' || *p1 == '\r')) p1++;
+    while (*p2 && (*p2 == ' ' || *p2 == '\t' || *p2 == '\n' || *p2 == '\r')) p2++;
+
+    /* Compare non-whitespace content, collapsing internal whitespace */
+    while (*p1 && *p2) {
+        /* Skip whitespace in both strings */
+        bool ws1 = (*p1 == ' ' || *p1 == '\t' || *p1 == '\n' || *p1 == '\r');
+        bool ws2 = (*p2 == ' ' || *p2 == '\t' || *p2 == '\n' || *p2 == '\r');
+
+        if (ws1 && ws2) {
+            /* Both have whitespace - skip it in both */
+            while (*p1 && (*p1 == ' ' || *p1 == '\t' || *p1 == '\n' || *p1 == '\r')) p1++;
+            while (*p2 && (*p2 == ' ' || *p2 == '\t' || *p2 == '\n' || *p2 == '\r')) p2++;
+        } else if (ws1 || ws2) {
+            /* Only one has whitespace - not equivalent */
+            return false;
+        } else {
+            /* Both have non-whitespace - compare character */
+            if (*p1 != *p2) return false;
+            p1++;
+            p2++;
+        }
+    }
+
+    /* Skip trailing whitespace */
+    while (*p1 && (*p1 == ' ' || *p1 == '\t' || *p1 == '\n' || *p1 == '\r')) p1++;
+    while (*p2 && (*p2 == ' ' || *p2 == '\t' || *p2 == '\n' || *p2 == '\r')) p2++;
+
+    /* Both should be at end */
+    return *p1 == '\0' && *p2 == '\0';
+}
+
+/*
  * Extract the feature name from a shorthand statement's raw_text.
  *
  * Shorthand statements have formats like:
@@ -753,6 +802,28 @@ static SysmlTrivia *sysml2_modify_copy_trivia(
     dst->next = sysml2_modify_copy_trivia(src->next, arena);
 
     return dst;
+}
+
+/*
+ * Filter out blank line trivia from a trivia list to prevent accumulation.
+ * Keeps comment trivia intact. Returns a new list (shallow copy of non-blank items).
+ */
+static SysmlTrivia *sysml2_modify_filter_blank_trivia(
+    SysmlTrivia *src, Sysml2Arena *arena
+) {
+    SysmlTrivia *head = NULL, *tail = NULL;
+    while (src) {
+        if (src->kind != SYSML_TRIVIA_BLANK_LINE) {
+            SysmlTrivia *copy = sysml2_arena_alloc(arena, sizeof(SysmlTrivia));
+            if (!copy) return head;
+            *copy = *src;
+            copy->next = NULL;
+            if (!head) head = tail = copy;
+            else { tail->next = copy; tail = copy; }
+        }
+        src = src->next;
+    }
+    return head;
 }
 
 /*
@@ -917,6 +988,21 @@ static SysmlNode *sysml2_modify_deep_copy_node(
                     strstr(dst->body_stmts[i]->raw_text, trivia_text)) {
                     /* Trivia is already in a body statement - clear the duplicate */
                     dst->trailing_trivia = NULL;
+                    break;
+                }
+            }
+        }
+
+        /* Fix leading trivia duplication: same logic for leading comments.
+         * This handles cases where comments before an element appear both as
+         * leading_trivia and within a body statement's raw_text during merges. */
+        if (dst->leading_trivia && dst->leading_trivia->text) {
+            const char *trivia_text = dst->leading_trivia->text;
+            for (size_t i = 0; i < dst->body_stmt_count; i++) {
+                if (dst->body_stmts[i] && dst->body_stmts[i]->raw_text &&
+                    strstr(dst->body_stmts[i]->raw_text, trivia_text)) {
+                    /* Trivia is already in a body statement - clear the duplicate */
+                    dst->leading_trivia = NULL;
                     break;
                 }
             }
@@ -1356,6 +1442,10 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
                 /* Inherit original location to preserve element ordering */
                 new_node->loc = node->loc;
 
+                /* Filter out blank line trivia to prevent accumulation */
+                new_node->leading_trivia = sysml2_modify_filter_blank_trivia(
+                    new_node->leading_trivia, arena);
+
                 /* Preserve documentation if fragment has none */
                 if (!new_node->documentation && node->documentation) {
                     new_node->documentation = node->documentation;
@@ -1390,17 +1480,26 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
 
                 /* Union merge body_stmts: fragment statements take precedence,
                  * preserve original statements not in fragment.
-                 * Only handles shorthand features (SYSML_STMT_SHORTHAND_FEATURE). */
+                 * Only handles shorthand features (SYSML_STMT_SHORTHAND_FEATURE).
+                 *
+                 * Deduplication uses both name matching AND raw_text equivalence
+                 * to handle cases where whitespace differs but content is same. */
                 if (node->body_stmt_count > 0) {
                     /* Build set of statement names from fragment */
                     const char **frag_names = sysml2_arena_alloc(
                         arena, (new_node->body_stmt_count + 1) * sizeof(const char *));
                     size_t frag_name_count = 0;
 
-                    if (frag_names) {
+                    /* Also store raw_text for equivalence checking */
+                    const char **frag_raw_texts = sysml2_arena_alloc(
+                        arena, (new_node->body_stmt_count + 1) * sizeof(const char *));
+                    size_t frag_raw_count = 0;
+
+                    if (frag_names && frag_raw_texts) {
                         for (size_t k = 0; k < new_node->body_stmt_count; k++) {
                             SysmlStatement *stmt = new_node->body_stmts[k];
                             if (stmt && stmt->kind == SYSML_STMT_SHORTHAND_FEATURE && stmt->raw_text) {
+                                frag_raw_texts[frag_raw_count++] = stmt->raw_text;
                                 const char *name = sysml2_extract_shorthand_stmt_name(
                                     stmt->raw_text, arena, intern);
                                 if (name) {
@@ -1410,6 +1509,25 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
                         }
                     }
 
+                    /* Helper: check if original statement duplicates fragment */
+                    #define STMT_IS_DUPLICATE(orig_stmt) ({ \
+                        bool _dup = false; \
+                        const char *_name = sysml2_extract_shorthand_stmt_name( \
+                            (orig_stmt)->raw_text, arena, intern); \
+                        if (_name && id_in_set(_name, frag_names, frag_name_count)) { \
+                            _dup = true; \
+                        } else { \
+                            /* Also check raw_text equivalence for whitespace diffs */ \
+                            for (size_t _r = 0; _r < frag_raw_count; _r++) { \
+                                if (sysml2_shorthand_stmt_equivalent((orig_stmt)->raw_text, frag_raw_texts[_r])) { \
+                                    _dup = true; \
+                                    break; \
+                                } \
+                            } \
+                        } \
+                        _dup; \
+                    })
+
                     /* Count original statements not in fragment */
                     size_t preserve_count = 0;
                     for (size_t k = 0; k < node->body_stmt_count; k++) {
@@ -1417,9 +1535,7 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
                         if (!stmt) continue;
 
                         if (stmt->kind == SYSML_STMT_SHORTHAND_FEATURE && stmt->raw_text) {
-                            const char *name = sysml2_extract_shorthand_stmt_name(
-                                stmt->raw_text, arena, intern);
-                            if (name && !id_in_set(name, frag_names, frag_name_count)) {
+                            if (!STMT_IS_DUPLICATE(stmt)) {
                                 preserve_count++;
                             }
                         }
@@ -1442,9 +1558,7 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
                                 if (!stmt) continue;
 
                                 if (stmt->kind == SYSML_STMT_SHORTHAND_FEATURE && stmt->raw_text) {
-                                    const char *name = sysml2_extract_shorthand_stmt_name(
-                                        stmt->raw_text, arena, intern);
-                                    if (name && !id_in_set(name, frag_names, frag_name_count)) {
+                                    if (!STMT_IS_DUPLICATE(stmt)) {
                                         merged[idx++] = sysml2_modify_copy_statement(stmt, arena);
                                     }
                                 }
@@ -1454,6 +1568,8 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
                             new_node->body_stmt_count = idx;
                         }
                     }
+
+                    #undef STMT_IS_DUPLICATE
                 }
 
                 result->elements[result->element_count++] = new_node;
@@ -1535,6 +1651,10 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
                  * source file offsets would otherwise get reordered. */
                 new_node->loc = orig->loc;
 
+                /* Filter out blank line trivia to prevent accumulation */
+                new_node->leading_trivia = sysml2_modify_filter_blank_trivia(
+                    new_node->leading_trivia, arena);
+
                 /* Preserve documentation if fragment has none */
                 if (!new_node->documentation && orig->documentation) {
                     new_node->documentation = orig->documentation;  /* Interned string */
@@ -1568,17 +1688,26 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
 
                 /* Union merge body_stmts: fragment statements take precedence,
                  * preserve original statements not in fragment.
-                 * Only handles shorthand features (SYSML_STMT_SHORTHAND_FEATURE). */
+                 * Only handles shorthand features (SYSML_STMT_SHORTHAND_FEATURE).
+                 *
+                 * Deduplication uses both name matching AND raw_text equivalence
+                 * to handle cases where whitespace differs but content is same. */
                 if (orig->body_stmt_count > 0) {
                     /* Build set of statement names from fragment */
                     const char **frag_names = sysml2_arena_alloc(
                         arena, (new_node->body_stmt_count + 1) * sizeof(const char *));
                     size_t frag_name_count = 0;
 
-                    if (frag_names) {
+                    /* Also store raw_text for equivalence checking */
+                    const char **frag_raw_texts = sysml2_arena_alloc(
+                        arena, (new_node->body_stmt_count + 1) * sizeof(const char *));
+                    size_t frag_raw_count = 0;
+
+                    if (frag_names && frag_raw_texts) {
                         for (size_t k = 0; k < new_node->body_stmt_count; k++) {
                             SysmlStatement *stmt = new_node->body_stmts[k];
                             if (stmt && stmt->kind == SYSML_STMT_SHORTHAND_FEATURE && stmt->raw_text) {
+                                frag_raw_texts[frag_raw_count++] = stmt->raw_text;
                                 const char *name = sysml2_extract_shorthand_stmt_name(
                                     stmt->raw_text, arena, intern);
                                 if (name) {
@@ -1588,6 +1717,25 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
                         }
                     }
 
+                    /* Helper: check if original statement duplicates fragment */
+                    #define STMT_IS_DUPLICATE2(orig_stmt) ({ \
+                        bool _dup = false; \
+                        const char *_name = sysml2_extract_shorthand_stmt_name( \
+                            (orig_stmt)->raw_text, arena, intern); \
+                        if (_name && id_in_set(_name, frag_names, frag_name_count)) { \
+                            _dup = true; \
+                        } else { \
+                            /* Also check raw_text equivalence for whitespace diffs */ \
+                            for (size_t _r = 0; _r < frag_raw_count; _r++) { \
+                                if (sysml2_shorthand_stmt_equivalent((orig_stmt)->raw_text, frag_raw_texts[_r])) { \
+                                    _dup = true; \
+                                    break; \
+                                } \
+                            } \
+                        } \
+                        _dup; \
+                    })
+
                     /* Count original statements not in fragment */
                     size_t preserve_count = 0;
                     for (size_t k = 0; k < orig->body_stmt_count; k++) {
@@ -1596,9 +1744,7 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
 
                         /* Only merge shorthand features by name */
                         if (stmt->kind == SYSML_STMT_SHORTHAND_FEATURE && stmt->raw_text) {
-                            const char *name = sysml2_extract_shorthand_stmt_name(
-                                stmt->raw_text, arena, intern);
-                            if (name && !id_in_set(name, frag_names, frag_name_count)) {
+                            if (!STMT_IS_DUPLICATE2(stmt)) {
                                 preserve_count++;
                             }
                         }
@@ -1625,9 +1771,7 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
                                 if (!stmt) continue;
 
                                 if (stmt->kind == SYSML_STMT_SHORTHAND_FEATURE && stmt->raw_text) {
-                                    const char *name = sysml2_extract_shorthand_stmt_name(
-                                        stmt->raw_text, arena, intern);
-                                    if (name && !id_in_set(name, frag_names, frag_name_count)) {
+                                    if (!STMT_IS_DUPLICATE2(stmt)) {
                                         /* Deep copy the preserved statement */
                                         merged[idx++] = sysml2_modify_copy_statement(stmt, arena);
                                     }
@@ -1638,6 +1782,8 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
                             new_node->body_stmt_count = idx;
                         }
                     }
+
+                    #undef STMT_IS_DUPLICATE2
                 }
             }
         } else {
