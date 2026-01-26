@@ -1338,6 +1338,10 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
     /* Write ref modifier */
     if (node->is_ref) {
         fputs("ref ", w->out);
+        if (node->ref_behavioral_keyword) {
+            fputs(node->ref_behavioral_keyword, w->out);
+            fputc(' ', w->out);
+        }
     }
 
     /* Write end modifier */
@@ -1351,7 +1355,16 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
     }
 
     /* Write keyword */
-    const char *keyword = sysml2_kind_to_keyword(node->kind);
+    const char *keyword;
+    /* Handle event occurrence: use "event occurrence" instead of just "event" */
+    if (node->kind == SYSML_KIND_EVENT_USAGE && node->is_event_occurrence) {
+        keyword = "event occurrence";
+    } else if (node->ref_behavioral_keyword) {
+        /* If ref behavioral keyword is set, it replaces the kind keyword */
+        keyword = NULL;
+    } else {
+        keyword = sysml2_kind_to_keyword(node->kind);
+    }
     bool has_keyword = keyword && keyword[0];
 
     /* Enum literals (ENUMERATION_USAGE) inside enum defs:

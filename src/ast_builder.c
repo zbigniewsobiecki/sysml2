@@ -80,6 +80,10 @@ SysmlBuildContext *sysml2_build_context_create(
     /* Initialize pending enum keyword */
     ctx->pending_has_enum_keyword = false;
 
+    /* Initialize pending event occurrence and ref behavioral keyword */
+    ctx->pending_event_occurrence = false;
+    ctx->pending_ref_behavioral_keyword = NULL;
+
     /* Initialize pending import visibility */
     ctx->pending_import_private = false;
     ctx->pending_import_public = false;
@@ -279,6 +283,8 @@ SysmlNode *sysml2_build_node(
     node->is_ref = ctx->pending_ref;
     node->is_parallel = ctx->pending_parallel;
     node->has_enum_keyword = ctx->pending_has_enum_keyword;
+    node->is_event_occurrence = ctx->pending_event_occurrence;
+    node->ref_behavioral_keyword = ctx->pending_ref_behavioral_keyword;
     ctx->pending_abstract = false;
     ctx->pending_variation = false;
     ctx->pending_readonly = false;
@@ -287,6 +293,8 @@ SysmlNode *sysml2_build_node(
     ctx->pending_ref = false;
     ctx->pending_parallel = false;
     ctx->pending_has_enum_keyword = false;
+    ctx->pending_event_occurrence = false;
+    ctx->pending_ref_behavioral_keyword = NULL;
 
     /* Apply pending direction */
     node->direction = ctx->pending_direction;
@@ -2482,6 +2490,86 @@ void sysml2_capture_nary_connector(SysmlBuildContext *ctx, const char *text, siz
                 }
                 break;
             }
+        }
+    }
+}
+
+/*
+ * Capture event occurrence flag
+ */
+void sysml2_capture_event_occurrence(SysmlBuildContext *ctx) {
+    if (!ctx) return;
+    ctx->pending_event_occurrence = true;
+}
+
+/*
+ * Capture ref behavioral keyword
+ */
+void sysml2_capture_ref_behavioral_keyword(SysmlBuildContext *ctx, const char *keyword, size_t len) {
+    if (!ctx || !keyword || len == 0) return;
+    ctx->pending_ref_behavioral_keyword = trim_and_intern(ctx, keyword, len);
+}
+
+/*
+ * Capture interface connect parts
+ */
+void sysml2_capture_interface_connect(
+    SysmlBuildContext *ctx,
+    const char *source, size_t source_len,
+    const char *target, size_t target_len
+) {
+    if (!ctx || ctx->element_count == 0) return;
+    SysmlNode *current = ctx->elements[ctx->element_count - 1];
+    if (!current) return;
+
+    const char *src = trim_and_intern(ctx, source, source_len);
+    const char *tgt = trim_and_intern(ctx, target, target_len);
+    if (!src || !tgt) return;
+
+    size_t src_len = strlen(src);
+    size_t tgt_len = strlen(tgt);
+    size_t total_len = src_len + 4 + tgt_len + 1;  /* " to " */
+    char *buf = sysml2_arena_alloc(ctx->arena, total_len);
+    if (buf) {
+        snprintf(buf, total_len, "%s to %s", src, tgt);
+        current->connector_part = sysml2_intern(ctx->intern, buf);
+    }
+}
+
+/*
+ * Capture succession first/then parts
+ */
+void sysml2_capture_succession_part(
+    SysmlBuildContext *ctx,
+    const char *first, size_t first_len,
+    const char *then, size_t then_len
+) {
+    if (!ctx || ctx->element_count == 0) return;
+    SysmlNode *current = ctx->elements[ctx->element_count - 1];
+    if (!current) return;
+
+    const char *first_str = trim_and_intern(ctx, first, first_len);
+    if (!first_str) return;
+
+    size_t first_slen = strlen(first_str);
+
+    if (then && then_len > 0) {
+        const char *then_str = trim_and_intern(ctx, then, then_len);
+        if (then_str) {
+            size_t then_slen = strlen(then_str);
+            size_t total_len = 6 + first_slen + 6 + then_slen + 1;  /* "first " + " then " */
+            char *buf = sysml2_arena_alloc(ctx->arena, total_len);
+            if (buf) {
+                snprintf(buf, total_len, "first %s then %s", first_str, then_str);
+                current->connector_part = sysml2_intern(ctx->intern, buf);
+            }
+        }
+    } else {
+        size_t total_len = 6 + first_slen + 1;  /* "first " */
+        char *buf = sysml2_arena_alloc(ctx->arena, total_len);
+        if (buf) {
+            snprintf(buf, total_len, "first %s", first_str);
+            current->connector_part = sysml2_intern(ctx->intern, buf);
         }
     }
 }

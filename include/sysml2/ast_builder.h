@@ -74,6 +74,8 @@ typedef struct SysmlBuildContext {
     bool pending_ref;
     bool pending_parallel;
     bool pending_has_enum_keyword;
+    bool pending_event_occurrence;
+    const char *pending_ref_behavioral_keyword;
     SysmlDirection pending_direction;
     SysmlVisibility pending_visibility;
 
@@ -1148,5 +1150,59 @@ void sysml2_capture_allocate(
  * @param len Length of text
  */
 void sysml2_capture_nary_connector(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture event occurrence flag
+ *
+ * Sets the pending flag to indicate 'event occurrence' syntax.
+ *
+ * @param ctx Build context
+ */
+void sysml2_capture_event_occurrence(SysmlBuildContext *ctx);
+
+/*
+ * Capture ref behavioral keyword
+ *
+ * Captures keywords like 'state', 'action', etc. after 'ref' keyword.
+ *
+ * @param ctx Build context
+ * @param keyword The behavioral keyword text
+ * @param len Length of keyword
+ */
+void sysml2_capture_ref_behavioral_keyword(SysmlBuildContext *ctx, const char *keyword, size_t len);
+
+/*
+ * Capture interface connect parts
+ *
+ * Sets connector_part on current node for interface 'X to Y' syntax.
+ *
+ * @param ctx Build context
+ * @param source Source qualified name
+ * @param source_len Length of source
+ * @param target Target qualified name
+ * @param target_len Length of target
+ */
+void sysml2_capture_interface_connect(
+    SysmlBuildContext *ctx,
+    const char *source, size_t source_len,
+    const char *target, size_t target_len
+);
+
+/*
+ * Capture succession first/then parts
+ *
+ * Sets connector_part on current node for succession 'first X then Y' syntax.
+ *
+ * @param ctx Build context
+ * @param first First part qualified name
+ * @param first_len Length of first
+ * @param then Then part qualified name (can be NULL)
+ * @param then_len Length of then
+ */
+void sysml2_capture_succession_part(
+    SysmlBuildContext *ctx,
+    const char *first, size_t first_len,
+    const char *then, size_t then_len
+);
 
 #endif /* SYSML2_AST_BUILDER_H */

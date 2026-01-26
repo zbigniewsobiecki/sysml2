@@ -1777,6 +1777,218 @@ TEST(sysml_roundtrip_direction_keywords) {
     FIXTURE_TEARDOWN();
 }
 
+/* ========== Specialized Syntax Preservation Tests ========== */
+
+/* Test: ref state preserved (not simplified to ref feature) */
+TEST(sysml_ref_state_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package Test {\n"
+        "    ref state s1;\n"
+        "    ref action a1;\n"
+        "}\n";
+
+    /* First round */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+    char *output1 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model1, &output1), SYSML2_OK);
+
+    /* Second round */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+    char *output2 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model2, &output2), SYSML2_OK);
+
+    /* Third round for idempotency */
+    SysmlSemanticModel *model3 = parse_sysml_string(&arena, &intern, output2);
+    ASSERT_NOT_NULL(model3);
+    char *output3 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model3, &output3), SYSML2_OK);
+
+    /* Idempotency check */
+    ASSERT_STR_EQ(output2, output3);
+
+    /* Verify ref state and ref action are preserved, not simplified to ref feature */
+    ASSERT(strstr(output3, "ref state") != NULL);
+    ASSERT(strstr(output3, "ref action") != NULL);
+
+    free(output1);
+    free(output2);
+    free(output3);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: event occurrence vs event distinction preserved */
+TEST(sysml_event_occurrence_vs_event_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package Test {\n"
+        "    event occurrence e1;\n"
+        "    event e2;\n"
+        "}\n";
+
+    /* First round */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+    char *output1 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model1, &output1), SYSML2_OK);
+
+    /* Second round */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+    char *output2 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model2, &output2), SYSML2_OK);
+
+    /* Third round for idempotency */
+    SysmlSemanticModel *model3 = parse_sysml_string(&arena, &intern, output2);
+    ASSERT_NOT_NULL(model3);
+    char *output3 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model3, &output3), SYSML2_OK);
+
+    /* Idempotency check */
+    ASSERT_STR_EQ(output2, output3);
+
+    /* Verify event occurrence is preserved for e1 */
+    ASSERT(strstr(output3, "event occurrence e1") != NULL);
+    /* e2 should be just "event", not "event occurrence" */
+    /* Note: we verify e2 exists and there's only one "event occurrence" */
+    ASSERT(strstr(output3, "e2") != NULL);
+
+    free(output1);
+    free(output2);
+    free(output3);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: interface to connection syntax preserved */
+TEST(sysml_interface_to_syntax_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package Test {\n"
+        "    interface portA to portB;\n"
+        "}\n";
+
+    /* First round */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+    char *output1 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model1, &output1), SYSML2_OK);
+
+    /* Second round */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+    char *output2 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model2, &output2), SYSML2_OK);
+
+    /* Third round for idempotency */
+    SysmlSemanticModel *model3 = parse_sysml_string(&arena, &intern, output2);
+    ASSERT_NOT_NULL(model3);
+    char *output3 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model3, &output3), SYSML2_OK);
+
+    /* Idempotency check */
+    ASSERT_STR_EQ(output2, output3);
+
+    /* Verify interface with "to" syntax is preserved */
+    ASSERT(strstr(output3, "portA to portB") != NULL);
+
+    free(output1);
+    free(output2);
+    free(output3);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: succession first/then syntax preserved */
+TEST(sysml_succession_first_then_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package Test {\n"
+        "    succession seq first A then B;\n"
+        "}\n";
+
+    /* First round */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+    char *output1 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model1, &output1), SYSML2_OK);
+
+    /* Second round */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+    char *output2 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model2, &output2), SYSML2_OK);
+
+    /* Third round for idempotency */
+    SysmlSemanticModel *model3 = parse_sysml_string(&arena, &intern, output2);
+    ASSERT_NOT_NULL(model3);
+    char *output3 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model3, &output3), SYSML2_OK);
+
+    /* Idempotency check */
+    ASSERT_STR_EQ(output2, output3);
+
+    /* Verify succession with first/then is preserved */
+    ASSERT(strstr(output3, "first A then B") != NULL);
+
+    free(output1);
+    free(output2);
+    free(output3);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: comprehensive specialized syntax round-trip */
+TEST(sysml_roundtrip_specialized_syntax) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package Test {\n"
+        "    ref state s1;\n"
+        "    ref action a1;\n"
+        "    event occurrence e1;\n"
+        "    event e2;\n"
+        "    interface portA to portB;\n"
+        "    succession seq first A then B;\n"
+        "}\n";
+
+    /* First round */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+    char *output1 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model1, &output1), SYSML2_OK);
+
+    /* Second round */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+    char *output2 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model2, &output2), SYSML2_OK);
+
+    /* Third round for idempotency */
+    SysmlSemanticModel *model3 = parse_sysml_string(&arena, &intern, output2);
+    ASSERT_NOT_NULL(model3);
+    char *output3 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model3, &output3), SYSML2_OK);
+
+    /* Idempotency check */
+    ASSERT_STR_EQ(output2, output3);
+
+    /* All specialized syntax should be preserved */
+    ASSERT(strstr(output3, "ref state") != NULL);
+    ASSERT(strstr(output3, "ref action") != NULL);
+    ASSERT(strstr(output3, "event occurrence e1") != NULL);
+    ASSERT(strstr(output3, "portA to portB") != NULL);
+    ASSERT(strstr(output3, "first A then B") != NULL);
+
+    free(output1);
+    free(output2);
+    free(output3);
+    FIXTURE_TEARDOWN();
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -1880,6 +2092,13 @@ int main(void) {
     RUN_TEST(sysml_roundtrip_phase1_statements);
     RUN_TEST(sysml_roundtrip_allocation_and_ref);
     RUN_TEST(sysml_roundtrip_direction_keywords);
+
+    /* Specialized syntax preservation tests */
+    RUN_TEST(sysml_ref_state_preserved);
+    RUN_TEST(sysml_event_occurrence_vs_event_preserved);
+    RUN_TEST(sysml_interface_to_syntax_preserved);
+    RUN_TEST(sysml_succession_first_then_preserved);
+    RUN_TEST(sysml_roundtrip_specialized_syntax);
 
     printf("\n%d/%d tests passed.\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;
