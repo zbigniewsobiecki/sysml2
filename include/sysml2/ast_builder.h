@@ -129,6 +129,16 @@ typedef struct SysmlBuildContext {
 
     /* Last captured trivia offset to prevent PEG backtracking duplicates */
     size_t last_line_comment_offset;
+
+    /* Markers for raw constraint body cleanup
+     * Set before parsing require/assume constraint body, used to remove
+     * elements and statements created inside the body (they're captured in raw_text instead) */
+    size_t raw_constraint_element_mark;
+    size_t raw_constraint_stmt_mark;
+
+    /* Flag to suppress documentation attachment when inside a raw body (objective, etc.)
+     * Documentation inside these bodies is embedded in raw_text, not attached to parent. */
+    bool suppress_documentation;
 } SysmlBuildContext;
 
 /*
@@ -892,6 +902,16 @@ void sysml2_capture_shorthand_feature(SysmlBuildContext *ctx, const char *text, 
  * @param node Node to attach statements to
  */
 void sysml2_attach_pending_stmts(SysmlBuildContext *ctx, SysmlNode *node);
+
+/*
+ * Mark the start of a raw constraint body
+ *
+ * Saves the current element count so elements created inside the body
+ * can be removed by sysml2_capture_require_constraint/assume_constraint.
+ *
+ * @param ctx Build context
+ */
+void sysml2_mark_raw_constraint_start(SysmlBuildContext *ctx);
 
 /*
  * Capture a require constraint statement

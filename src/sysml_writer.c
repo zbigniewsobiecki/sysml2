@@ -1197,6 +1197,23 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
         write_indent(w);
     }
 
+    /* Write visibility modifier (public/private/protected) */
+    switch (node->visibility) {
+        case SYSML_VIS_PRIVATE:
+            fputs("private ", w->out);
+            break;
+        case SYSML_VIS_PROTECTED:
+            fputs("protected ", w->out);
+            break;
+        case SYSML_VIS_PUBLIC:
+            /* Public is the default, only write if explicitly marked */
+            /* Note: we don't have an is_public_explicit field on nodes,
+             * so we don't write public unless we add that field */
+            break;
+        default:
+            break;
+    }
+
     /* Write prefix metadata before keyword (#Type) */
     for (size_t i = 0; i < node->prefix_metadata_count; i++) {
         fputc('#', w->out);
@@ -1204,19 +1221,22 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
         fputc(' ', w->out);
     }
 
-    /* Write direction for parameters (in/out/inout) */
-    switch (node->direction) {
-        case SYSML_DIR_IN:
-            fputs("in ", w->out);
-            break;
-        case SYSML_DIR_OUT:
-            fputs("out ", w->out);
-            break;
-        case SYSML_DIR_INOUT:
-            fputs("inout ", w->out);
-            break;
-        default:
-            break;
+    /* Write direction for parameters/usages (in/out/inout).
+     * Definitions (port def, part def, etc.) should NOT have direction. */
+    if (!SYSML_KIND_IS_DEFINITION(node->kind)) {
+        switch (node->direction) {
+            case SYSML_DIR_IN:
+                fputs("in ", w->out);
+                break;
+            case SYSML_DIR_OUT:
+                fputs("out ", w->out);
+                break;
+            case SYSML_DIR_INOUT:
+                fputs("inout ", w->out);
+                break;
+            default:
+                break;
+        }
     }
 
     /* Write abstract modifier */

@@ -599,9 +599,10 @@ void sysml2_build_add_import_with_loc(
     imp->loc.line = 0;
     imp->loc.column = 0;
 
-    /* Reset pending import visibility */
+    /* Reset pending import visibility and node visibility */
     ctx->pending_import_private = false;
     ctx->pending_import_public = false;
+    ctx->pending_visibility = SYSML_VIS_PUBLIC;
 
     ctx->imports[ctx->import_count++] = imp;
 }
@@ -1208,6 +1209,10 @@ void sysml2_capture_documentation(struct Sysml2ParserContext *pctx, size_t start
     ParserCtx *ctx = (ParserCtx *)pctx;
     SysmlBuildContext *build_ctx = ctx->build_ctx;
     if (!build_ctx) return;
+
+    /* Skip documentation attachment when inside a raw body (objective, require/assume constraint).
+     * The documentation is already embedded in the raw_text of the containing statement. */
+    if (build_ctx->suppress_documentation) return;
 
     /* Get the documentation text */
     const char *start = ctx->input + start_offset;
@@ -2014,10 +2019,45 @@ void sysml2_attach_pending_stmts(SysmlBuildContext *ctx, SysmlNode *node) {
 }
 
 /*
+ * Mark the start of a raw constraint body
+ */
+void sysml2_mark_raw_constraint_start(SysmlBuildContext *ctx) {
+    if (!ctx) return;
+    ctx->raw_constraint_element_mark = ctx->element_count;
+    ctx->raw_constraint_stmt_mark = ctx->pending_stmt_count;
+    ctx->suppress_documentation = true;
+}
+
+/*
+ * Helper to restore state after parsing a raw body (require/assume constraint, objective)
+ */
+static void restore_raw_body_state(SysmlBuildContext *ctx) {
+    /* Restore pending statement count to what it was before parsing the body.
+     * Statements created inside are already embedded in raw_text. */
+    if (ctx->raw_constraint_stmt_mark <= ctx->pending_stmt_count) {
+        ctx->pending_stmt_count = ctx->raw_constraint_stmt_mark;
+    }
+    ctx->raw_constraint_stmt_mark = 0;
+
+    /* Remove elements that were created inside the body.
+     * They're already embedded in raw_text and should NOT appear as separate children. */
+    if (ctx->raw_constraint_element_mark > 0 &&
+        ctx->raw_constraint_element_mark <= ctx->element_count) {
+        ctx->element_count = ctx->raw_constraint_element_mark;
+    }
+    ctx->raw_constraint_element_mark = 0;
+
+    /* Re-enable documentation attachment */
+    ctx->suppress_documentation = false;
+}
+
+/*
  * Capture a require constraint statement
  */
 void sysml2_capture_require_constraint(SysmlBuildContext *ctx, const char *text, size_t len) {
     if (!ctx) return;
+
+    restore_raw_body_state(ctx);
 
     SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_REQUIRE_CONSTRAINT);
     if (!stmt) return;
@@ -2033,6 +2073,8 @@ void sysml2_capture_require_constraint(SysmlBuildContext *ctx, const char *text,
  */
 void sysml2_capture_assume_constraint(SysmlBuildContext *ctx, const char *text, size_t len) {
     if (!ctx) return;
+
+    restore_raw_body_state(ctx);
 
     SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_ASSUME_CONSTRAINT);
     if (!stmt) return;
@@ -2141,6 +2183,8 @@ void sysml2_capture_stakeholder(SysmlBuildContext *ctx, const char *text, size_t
  */
 void sysml2_capture_objective(SysmlBuildContext *ctx, const char *text, size_t len) {
     if (!ctx) return;
+
+    restore_raw_body_state(ctx);
 
     SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_OBJECTIVE);
     if (!stmt) return;

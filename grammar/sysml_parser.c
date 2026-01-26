@@ -142,6 +142,7 @@ typedef enum {
 typedef struct {
     SysmlOperatorKind op;
     const char *ref;
+    bool is_conjugated;  /* True if type has ~ prefix (port conjugation) */
 } SysmlTypeRefResult;
 
 /* Helper: check if position starts with a SysML keyword (followed by non-identifier char) */
@@ -168,7 +169,7 @@ static int sysml2_is_keyword_at(const char *text, size_t len, size_t pos) {
 
 /* Helper: extract next type reference from captured text at position i, returning operator and reference */
 static SysmlTypeRefResult sysml2_extract_next_type_ref(SysmlParserContext *ctx, const char *text, size_t len, size_t *pos) {
-    SysmlTypeRefResult result = { SYSML_OP_NONE, NULL };
+    SysmlTypeRefResult result = { SYSML_OP_NONE, NULL, false };
     if (!ctx->build_ctx || !text || len == 0) return result;
 
     size_t i = *pos;
@@ -214,9 +215,15 @@ static SysmlTypeRefResult sysml2_extract_next_type_ref(SysmlParserContext *ctx, 
                 op_end = i + 1;
             }
 
-            /* Skip whitespace and optional ~ after operator */
+            /* Skip whitespace after operator, detect ~ conjugation marker */
             i = op_end;
-            while (i < len && (text[i] == ' ' || text[i] == '\t' || text[i] == '~')) i++;
+            bool conjugated = false;
+            while (i < len && (text[i] == ' ' || text[i] == '\t')) i++;
+            if (i < len && text[i] == '~') {
+                conjugated = true;
+                i++;  /* Skip the ~ */
+                while (i < len && (text[i] == ' ' || text[i] == '\t')) i++;  /* Skip space after ~ */
+            }
             if (i >= len) {
                 *pos = i;
                 return result;
@@ -266,6 +273,7 @@ static SysmlTypeRefResult sysml2_extract_next_type_ref(SysmlParserContext *ctx, 
             if (ref_end > ref_start) {
                 result.op = op;
                 result.ref = sysml2_intern_n(ctx->build_ctx->intern, text + ref_start, ref_end - ref_start);
+                result.is_conjugated = conjugated;
             }
             *pos = i;
             return result;
@@ -343,12 +351,12 @@ static const char *sysml2_extract_bare_type_ref(SysmlParserContext *ctx, const c
     return NULL;
 }
 
-/* Helper: add a type reference with the given operator */
-static void sysml2_add_type_ref_with_op(SysmlParserContext *ctx, SysmlNode *node, SysmlOperatorKind op, const char *ref) {
+/* Helper: add a type reference with the given operator and conjugation flag */
+static void sysml2_add_type_ref_with_op(SysmlParserContext *ctx, SysmlNode *node, SysmlOperatorKind op, const char *ref, bool is_conjugated) {
     if (!ctx->build_ctx || !node || !ref) return;
     switch (op) {
         case SYSML_OP_TYPED_BY:
-            sysml2_build_add_typed_by(ctx->build_ctx, node, ref);
+            sysml2_build_add_typed_by_conjugated(ctx->build_ctx, node, ref, is_conjugated);
             break;
         case SYSML_OP_SPECIALIZES:
             sysml2_build_add_specializes(ctx->build_ctx, node, ref);
@@ -370,6 +378,7 @@ static void sysml2_extract_all_type_refs(SysmlParserContext *ctx, SysmlNode *nod
 
     size_t pos = 0;
     SysmlOperatorKind last_op = SYSML_OP_NONE;
+    bool last_conjugated = false;
 
     while (pos < len) {
         /* Skip whitespace */
@@ -379,9 +388,18 @@ static void sysml2_extract_all_type_refs(SysmlParserContext *ctx, SysmlNode *nod
         /* Check for comma continuation - extract bare type ref with previous operator */
         if (text[pos] == ',' && last_op != SYSML_OP_NONE) {
             pos++;  /* Skip comma */
+            /* Skip whitespace after comma */
+            while (pos < len && (text[pos] == ' ' || text[pos] == '\t')) pos++;
+            /* Check for conjugation marker after comma */
+            bool comma_conjugated = false;
+            if (pos < len && text[pos] == '~') {
+                comma_conjugated = true;
+                pos++;
+                while (pos < len && (text[pos] == ' ' || text[pos] == '\t')) pos++;
+            }
             const char *ref = sysml2_extract_bare_type_ref(ctx, text, len, &pos);
             if (ref) {
-                sysml2_add_type_ref_with_op(ctx, node, last_op, ref);
+                sysml2_add_type_ref_with_op(ctx, node, last_op, ref, comma_conjugated);
             }
             continue;
         }
@@ -390,7 +408,8 @@ static void sysml2_extract_all_type_refs(SysmlParserContext *ctx, SysmlNode *nod
         if (result.op == SYSML_OP_NONE || !result.ref) break;
 
         last_op = result.op;  /* Remember operator for comma continuation */
-        sysml2_add_type_ref_with_op(ctx, node, result.op, result.ref);
+        last_conjugated = result.is_conjugated;
+        sysml2_add_type_ref_with_op(ctx, node, result.op, result.ref, result.is_conjugated);
     }
 }
 

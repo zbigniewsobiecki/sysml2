@@ -1907,7 +1907,7 @@ Direction <- KW_INOUT { if (auxil->build_ctx) sysml2_capture_direction(auxil->bu
 SubjectUsage <- KW_SUBJECT < (UsageDeclaration UsageBody / FeatureValue SEMICOLON) > { if (auxil->build_ctx) sysml2_capture_subject(auxil->build_ctx, $1, $1e - $1s); }
 ActorUsage <- KW_ACTOR < (UsageDeclaration UsageBody / FeatureValue SEMICOLON) > { if (auxil->build_ctx) sysml2_capture_actor(auxil->build_ctx, $1, $1e - $1s); }
 StakeholderUsage <- KW_STAKEHOLDER < (UsageDeclaration UsageBody / FeatureValue SEMICOLON) > { if (auxil->build_ctx) sysml2_capture_stakeholder(auxil->build_ctx, $1, $1e - $1s); }
-ObjectiveUsage <- KW_OBJECTIVE < UsageDeclaration RequirementBody > { if (auxil->build_ctx) sysml2_capture_objective(auxil->build_ctx, $1, $1e - $1s); }
+ObjectiveUsage <- KW_OBJECTIVE { if (auxil->build_ctx) sysml2_mark_raw_constraint_start(auxil->build_ctx); } < UsageDeclaration RequirementBody > { if (auxil->build_ctx) sysml2_capture_objective(auxil->build_ctx, $1, $1e - $1s); }
 FrameUsage <- KW_FRAME < (KW_CONCERN / KW_REQUIREMENT)? UsageDeclaration RequirementBody > { if (auxil->build_ctx) sysml2_capture_frame(auxil->build_ctx, $1, $1e - $1s); }
 RequirementReference <- RequirementConstraintKind UsageDeclaration? UsageBody
 RequirementConstraintKind <- KW_ASSUME KW_CONSTRAINT? / KW_REQUIRE KW_CONSTRAINT?
@@ -2065,12 +2065,13 @@ AssertSatisfyUsage <- KW_ASSERT KW_NOT? KW_SATISFY KW_REQUIREMENT? UsageDeclarat
                     / KW_ASSERT KW_NOT? KW_SATISFY QualifiedName FeatureChain? KW_BY QualifiedName FeatureChain? UsageBody
 
 # === ASSUME/REQUIRE IN REQUIREMENTS ===
-AssumeConstraint <- KW_ASSUME < PrefixMetadata* KW_CONSTRAINT? UsageDeclaration ConstraintBody > { if (auxil->build_ctx) sysml2_capture_assume_constraint(auxil->build_ctx, $1, $1e - $1s); }
+# Mark the start before parsing so we can clean up elements created inside the body
+AssumeConstraint <- KW_ASSUME { if (auxil->build_ctx) sysml2_mark_raw_constraint_start(auxil->build_ctx); } < PrefixMetadata* KW_CONSTRAINT? UsageDeclaration ConstraintBody > { if (auxil->build_ctx) sysml2_capture_assume_constraint(auxil->build_ctx, $1, $1e - $1s); }
 # RequireConstraint: with 'constraint' keyword uses ConstraintBody, otherwise uses UsageBody
 # Also supports feature chain: require name.feature;
-RequireConstraint <- KW_REQUIRE < PrefixMetadata* KW_CONSTRAINT UsageDeclaration? ConstraintBody > { if (auxil->build_ctx) sysml2_capture_require_constraint(auxil->build_ctx, $1, $1e - $1s); }
-                   / KW_REQUIRE < PrefixMetadata* QualifiedName FeatureChain UsageBody > { if (auxil->build_ctx) sysml2_capture_require_constraint(auxil->build_ctx, $2, $2e - $2s); }
-                   / KW_REQUIRE < PrefixMetadata* UsageDeclaration UsageBody > { if (auxil->build_ctx) sysml2_capture_require_constraint(auxil->build_ctx, $3, $3e - $3s); }
+RequireConstraint <- KW_REQUIRE { if (auxil->build_ctx) sysml2_mark_raw_constraint_start(auxil->build_ctx); } < PrefixMetadata* KW_CONSTRAINT UsageDeclaration? ConstraintBody > { if (auxil->build_ctx) sysml2_capture_require_constraint(auxil->build_ctx, $1, $1e - $1s); }
+                   / KW_REQUIRE { if (auxil->build_ctx) sysml2_mark_raw_constraint_start(auxil->build_ctx); } < PrefixMetadata* QualifiedName FeatureChain UsageBody > { if (auxil->build_ctx) sysml2_capture_require_constraint(auxil->build_ctx, $2, $2e - $2s); }
+                   / KW_REQUIRE { if (auxil->build_ctx) sysml2_mark_raw_constraint_start(auxil->build_ctx); } < PrefixMetadata* UsageDeclaration UsageBody > { if (auxil->build_ctx) sysml2_capture_require_constraint(auxil->build_ctx, $3, $3e - $3s); }
 
 # === END MEMBER FOR CONNECTIONS ===
 # End member can have identification before multiplicity: end inCart[0..1] item cart: Type;

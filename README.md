@@ -51,6 +51,7 @@ Options:
   --delete <pattern>     Delete elements matching pattern (repeatable)
   --dry-run              Preview modifications without writing
   --create-scope         Auto-create target scope if missing
+  --replace-scope        Clear target scope before inserting (preserves fragment order)
   --color[=when]         Colorize output (auto, always, never)
   --max-errors <n>       Stop after n errors (default: 20)
   -W<warning>            Enable warning (e.g., -Werror)
@@ -129,6 +130,17 @@ echo 'part def Car;' | sysml2 --set - --at 'Vehicles' model.sysml --fix
 Preview changes without writing:
 ```bash
 ./sysml2 --delete 'Legacy::**' --dry-run model.sysml
+```
+
+Replace scope contents (preserves fragment element order):
+```bash
+# Useful for fixing E3002 ordering errors - declarations must come before redefinitions
+./sysml2 --set reordered.sysml --at 'Package' --replace-scope model.sysml --fix
+```
+
+Create scope if missing and replace its contents:
+```bash
+./sysml2 --set data.sysml --at 'Root::NewScope' --create-scope --replace-scope model.sysml --fix
 ```
 
 ## 🚨 Error Messages

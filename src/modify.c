@@ -1326,6 +1326,13 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
 
         /* Check if this is a replaced element (not just removed) */
         if (id_in_set(node->id, replaced_ids, replaced_count)) {
+            /* When replace_scope is true and this is a direct child of the target scope,
+             * skip in-place replacement. Let Step 5 add fragment elements in fragment order
+             * to preserve the order specified in the fragment. */
+            if (replace_scope && node->parent_id && strcmp(node->parent_id, target_scope) == 0) {
+                continue;  /* Skip to next base element, Step 5 will add in fragment order */
+            }
+
             /* Find and process the corresponding fragment element in-place */
             for (size_t fi = 0; fi < fragment->element_count; fi++) {
                 if (fragment_processed[fi]) continue;
@@ -1842,4 +1849,323 @@ int sysml2_modify_find_containing_file(
     }
 
     return -1;
+}
+
+/*
+ * List all scopes in a model
+ */
+bool sysml2_modify_list_scopes(
+    const SysmlSemanticModel *model,
+    Sysml2Arena *arena,
+    const char ***out_scopes,
+    size_t *out_count
+) {
+    if (!model || !arena || !out_scopes || !out_count) {
+        if (out_scopes) *out_scopes = NULL;
+        if (out_count) *out_count = 0;
+        return false;
+    }
+
+    /* Count packages/namespaces first */
+    size_t scope_count = 0;
+    for (size_t i = 0; i < model->element_count; i++) {
+        SysmlNode *node = model->elements[i];
+        if (!node || !node->id) continue;
+
+        /* Include packages and namespaces as scopes */
+        if (node->kind == SYSML_KIND_PACKAGE ||
+            node->kind == SYSML_KIND_NAMESPACE) {
+            scope_count++;
+        }
+    }
+
+    if (scope_count == 0) {
+        *out_scopes = NULL;
+        *out_count = 0;
+        return true;
+    }
+
+    /* Allocate array (+1 for NULL terminator) */
+    const char **scopes = sysml2_arena_alloc(arena, (scope_count + 1) * sizeof(const char *));
+    if (!scopes) {
+        *out_scopes = NULL;
+        *out_count = 0;
+        return false;
+    }
+
+    /* Collect scope IDs */
+    size_t idx = 0;
+    for (size_t i = 0; i < model->element_count; i++) {
+        SysmlNode *node = model->elements[i];
+        if (!node || !node->id) continue;
+
+        if (node->kind == SYSML_KIND_PACKAGE ||
+            node->kind == SYSML_KIND_NAMESPACE) {
+            scopes[idx++] = node->id;
+        }
+    }
+    scopes[idx] = NULL;  /* NULL terminator */
+
+    *out_scopes = scopes;
+    *out_count = scope_count;
+    return true;
+}
+
+/*
+ * List all scopes across multiple models
+ */
+bool sysml2_modify_list_scopes_multi(
+    SysmlSemanticModel **models,
+    size_t model_count,
+    Sysml2Arena *arena,
+    const char ***out_scopes,
+    size_t *out_count
+) {
+    if (!models || !arena || !out_scopes || !out_count) {
+        if (out_scopes) *out_scopes = NULL;
+        if (out_count) *out_count = 0;
+        return false;
+    }
+
+    /* Count total scopes across all models */
+    size_t total_count = 0;
+    for (size_t m = 0; m < model_count; m++) {
+        if (!models[m]) continue;
+
+        for (size_t i = 0; i < models[m]->element_count; i++) {
+            SysmlNode *node = models[m]->elements[i];
+            if (!node || !node->id) continue;
+
+            if (node->kind == SYSML_KIND_PACKAGE ||
+                node->kind == SYSML_KIND_NAMESPACE) {
+                total_count++;
+            }
+        }
+    }
+
+    if (total_count == 0) {
+        *out_scopes = NULL;
+        *out_count = 0;
+        return true;
+    }
+
+    /* Allocate array (+1 for NULL terminator) */
+    const char **scopes = sysml2_arena_alloc(arena, (total_count + 1) * sizeof(const char *));
+    if (!scopes) {
+        *out_scopes = NULL;
+        *out_count = 0;
+        return false;
+    }
+
+    /* Collect scope IDs from all models */
+    size_t idx = 0;
+    for (size_t m = 0; m < model_count; m++) {
+        if (!models[m]) continue;
+
+        for (size_t i = 0; i < models[m]->element_count; i++) {
+            SysmlNode *node = models[m]->elements[i];
+            if (!node || !node->id) continue;
+
+            if (node->kind == SYSML_KIND_PACKAGE ||
+                node->kind == SYSML_KIND_NAMESPACE) {
+                /* Check for duplicates (same scope in multiple files) */
+                bool duplicate = false;
+                for (size_t j = 0; j < idx; j++) {
+                    if (strcmp(scopes[j], node->id) == 0) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (!duplicate) {
+                    scopes[idx++] = node->id;
+                }
+            }
+        }
+    }
+    scopes[idx] = NULL;  /* NULL terminator */
+
+    *out_scopes = scopes;
+    *out_count = idx;
+    return true;
+}
+
+/*
+ * Calculate simple edit distance between two strings (for fuzzy matching)
+ * Limited to max_dist to avoid expensive comparisons
+ */
+static size_t simple_edit_distance(const char *s1, const char *s2, size_t max_dist) {
+    size_t len1 = strlen(s1);
+    size_t len2 = strlen(s2);
+
+    /* Quick length check */
+    if (len1 > len2 + max_dist || len2 > len1 + max_dist) {
+        return max_dist + 1;
+    }
+
+    /* Simple Levenshtein using two rows */
+    size_t *prev = malloc((len2 + 1) * sizeof(size_t));
+    size_t *curr = malloc((len2 + 1) * sizeof(size_t));
+    if (!prev || !curr) {
+        free(prev);
+        free(curr);
+        return max_dist + 1;
+    }
+
+    for (size_t j = 0; j <= len2; j++) {
+        prev[j] = j;
+    }
+
+    for (size_t i = 1; i <= len1; i++) {
+        curr[0] = i;
+        size_t min_in_row = i;
+
+        for (size_t j = 1; j <= len2; j++) {
+            size_t cost = (s1[i - 1] == s2[j - 1]) ? 0 : 1;
+            curr[j] = prev[j] + 1;  /* deletion */
+            if (curr[j - 1] + 1 < curr[j]) {
+                curr[j] = curr[j - 1] + 1;  /* insertion */
+            }
+            if (prev[j - 1] + cost < curr[j]) {
+                curr[j] = prev[j - 1] + cost;  /* substitution */
+            }
+            if (curr[j] < min_in_row) {
+                min_in_row = curr[j];
+            }
+        }
+
+        /* Early termination if all values in row exceed max_dist */
+        if (min_in_row > max_dist) {
+            free(prev);
+            free(curr);
+            return max_dist + 1;
+        }
+
+        /* Swap rows */
+        size_t *tmp = prev;
+        prev = curr;
+        curr = tmp;
+    }
+
+    size_t result = prev[len2];
+    free(prev);
+    free(curr);
+    return result;
+}
+
+/*
+ * Find similar scope names
+ */
+bool sysml2_modify_find_similar_scopes(
+    const char *target,
+    const char **scopes,
+    size_t scope_count,
+    Sysml2Arena *arena,
+    const char ***out_suggestions,
+    size_t *out_count,
+    size_t max_suggestions
+) {
+    if (!target || !scopes || !arena || !out_suggestions || !out_count) {
+        if (out_suggestions) *out_suggestions = NULL;
+        if (out_count) *out_count = 0;
+        return false;
+    }
+
+    if (scope_count == 0 || max_suggestions == 0) {
+        *out_suggestions = NULL;
+        *out_count = 0;
+        return true;
+    }
+
+    /* Get local name of target for comparison */
+    const char *target_local = sysml2_modify_get_local_name(target);
+
+    /* Allocate space for suggestions with scores */
+    typedef struct {
+        const char *scope;
+        size_t score;  /* lower is better */
+    } ScoredScope;
+
+    ScoredScope *scored = sysml2_arena_alloc(arena, scope_count * sizeof(ScoredScope));
+    if (!scored) {
+        *out_suggestions = NULL;
+        *out_count = 0;
+        return false;
+    }
+
+    size_t scored_count = 0;
+    size_t max_edit_dist = 5;  /* Maximum edit distance to consider */
+
+    for (size_t i = 0; i < scope_count; i++) {
+        if (!scopes[i]) continue;
+
+        /* Calculate similarity score */
+        const char *scope_local = sysml2_modify_get_local_name(scopes[i]);
+        size_t score = SIZE_MAX;
+
+        /* Exact local name match (best) */
+        if (strcmp(scope_local, target_local) == 0) {
+            score = 0;
+        }
+        /* Case-insensitive local name match */
+        else if (strcasecmp(scope_local, target_local) == 0) {
+            score = 1;
+        }
+        /* Prefix match (scope starts with target or vice versa) */
+        else if (strncmp(scopes[i], target, strlen(target)) == 0) {
+            score = 2;
+        }
+        else if (strncmp(target, scopes[i], strlen(scopes[i])) == 0) {
+            score = 2;
+        }
+        /* Edit distance on local name */
+        else {
+            size_t dist = simple_edit_distance(scope_local, target_local, max_edit_dist);
+            if (dist <= max_edit_dist) {
+                score = 10 + dist;
+            }
+        }
+
+        /* Only include if score is reasonable */
+        if (score < SIZE_MAX) {
+            scored[scored_count].scope = scopes[i];
+            scored[scored_count].score = score;
+            scored_count++;
+        }
+    }
+
+    /* Sort by score (simple bubble sort - small arrays) */
+    for (size_t i = 0; i < scored_count; i++) {
+        for (size_t j = i + 1; j < scored_count; j++) {
+            if (scored[j].score < scored[i].score) {
+                ScoredScope tmp = scored[i];
+                scored[i] = scored[j];
+                scored[j] = tmp;
+            }
+        }
+    }
+
+    /* Take top N suggestions */
+    size_t result_count = scored_count < max_suggestions ? scored_count : max_suggestions;
+
+    if (result_count == 0) {
+        *out_suggestions = NULL;
+        *out_count = 0;
+        return true;
+    }
+
+    const char **suggestions = sysml2_arena_alloc(arena, (result_count + 1) * sizeof(const char *));
+    if (!suggestions) {
+        *out_suggestions = NULL;
+        *out_count = 0;
+        return false;
+    }
+
+    for (size_t i = 0; i < result_count; i++) {
+        suggestions[i] = scored[i].scope;
+    }
+    suggestions[result_count] = NULL;
+
+    *out_suggestions = suggestions;
+    *out_count = result_count;
+    return true;
 }

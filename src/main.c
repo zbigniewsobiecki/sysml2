@@ -933,7 +933,43 @@ static int run_modify_mode(
             if (options->create_scope && options->input_file_count > 0) {
                 target_model_idx = 0;
             } else {
-                fprintf(stderr, "error: target scope '%s' not found (use --create-scope to create it)\n", target_scope);
+                fprintf(stderr, "error: target scope '%s' not found\n", target_scope);
+
+                /* List available scopes and suggest similar names */
+                const char **all_scopes = NULL;
+                size_t scope_count = 0;
+                if (sysml2_modify_list_scopes_multi(modified_models, options->input_file_count, arena, &all_scopes, &scope_count)) {
+                    /* Find similar scope names */
+                    const char **suggestions = NULL;
+                    size_t suggestion_count = 0;
+                    if (scope_count > 0 && sysml2_modify_find_similar_scopes(
+                            target_scope, all_scopes, scope_count, arena,
+                            &suggestions, &suggestion_count, 3)) {
+                        if (suggestion_count > 0) {
+                            fprintf(stderr, "  did you mean: %s", suggestions[0]);
+                            for (size_t i = 1; i < suggestion_count; i++) {
+                                fprintf(stderr, ", %s", suggestions[i]);
+                            }
+                            fprintf(stderr, "?\n");
+                        }
+                    }
+
+                    /* Show available scopes (limited to first 10) */
+                    if (scope_count > 0) {
+                        fprintf(stderr, "  available scopes: ");
+                        size_t show_count = scope_count < 10 ? scope_count : 10;
+                        for (size_t i = 0; i < show_count; i++) {
+                            if (i > 0) fprintf(stderr, ", ");
+                            fprintf(stderr, "%s", all_scopes[i]);
+                        }
+                        if (scope_count > 10) {
+                            fprintf(stderr, ", ... (%zu more)", scope_count - 10);
+                        }
+                        fprintf(stderr, "\n");
+                    }
+                }
+
+                fprintf(stderr, "  hint: use --create-scope to create it\n");
                 free(models);
                 free(modified_models);
                 return 1;

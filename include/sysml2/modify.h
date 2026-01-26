@@ -265,4 +265,69 @@ bool sysml2_modify_id_starts_with(const char *id, const char *prefix);
  */
 const char *sysml2_modify_get_local_name(const char *qualified_id);
 
+/*
+ * List all scopes in a model
+ *
+ * Collects all package/namespace IDs that can be used as target scopes.
+ * Useful for error messages suggesting available scopes.
+ *
+ * @param model Model to search
+ * @param arena Memory arena for allocations
+ * @param out_scopes Output: array of scope IDs (NULL-terminated)
+ * @param out_count Output: number of scopes found
+ * @return true on success
+ */
+bool sysml2_modify_list_scopes(
+    const SysmlSemanticModel *model,
+    Sysml2Arena *arena,
+    const char ***out_scopes,
+    size_t *out_count
+);
+
+/*
+ * List all scopes across multiple models
+ *
+ * Collects all package/namespace IDs from all models.
+ * Useful for error messages when target scope is not found.
+ *
+ * @param models Array of models to search
+ * @param model_count Number of models
+ * @param arena Memory arena for allocations
+ * @param out_scopes Output: array of scope IDs (NULL-terminated)
+ * @param out_count Output: number of scopes found
+ * @return true on success
+ */
+bool sysml2_modify_list_scopes_multi(
+    SysmlSemanticModel **models,
+    size_t model_count,
+    Sysml2Arena *arena,
+    const char ***out_scopes,
+    size_t *out_count
+);
+
+/*
+ * Find similar scope names (simple prefix matching)
+ *
+ * Returns scopes that start with the same prefix as the target,
+ * or have the same local name (after last ::).
+ *
+ * @param target Target scope that was not found
+ * @param scopes Array of available scopes
+ * @param scope_count Number of scopes
+ * @param arena Memory arena for allocations
+ * @param out_suggestions Output: array of similar scope names (NULL-terminated)
+ * @param out_count Output: number of suggestions found
+ * @param max_suggestions Maximum number of suggestions to return
+ * @return true on success
+ */
+bool sysml2_modify_find_similar_scopes(
+    const char *target,
+    const char **scopes,
+    size_t scope_count,
+    Sysml2Arena *arena,
+    const char ***out_suggestions,
+    size_t *out_count,
+    size_t max_suggestions
+);
+
 #endif /* SYSML2_MODIFY_H */
