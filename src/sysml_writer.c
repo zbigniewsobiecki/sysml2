@@ -1345,6 +1345,11 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
         fputs("end ", w->out);
     }
 
+    /* Write exhibit modifier (for state usages) */
+    if (node->is_exhibit && node->kind == SYSML_KIND_STATE_USAGE) {
+        fputs("exhibit ", w->out);
+    }
+
     /* Write keyword */
     const char *keyword = sysml2_kind_to_keyword(node->kind);
     bool has_keyword = keyword && keyword[0];

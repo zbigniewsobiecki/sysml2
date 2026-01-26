@@ -423,6 +423,7 @@ typedef struct SysmlNode {
     bool is_ref;
     bool is_end;                 /* true if 'end' keyword was present */
     bool is_parallel;            /* true if 'parallel' keyword on state */
+    bool is_exhibit;             /* true if 'exhibit' keyword on state usage */
     bool is_standard_library;    /* true if library package declared with 'standard' prefix */
     bool is_public_explicit;     /* true if 'public' keyword was explicit */
     bool has_enum_keyword;       /* true if enum usage has 'enum' keyword prefix */

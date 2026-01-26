@@ -1570,6 +1570,17 @@ void sysml2_set_parallel_on_current(SysmlBuildContext *ctx) {
 }
 
 /*
+ * Set the is_exhibit flag on the current element
+ */
+void sysml2_set_exhibit_on_current(SysmlBuildContext *ctx) {
+    if (!ctx || ctx->element_count == 0) return;
+    SysmlNode *current = ctx->elements[ctx->element_count - 1];
+    if (current) {
+        current->is_exhibit = true;
+    }
+}
+
+/*
  * Capture the enum keyword for enumerated values
  */
 void sysml2_capture_enum_keyword(SysmlBuildContext *ctx) {

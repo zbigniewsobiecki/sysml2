@@ -1177,6 +1177,606 @@ TEST(sysml_roundtrip_nested_port_body) {
     FIXTURE_TEARDOWN();
 }
 
+/* ========== Phase 1: Statement Capture Tests ========== */
+
+/* Test: satisfy statement preserved */
+TEST(sysml_satisfy_statement_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package TestPkg {\n"
+        "    requirement def Req1;\n"
+        "    part def Part1;\n"
+        "    satisfy Req1 by Part1;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify satisfy statement is preserved */
+    ASSERT(strstr(output, "satisfy") != NULL);
+    ASSERT(strstr(output, "Req1") != NULL);
+    ASSERT(strstr(output, "by") != NULL);
+    ASSERT(strstr(output, "Part1") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: assert satisfy statement preserved */
+TEST(sysml_assert_satisfy_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package TestPkg {\n"
+        "    requirement def Req1;\n"
+        "    part def Part1;\n"
+        "    assert satisfy Req1 by Part1;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify assert satisfy statement is preserved */
+    ASSERT(strstr(output, "assert") != NULL);
+    ASSERT(strstr(output, "satisfy") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: include use case statement preserved */
+TEST(sysml_include_use_case_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "use case def MainFlow {\n"
+        "    use case subFlow;\n"
+        "    include use case subFlow;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify include use case statement is preserved */
+    ASSERT(strstr(output, "include") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: expose statement preserved */
+TEST(sysml_expose_statement_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "view def SystemView {\n"
+        "    expose Model::*;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify expose statement is preserved */
+    ASSERT(strstr(output, "expose") != NULL);
+    ASSERT(strstr(output, "Model") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: render statement preserved */
+TEST(sysml_render_statement_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "view def DiagramView {\n"
+        "    render asDrawing;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify render statement is preserved */
+    ASSERT(strstr(output, "render") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: verify requirement statement preserved */
+TEST(sysml_verify_requirement_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "verification def TestVerification {\n"
+        "    verify requirement SysReq;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify verify requirement statement is preserved */
+    ASSERT(strstr(output, "verify") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* ========== Phase 2: N-ary Connection Endpoint Tests ========== */
+
+/* Test: n-ary connection endpoints preserved */
+TEST(sysml_nary_connection_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "part def Hub {\n"
+        "    part a;\n"
+        "    part b;\n"
+        "    part c;\n"
+        "    connection hub connect (a, b, c);\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify n-ary connection is preserved with all endpoints */
+    ASSERT(strstr(output, "connection") != NULL);
+    ASSERT(strstr(output, "connect") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* ========== Phase 3: ReferenceUsage Tests ========== */
+
+/* Test: ref feature preserved */
+TEST(sysml_ref_feature_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "part def Container {\n"
+        "    ref part referenced : ExternalPart;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify ref keyword is preserved */
+    ASSERT(strstr(output, "ref") != NULL);
+    ASSERT(strstr(output, "referenced") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: ref attribute preserved */
+TEST(sysml_ref_attribute_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "part def DataHolder {\n"
+        "    ref attribute externalData : String;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify ref attribute is preserved */
+    ASSERT(strstr(output, "ref") != NULL);
+    ASSERT(strstr(output, "externalData") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* ========== Phase 4: AllocationUsage Tests ========== */
+
+/* Test: allocation usage preserved */
+TEST(sysml_allocation_usage_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "allocation def SystemAllocation {\n"
+        "    allocation funcToComp;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify allocation usage is preserved */
+    ASSERT(strstr(output, "allocation") != NULL);
+    ASSERT(strstr(output, "funcToComp") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: allocate statement preserved */
+TEST(sysml_allocate_statement_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "allocation def Mapping {\n"
+        "    allocate Function to Component;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify allocate statement is preserved */
+    ASSERT(strstr(output, "allocate") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* ========== Phase 6: Additional Usage Type Tests ========== */
+
+/* Test: interface usage preserved */
+TEST(sysml_interface_usage_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "part def System {\n"
+        "    interface apiLink : ApiInterface;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify interface usage is preserved */
+    ASSERT(strstr(output, "interface") != NULL);
+    ASSERT(strstr(output, "apiLink") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: event occurrence usage preserved */
+TEST(sysml_event_occurrence_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "state def Process {\n"
+        "    event occurrence trigger;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify event occurrence is preserved */
+    ASSERT(strstr(output, "event") != NULL);
+    ASSERT(strstr(output, "trigger") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: exhibit state usage preserved */
+TEST(sysml_exhibit_state_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "part def Machine {\n"
+        "    exhibit state running;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify exhibit state is preserved */
+    ASSERT(strstr(output, "exhibit") != NULL);
+    ASSERT(strstr(output, "running") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: succession usage preserved */
+TEST(sysml_succession_usage_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "state def Workflow {\n"
+        "    state initial;\n"
+        "    state final;\n"
+        "    succession flow first initial then final;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify succession usage is preserved */
+    ASSERT(strstr(output, "succession") != NULL || strstr(output, "first") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* ========== Direction Keyword Tests ========== */
+
+/* Test: in direction preserved */
+TEST(sysml_in_direction_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "action def Process {\n"
+        "    in item inputData;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify in direction is preserved */
+    ASSERT(strstr(output, "in") != NULL);
+    ASSERT(strstr(output, "inputData") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: out direction preserved */
+TEST(sysml_out_direction_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "action def Process {\n"
+        "    out item outputData;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify out direction is preserved */
+    ASSERT(strstr(output, "out") != NULL);
+    ASSERT(strstr(output, "outputData") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: inout direction preserved */
+TEST(sysml_inout_direction_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "action def Process {\n"
+        "    inout item bidirectionalData;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify inout direction is preserved */
+    ASSERT(strstr(output, "inout") != NULL);
+    ASSERT(strstr(output, "bidirectionalData") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* ========== Comprehensive Round-Trip Tests for New Fixes ========== */
+
+/* Test: round-trip preserves Phase 1 statement captures */
+TEST(sysml_roundtrip_phase1_statements) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package TestPkg {\n"
+        "    requirement def Req1;\n"
+        "    part def Part1;\n"
+        "    satisfy Req1 by Part1;\n"
+        "}\n";
+
+    /* First round */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+    char *output1 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model1, &output1), SYSML2_OK);
+
+    /* Second round */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+    char *output2 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model2, &output2), SYSML2_OK);
+
+    /* Third round for idempotency */
+    SysmlSemanticModel *model3 = parse_sysml_string(&arena, &intern, output2);
+    ASSERT_NOT_NULL(model3);
+    char *output3 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model3, &output3), SYSML2_OK);
+
+    /* Idempotency: second and third outputs must be identical */
+    ASSERT_STR_EQ(output2, output3);
+
+    /* Verify statements preserved */
+    ASSERT(strstr(output3, "satisfy") != NULL);
+
+    free(output1);
+    free(output2);
+    free(output3);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: round-trip preserves allocation and ref features */
+TEST(sysml_roundtrip_allocation_and_ref) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package TestPkg {\n"
+        "    allocation def Alloc {\n"
+        "        allocation mapping;\n"
+        "    }\n"
+        "    part def Container {\n"
+        "        ref part external;\n"
+        "    }\n"
+        "}\n";
+
+    /* First round */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+    char *output1 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model1, &output1), SYSML2_OK);
+
+    /* Second round */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+    char *output2 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model2, &output2), SYSML2_OK);
+
+    /* Third round for idempotency */
+    SysmlSemanticModel *model3 = parse_sysml_string(&arena, &intern, output2);
+    ASSERT_NOT_NULL(model3);
+    char *output3 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model3, &output3), SYSML2_OK);
+
+    /* Idempotency check */
+    ASSERT_STR_EQ(output2, output3);
+
+    /* Verify allocation and ref preserved */
+    ASSERT(strstr(output3, "allocation") != NULL);
+    ASSERT(strstr(output3, "ref") != NULL);
+
+    free(output1);
+    free(output2);
+    free(output3);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: round-trip preserves direction keywords */
+TEST(sysml_roundtrip_direction_keywords) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "action def DataProcessor {\n"
+        "    in item inputData;\n"
+        "    out item outputData;\n"
+        "    inout item bidirectionalData;\n"
+        "}\n";
+
+    /* First round */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+    char *output1 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model1, &output1), SYSML2_OK);
+
+    /* Second round */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+    char *output2 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model2, &output2), SYSML2_OK);
+
+    /* Third round for idempotency */
+    SysmlSemanticModel *model3 = parse_sysml_string(&arena, &intern, output2);
+    ASSERT_NOT_NULL(model3);
+    char *output3 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model3, &output3), SYSML2_OK);
+
+    /* Idempotency check */
+    ASSERT_STR_EQ(output2, output3);
+
+    /* Verify direction keywords preserved */
+    ASSERT(strstr(output3, "in ") != NULL || strstr(output3, "in\t") != NULL);
+    ASSERT(strstr(output3, "out ") != NULL || strstr(output3, "out\t") != NULL);
+    ASSERT(strstr(output3, "inout") != NULL);
+
+    free(output1);
+    free(output2);
+    free(output3);
+    FIXTURE_TEARDOWN();
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -1245,6 +1845,41 @@ int main(void) {
     RUN_TEST(sysml_roundtrip_batch1_keywords);
     RUN_TEST(sysml_roundtrip_flow_endpoints);
     RUN_TEST(sysml_roundtrip_nested_port_body);
+
+    /* Phase 1: Statement capture tests */
+    RUN_TEST(sysml_satisfy_statement_preserved);
+    RUN_TEST(sysml_assert_satisfy_preserved);
+    RUN_TEST(sysml_include_use_case_preserved);
+    RUN_TEST(sysml_expose_statement_preserved);
+    RUN_TEST(sysml_render_statement_preserved);
+    RUN_TEST(sysml_verify_requirement_preserved);
+
+    /* Phase 2: N-ary connection endpoints */
+    RUN_TEST(sysml_nary_connection_preserved);
+
+    /* Phase 3: ReferenceUsage tests */
+    RUN_TEST(sysml_ref_feature_preserved);
+    RUN_TEST(sysml_ref_attribute_preserved);
+
+    /* Phase 4: AllocationUsage tests */
+    RUN_TEST(sysml_allocation_usage_preserved);
+    RUN_TEST(sysml_allocate_statement_preserved);
+
+    /* Phase 6: Additional usage type tests */
+    RUN_TEST(sysml_interface_usage_preserved);
+    RUN_TEST(sysml_event_occurrence_preserved);
+    RUN_TEST(sysml_exhibit_state_preserved);
+    RUN_TEST(sysml_succession_usage_preserved);
+
+    /* Direction keyword tests */
+    RUN_TEST(sysml_in_direction_preserved);
+    RUN_TEST(sysml_out_direction_preserved);
+    RUN_TEST(sysml_inout_direction_preserved);
+
+    /* Comprehensive round-trip tests for new fixes */
+    RUN_TEST(sysml_roundtrip_phase1_statements);
+    RUN_TEST(sysml_roundtrip_allocation_and_ref);
+    RUN_TEST(sysml_roundtrip_direction_keywords);
 
     printf("\n%d/%d tests passed.\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;

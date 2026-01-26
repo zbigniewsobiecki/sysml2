@@ -650,6 +650,15 @@ void sysml2_capture_parallel(SysmlBuildContext *ctx);
 void sysml2_set_parallel_on_current(SysmlBuildContext *ctx);
 
 /*
+ * Set exhibit flag on current state usage node
+ *
+ * Directly sets is_exhibit on the current node in the build stack.
+ *
+ * @param ctx Build context
+ */
+void sysml2_set_exhibit_on_current(SysmlBuildContext *ctx);
+
+/*
  * Capture the enum keyword for enumeration values
  *
  * Will be applied to the next created enumeration usage node.
