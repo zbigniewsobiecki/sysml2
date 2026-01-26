@@ -1359,6 +1359,9 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
     /* Handle event occurrence: use "event occurrence" instead of just "event" */
     if (node->kind == SYSML_KIND_EVENT_USAGE && node->is_event_occurrence) {
         keyword = "event occurrence";
+    } else if (node->kind == SYSML_KIND_PORTION_USAGE && node->portion_kind) {
+        /* Use snapshot/timeslice instead of generic "portion" */
+        keyword = node->portion_kind;
     } else if (node->ref_behavioral_keyword) {
         /* If ref behavioral keyword is set, it replaces the kind keyword */
         keyword = NULL;

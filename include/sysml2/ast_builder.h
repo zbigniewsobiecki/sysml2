@@ -76,6 +76,10 @@ typedef struct SysmlBuildContext {
     bool pending_has_enum_keyword;
     bool pending_event_occurrence;
     const char *pending_ref_behavioral_keyword;
+    const char *pending_portion_kind;
+    bool pending_is_asserted;
+    bool pending_is_negated;
+    bool pending_has_connect_keyword;
     SysmlDirection pending_direction;
     SysmlVisibility pending_visibility;
 
@@ -1204,5 +1208,51 @@ void sysml2_capture_succession_part(
     const char *first, size_t first_len,
     const char *then, size_t then_len
 );
+
+/*
+ * Capture portion kind (snapshot/timeslice)
+ *
+ * Will be applied to the next created portion usage node.
+ *
+ * @param ctx Build context
+ * @param keyword The portion kind keyword ("snapshot" or "timeslice")
+ * @param len Length of keyword
+ */
+void sysml2_capture_portion_kind(SysmlBuildContext *ctx, const char *keyword, size_t len);
+
+/*
+ * Capture assert flags
+ *
+ * Will be applied to the next created constraint node.
+ *
+ * @param ctx Build context
+ * @param is_asserted True if 'assert' keyword was present
+ * @param is_negated True if 'not' keyword was present
+ */
+void sysml2_capture_assert_flags(SysmlBuildContext *ctx, bool is_asserted, bool is_negated);
+
+/*
+ * Capture binding connector endpoints
+ *
+ * Sets connector_part on current node for binding 'of X = Y' syntax.
+ *
+ * @param ctx Build context
+ * @param left Left endpoint
+ * @param left_len Length of left
+ * @param right Right endpoint
+ * @param right_len Length of right
+ */
+void sysml2_capture_binding_endpoints(
+    SysmlBuildContext *ctx,
+    const char *left, size_t left_len,
+    const char *right, size_t right_len
+);
+
+/*
+ * Set has_connect_keyword flag on current interface node
+ *
+ * @param ctx Build context
+ */
+void sysml2_set_connect_keyword_on_current(SysmlBuildContext *ctx);
 
 #endif /* SYSML2_AST_BUILDER_H */

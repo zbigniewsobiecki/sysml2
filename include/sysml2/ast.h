@@ -428,9 +428,15 @@ typedef struct SysmlNode {
     bool is_standard_library;    /* true if library package declared with 'standard' prefix */
     bool is_public_explicit;     /* true if 'public' keyword was explicit */
     bool has_enum_keyword;       /* true if enum usage has 'enum' keyword prefix */
+    bool is_asserted;            /* true if 'assert' keyword was present */
+    bool is_negated;             /* true if 'not' keyword was present (assert not) */
+    bool has_connect_keyword;    /* true if 'connect' keyword was present in interface */
 
     /* Specialized keyword for ref behavioral features (state, action, etc.) */
     const char *ref_behavioral_keyword;  /* NULL or "state", "action", etc. */
+
+    /* Portion kind for snapshot/timeslice usages */
+    const char *portion_kind;    /* NULL or "snapshot", "timeslice" */
 
     /* Direction (for parameters) */
     SysmlDirection direction;

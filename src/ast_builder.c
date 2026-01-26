@@ -84,6 +84,12 @@ SysmlBuildContext *sysml2_build_context_create(
     ctx->pending_event_occurrence = false;
     ctx->pending_ref_behavioral_keyword = NULL;
 
+    /* Initialize pending portion kind and assert flags */
+    ctx->pending_portion_kind = NULL;
+    ctx->pending_is_asserted = false;
+    ctx->pending_is_negated = false;
+    ctx->pending_has_connect_keyword = false;
+
     /* Initialize pending import visibility */
     ctx->pending_import_private = false;
     ctx->pending_import_public = false;
@@ -285,6 +291,10 @@ SysmlNode *sysml2_build_node(
     node->has_enum_keyword = ctx->pending_has_enum_keyword;
     node->is_event_occurrence = ctx->pending_event_occurrence;
     node->ref_behavioral_keyword = ctx->pending_ref_behavioral_keyword;
+    node->portion_kind = ctx->pending_portion_kind;
+    node->is_asserted = ctx->pending_is_asserted;
+    node->is_negated = ctx->pending_is_negated;
+    node->has_connect_keyword = ctx->pending_has_connect_keyword;
     ctx->pending_abstract = false;
     ctx->pending_variation = false;
     ctx->pending_readonly = false;
@@ -295,6 +305,10 @@ SysmlNode *sysml2_build_node(
     ctx->pending_has_enum_keyword = false;
     ctx->pending_event_occurrence = false;
     ctx->pending_ref_behavioral_keyword = NULL;
+    ctx->pending_portion_kind = NULL;
+    ctx->pending_is_asserted = false;
+    ctx->pending_is_negated = false;
+    ctx->pending_has_connect_keyword = false;
 
     /* Apply pending direction */
     node->direction = ctx->pending_direction;
@@ -2571,5 +2585,59 @@ void sysml2_capture_succession_part(
             snprintf(buf, total_len, "first %s", first_str);
             current->connector_part = sysml2_intern(ctx->intern, buf);
         }
+    }
+}
+
+/*
+ * Capture portion kind (snapshot/timeslice)
+ */
+void sysml2_capture_portion_kind(SysmlBuildContext *ctx, const char *keyword, size_t len) {
+    if (!ctx || !keyword || len == 0) return;
+    ctx->pending_portion_kind = trim_and_intern(ctx, keyword, len);
+}
+
+/*
+ * Capture assert flags
+ */
+void sysml2_capture_assert_flags(SysmlBuildContext *ctx, bool is_asserted, bool is_negated) {
+    if (!ctx) return;
+    ctx->pending_is_asserted = is_asserted;
+    ctx->pending_is_negated = is_negated;
+}
+
+/*
+ * Capture binding connector endpoints
+ */
+void sysml2_capture_binding_endpoints(
+    SysmlBuildContext *ctx,
+    const char *left, size_t left_len,
+    const char *right, size_t right_len
+) {
+    if (!ctx || ctx->element_count == 0) return;
+    SysmlNode *current = ctx->elements[ctx->element_count - 1];
+    if (!current) return;
+
+    const char *l = trim_and_intern(ctx, left, left_len);
+    const char *r = trim_and_intern(ctx, right, right_len);
+    if (!l || !r) return;
+
+    size_t l_len = strlen(l);
+    size_t r_len = strlen(r);
+    size_t total_len = 3 + l_len + 3 + r_len + 1;  /* "of " + " = " */
+    char *buf = sysml2_arena_alloc(ctx->arena, total_len);
+    if (buf) {
+        snprintf(buf, total_len, "of %s = %s", l, r);
+        current->connector_part = sysml2_intern(ctx->intern, buf);
+    }
+}
+
+/*
+ * Set has_connect_keyword flag on current interface node
+ */
+void sysml2_set_connect_keyword_on_current(SysmlBuildContext *ctx) {
+    if (!ctx || ctx->element_count == 0) return;
+    SysmlNode *current = ctx->elements[ctx->element_count - 1];
+    if (current) {
+        current->has_connect_keyword = true;
     }
 }

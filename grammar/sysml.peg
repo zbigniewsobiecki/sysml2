@@ -1796,7 +1796,7 @@ DefinitionSpecialization <- SPECIALIZES QualifiedName (COMMA QualifiedName)*
 UsageElement <- AssertSatisfyUsage / SatisfyUsage / ExhibitStateUsage / PerformActionUsage / MessageUsage / ReferenceUsage / AttributeUsage / EnumerationUsage / ItemUsage / PartUsage / ConnectionUsage / FlowUsage / InterfaceUsage / PortUsage / AllocationUsage / ActionUsage / StateUsage / ConstraintUsage / RequirementUsage / ConcernUsage / CalcUsage / CaseUsage / AnalysisUsage / VerificationUsage / UseCaseUsage / ViewUsage / ViewpointUsage / RenderingUsage / SuccessionUsage / PortionUsage / SubjectUsage / ActorUsage / StakeholderUsage / IncludeUseCaseUsage / EventOccurrenceUsage / EventUsage / OccurrenceUsage
 # PortionUsage: snapshot/timeslice part/item/etc. needs scope for body
 PortionUsage <- BasicUsagePrefix* KW_INDIVIDUAL? PortionKind PortionUsageKind? < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_PORTION_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
-PortionKind <- KW_SNAPSHOT / KW_TIMESLICE
+PortionKind <- < (KW_SNAPSHOT / KW_TIMESLICE) > { if (auxil->build_ctx) sysml2_capture_portion_kind(auxil->build_ctx, $1, $1e - $1s); }
 PortionUsageKind <- KW_ITEM / KW_PART / KW_OCCURRENCE / KW_ATTRIBUTE
 # Succession: the optional UsageDeclaration can't consume 'first' keyword
 SuccessionUsage <- UsagePrefix* KW_SUCCESSION (!KW_FIRST < UsageDeclaration >)? { sysml2_build_push(auxil, SYSML_KIND_SUCCESSION, $1, $1e - $1s); } (KW_FIRST < ConnectorEndMember > (KW_THEN < ConnectorEndMember >)? { if (auxil->build_ctx) sysml2_capture_succession_part(auxil->build_ctx, $2, $2e - $2s, $3, $3e - $3s); })? SuccessionUsageBody { sysml2_pop(auxil); }
