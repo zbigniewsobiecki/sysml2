@@ -1631,10 +1631,12 @@ KerMLBinaryConnectorPart <- KW_FROM? ConnectorEndMember KW_TO ConnectorEndMember
 BindingConnectorDefinition <- BindingConnectorNamed / BindingConnectorAnon
 BindingConnectorNamed <- KerMLFeaturePrefix KW_BINDING < KerMLFeatureDeclaration > KW_OF
     { sysml2_build_push(auxil, SYSML_KIND_BINDING_CONNECTOR, $1, $1e - $1s); }
-    ConnectorEndMember EQ ConnectorEndMember KerMLTypeBody { sysml2_pop(auxil); }
+    < ConnectorEndMember > EQ < ConnectorEndMember > { if (auxil->build_ctx) sysml2_capture_binding_endpoints(auxil->build_ctx, $2, $2e - $2s, $3, $3e - $3s); }
+    KerMLTypeBody { sysml2_pop(auxil); }
 BindingConnectorAnon <- KerMLFeaturePrefix KW_BINDING KW_ALL? KW_OF?
     { sysml2_build_push(auxil, SYSML_KIND_BINDING_CONNECTOR, "", 0); }
-    (ConnectorEndMember EQ ConnectorEndMember)? KerMLTypeBody { sysml2_pop(auxil); }
+    (< ConnectorEndMember > EQ < ConnectorEndMember > { if (auxil->build_ctx) sysml2_capture_binding_endpoints(auxil->build_ctx, $1, $1e - $1s, $2, $2e - $2s); })?
+    KerMLTypeBody { sysml2_pop(auxil); }
 
 # Succession: [all] succession Name first A then B { ... }
 # Named succession has explicit feature declaration before 'first' or 'then'
