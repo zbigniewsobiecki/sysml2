@@ -1315,7 +1315,7 @@ TEST(merge_clears_body_metadata) {
     FIXTURE_TEARDOWN();
 }
 
-/* Test: Trailing trivia on target scope is cleared */
+/* Test: Trailing trivia on target scope is PRESERVED when fragment has no scope metadata */
 TEST(merge_clears_trailing_trivia) {
     FIXTURE_SETUP();
 
@@ -1336,7 +1336,7 @@ TEST(merge_clears_trailing_trivia) {
 
     SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 1, NULL, 0);
 
-    /* Fragment: new element */
+    /* Fragment: new element (no scope metadata) */
     SysmlNode frag_nodes[1];
     memset(frag_nodes, 0, sizeof(frag_nodes));
     frag_nodes[0].id = "NewElem";
@@ -1353,17 +1353,18 @@ TEST(merge_clears_trailing_trivia) {
 
     ASSERT_NOT_NULL(result);
 
-    /* Verify: Package trailing trivia is cleared */
+    /* Verify: Package trailing trivia is PRESERVED when fragment has no scope metadata
+     * This ensures blank lines and formatting are not lost during simple element additions */
     for (size_t i = 0; i < result->element_count; i++) {
         if (strcmp(result->elements[i]->id, "Pkg") == 0) {
-            ASSERT_NULL(result->elements[i]->trailing_trivia);
+            ASSERT_NOT_NULL(result->elements[i]->trailing_trivia);
         }
     }
 
     FIXTURE_TEARDOWN();
 }
 
-/* Test: Leading trivia on target scope is cleared */
+/* Test: Leading trivia on target scope is PRESERVED when fragment has no scope metadata */
 TEST(merge_clears_leading_trivia) {
     FIXTURE_SETUP();
 
@@ -1384,7 +1385,7 @@ TEST(merge_clears_leading_trivia) {
 
     SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 1, NULL, 0);
 
-    /* Fragment: new element */
+    /* Fragment: new element (no scope metadata) */
     SysmlNode frag_nodes[1];
     memset(frag_nodes, 0, sizeof(frag_nodes));
     frag_nodes[0].id = "NewElem";
@@ -1401,10 +1402,11 @@ TEST(merge_clears_leading_trivia) {
 
     ASSERT_NOT_NULL(result);
 
-    /* Verify: Package leading trivia is cleared */
+    /* Verify: Package leading trivia is PRESERVED when fragment has no scope metadata
+     * This ensures blank lines and formatting are not lost during simple element additions */
     for (size_t i = 0; i < result->element_count; i++) {
         if (strcmp(result->elements[i]->id, "Pkg") == 0) {
-            ASSERT_NULL(result->elements[i]->leading_trivia);
+            ASSERT_NOT_NULL(result->elements[i]->leading_trivia);
         }
     }
 

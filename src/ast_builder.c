@@ -410,12 +410,13 @@ void sysml2_build_add_relationship(SysmlBuildContext *ctx, SysmlRelationship *re
 }
 
 /*
- * Add a type reference to a node (: operator)
+ * Add a type reference to a node with conjugation flag (: operator)
  */
-void sysml2_build_add_typed_by(
+void sysml2_build_add_typed_by_conjugated(
     SysmlBuildContext *ctx,
     SysmlNode *node,
-    const char *type_ref
+    const char *type_ref,
+    bool is_conjugated
 ) {
     if (!ctx || !node || !type_ref) return;
 
@@ -427,15 +428,40 @@ void sysml2_build_add_typed_by(
     const char **new_typed_by = SYSML2_ARENA_NEW_ARRAY(ctx->arena, const char *, new_count);
     if (!new_typed_by) return;
 
+    /* Allocate or grow typed_by_conjugated array */
+    bool *new_conjugated = SYSML2_ARENA_NEW_ARRAY(ctx->arena, bool, new_count);
+    if (!new_conjugated) return;
+
     /* Copy existing entries */
     if (node->typed_by && node->typed_by_count > 0) {
         memcpy(new_typed_by, node->typed_by, node->typed_by_count * sizeof(const char *));
     }
+    if (node->typed_by_conjugated && node->typed_by_count > 0) {
+        memcpy(new_conjugated, node->typed_by_conjugated, node->typed_by_count * sizeof(bool));
+    } else {
+        /* Initialize to false for any existing entries without conjugation data */
+        for (size_t i = 0; i < node->typed_by_count; i++) {
+            new_conjugated[i] = false;
+        }
+    }
 
     /* Add new entry */
     new_typed_by[node->typed_by_count] = interned_ref;
+    new_conjugated[node->typed_by_count] = is_conjugated;
     node->typed_by = new_typed_by;
+    node->typed_by_conjugated = new_conjugated;
     node->typed_by_count = new_count;
+}
+
+/*
+ * Add a type reference to a node (: operator) - convenience wrapper
+ */
+void sysml2_build_add_typed_by(
+    SysmlBuildContext *ctx,
+    SysmlNode *node,
+    const char *type_ref
+) {
+    sysml2_build_add_typed_by_conjugated(ctx, node, type_ref, false);
 }
 
 /*

@@ -841,6 +841,13 @@ static SysmlNode *sysml2_modify_deep_copy_node(
         memcpy(dst->typed_by, src->typed_by, src->typed_by_count * sizeof(const char *));
     }
 
+    /* Deep copy typed_by_conjugated array */
+    if (src->typed_by_count > 0 && src->typed_by_conjugated) {
+        dst->typed_by_conjugated = sysml2_arena_alloc(arena, src->typed_by_count * sizeof(bool));
+        if (!dst->typed_by_conjugated) return NULL;
+        memcpy(dst->typed_by_conjugated, src->typed_by_conjugated, src->typed_by_count * sizeof(bool));
+    }
+
     /* Deep copy specializes array */
     if (src->specializes_count > 0 && src->specializes) {
         dst->specializes = sysml2_arena_alloc(arena, src->specializes_count * sizeof(const char *));
@@ -1438,9 +1445,12 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
                     node->prefix_applied_metadata_count = wrapper_prefix_metadata_count;
                 }
 
-                /* Always clear trivia to prevent formatting accumulation */
-                node->leading_trivia = NULL;
-                node->trailing_trivia = NULL;
+                /* Only clear trivia when scope metadata was actually replaced,
+                 * to preserve blank lines and formatting when just adding elements */
+                if (fragment_has_scope_metadata) {
+                    node->leading_trivia = NULL;
+                    node->trailing_trivia = NULL;
+                }
             }
             result->elements[result->element_count++] = node;
         }

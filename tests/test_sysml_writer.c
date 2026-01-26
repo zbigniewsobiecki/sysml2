@@ -660,6 +660,117 @@ TEST(sysml_roundtrip_simple) {
     FIXTURE_TEARDOWN();
 }
 
+/* ========== Regression Tests for Data Loss Fixes ========== */
+
+/* Test: Conjugation marker (~) is preserved in round-trip */
+TEST(sysml_conjugation_marker_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input = "interface def I { end client : ~Port; }";
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify conjugation marker is present in output */
+    ASSERT(strstr(output, "~Port") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Typing and redefines are NOT conflated (separate operators) */
+TEST(sysml_typing_vs_redefines_separate) {
+    FIXTURE_SETUP();
+
+    const char *input = "part x :>> database : PostgreSQL;";
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify correct: ":>> database : PostgreSQL" or ":>> database:PostgreSQL"
+     * NOT: ":>> database, PostgreSQL" (which would mean both are redefines) */
+    ASSERT(strstr(output, "database, PostgreSQL") == NULL);
+    ASSERT(strstr(output, ":>>") != NULL);
+    ASSERT(strstr(output, "PostgreSQL") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Multiplicity spacing is preserved */
+TEST(sysml_multiplicity_spacing_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input = "attribute x : String [0..1];";
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify space before [ is present: "String [" not "String[" */
+    ASSERT(strstr(output, "String [") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Round-trip preserves critical data (conjugation, typing, multiplicity) */
+TEST(sysml_roundtrip_idempotent) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "interface def Service {\n"
+        "    end client : ~ServicePort;\n"
+        "    end server : ServicePort;\n"
+        "}\n"
+        "part x :>> database : PostgreSQL;\n"
+        "attribute layer : String [0..1];\n";
+
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+
+    char *output1 = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model1, &output1);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output1);
+
+    /* Parse output1 again */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+
+    char *output2 = NULL;
+    result = sysml2_sysml_write_string(model2, &output2);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output2);
+
+    /* Verify critical data is preserved in second round-trip:
+     * - Conjugation marker (~) still present
+     * - Typing/redefines not conflated
+     * - Multiplicity spacing preserved
+     * Note: Blank lines between elements may vary, so we check for key patterns */
+    ASSERT(strstr(output2, "~ServicePort") != NULL);
+    ASSERT(strstr(output2, ":>> database") != NULL);
+    ASSERT(strstr(output2, ": PostgreSQL") != NULL || strstr(output2, ":PostgreSQL") != NULL);
+    ASSERT(strstr(output2, "String [0..1]") != NULL);
+    /* Verify typing is NOT conflated with redefines */
+    ASSERT(strstr(output2, "database, PostgreSQL") == NULL);
+
+    free(output1);
+    free(output2);
+    FIXTURE_TEARDOWN();
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -702,6 +813,12 @@ int main(void) {
 
     /* Round-trip */
     RUN_TEST(sysml_roundtrip_simple);
+
+    /* Data loss regression tests */
+    RUN_TEST(sysml_conjugation_marker_preserved);
+    RUN_TEST(sysml_typing_vs_redefines_separate);
+    RUN_TEST(sysml_multiplicity_spacing_preserved);
+    RUN_TEST(sysml_roundtrip_idempotent);
 
     printf("\n%d/%d tests passed.\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;

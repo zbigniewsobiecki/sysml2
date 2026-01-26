@@ -388,6 +388,7 @@ typedef struct SysmlNode {
     /* Type relationships */
     const char **typed_by;       /* : Type (typing) */
     size_t typed_by_count;
+    bool *typed_by_conjugated;   /* Parallel array: true if type has ~ prefix */
 
     const char **specializes;    /* :> Type (specialization/subsetting) */
     size_t specializes_count;

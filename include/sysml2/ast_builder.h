@@ -257,6 +257,21 @@ void sysml2_build_add_typed_by(
 );
 
 /*
+ * Add a type reference to a node with conjugation flag (: operator)
+ *
+ * @param ctx Build context
+ * @param node Node to modify
+ * @param type_ref Type reference (qualified name)
+ * @param is_conjugated True if type has ~ prefix (port conjugation)
+ */
+void sysml2_build_add_typed_by_conjugated(
+    SysmlBuildContext *ctx,
+    SysmlNode *node,
+    const char *type_ref,
+    bool is_conjugated
+);
+
+/*
  * Add a specialization to a node (:> operator)
  *
  * @param ctx Build context

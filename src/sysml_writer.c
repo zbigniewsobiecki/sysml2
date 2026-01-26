@@ -1309,20 +1309,31 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
         first_rel = false;
     }
 
-    /* : typing last (most specific for usages) */
-    /* End features use compact format (no spaces around colon) */
-    for (size_t i = 0; i < node->typed_by_count; i++) {
+    /* : typing - ALWAYS start fresh with : operator, never comma-continue from redefines/specializes
+     * Multiple types are comma-separated from each other, but typing itself uses : */
+    if (node->typed_by_count > 0) {
+        /* End features use compact format (no spaces around colon) */
         if (node->kind == SYSML_KIND_END_FEATURE) {
-            fputs(first_rel ? ":" : ", ", w->out);
+            fputc(':', w->out);
         } else {
-            fputs(first_rel ? " : " : ", ", w->out);
+            fputs(" : ", w->out);
         }
-        fputs(node->typed_by[i], w->out);
-        first_rel = false;
+        for (size_t i = 0; i < node->typed_by_count; i++) {
+            if (i > 0) fputs(", ", w->out);  /* Comma only between multiple types */
+            /* Output ~ prefix for conjugated port types */
+            if (node->typed_by_conjugated && node->typed_by_conjugated[i]) {
+                fputc('~', w->out);
+            }
+            fputs(node->typed_by[i], w->out);
+        }
     }
 
     /* Write multiplicity (skip for end features - already written after keyword) */
     if (node->multiplicity_lower && !end_feature_mult_written) {
+        /* Add space before [ for non-end features to preserve spacing: "String [0..1]" */
+        if (node->kind != SYSML_KIND_END_FEATURE) {
+            fputc(' ', w->out);
+        }
         fputc('[', w->out);
         fputs(node->multiplicity_lower, w->out);
         if (node->multiplicity_upper) {
