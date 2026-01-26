@@ -1989,6 +1989,234 @@ TEST(sysml_roundtrip_specialized_syntax) {
     FIXTURE_TEARDOWN();
 }
 
+/* ========== Phase 2 Round-Trip Regression Tests ========== */
+
+/* Issue 1: Binding connector endpoints */
+TEST(sysml_binding_connector_endpoints_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input = "package Test { binding b of a = b; }";
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model, &output), SYSML2_OK);
+
+    /* Should preserve binding endpoints */
+    ASSERT(strstr(output, "binding b of a = b") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Issue 2: Flow endpoints */
+TEST(sysml_flow_named_endpoints_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input = "package Test { flow f from a to b; }";
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model, &output), SYSML2_OK);
+
+    /* Should preserve flow endpoints */
+    ASSERT(strstr(output, "flow f from a to b") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Issue 3: Snapshot/timeslice portion kind */
+TEST(sysml_snapshot_timeslice_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package Test {\n"
+        "    snapshot part s;\n"
+        "    timeslice part ts;\n"
+        "}\n";
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model, &output), SYSML2_OK);
+
+    /* Should preserve snapshot and timeslice keywords */
+    ASSERT(strstr(output, "snapshot") != NULL);
+    ASSERT(strstr(output, "timeslice") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Issue 4: Interface connect keyword */
+TEST(sysml_interface_connect_keyword_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input = "package Test { interface i connect a to b; }";
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model, &output), SYSML2_OK);
+
+    /* Should preserve 'connect' keyword */
+    ASSERT(strstr(output, "interface i connect a to b") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Issue 5 & 6: Result expression in constraints/calcs */
+TEST(sysml_result_expression_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package Test {\n"
+        "    constraint c { x > 0 }\n"
+        "    calc calculate { in x; x * 2 }\n"
+        "}\n";
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model, &output), SYSML2_OK);
+
+    /* Should preserve result expressions */
+    ASSERT(strstr(output, "x > 0") != NULL);
+    ASSERT(strstr(output, "x * 2") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Issue 7 & 8: Assert constraint flags */
+TEST(sysml_assert_constraint_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package Test {\n"
+        "    assert constraint ac { true }\n"
+        "    assert not constraint anc { false }\n"
+        "}\n";
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model, &output), SYSML2_OK);
+
+    /* Should preserve assert and assert not keywords */
+    ASSERT(strstr(output, "assert constraint") != NULL);
+    ASSERT(strstr(output, "assert not constraint") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Issue 9: Perform action usage */
+TEST(sysml_perform_action_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package Test {\n"
+        "    action myAction {\n"
+        "        perform action subAction;\n"
+        "        perform existingAction;\n"
+        "    }\n"
+        "}\n";
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model, &output), SYSML2_OK);
+
+    /* Should preserve perform action variants */
+    ASSERT(strstr(output, "perform action subAction") != NULL);
+    ASSERT(strstr(output, "perform existingAction") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Issue 10: Default keyword parsing */
+TEST(sysml_default_value_keyword_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package Test {\n"
+        "    attribute y default = 100;\n"
+        "    attribute y_default = 50;\n"
+        "}\n";
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model, &output), SYSML2_OK);
+
+    /* Should correctly parse name vs default keyword */
+    ASSERT(strstr(output, "attribute y default") != NULL);
+    ASSERT(strstr(output, "attribute y_default") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Comprehensive round-trip test for Phase 2 fixes */
+TEST(sysml_roundtrip_phase2_all_fixes) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package Test {\n"
+        "    binding b of x = y;\n"
+        "    flow f from source to sink;\n"
+        "    snapshot part snap;\n"
+        "    timeslice part ts;\n"
+        "    interface iface connect portA to portB;\n"
+        "    constraint c { x > 0 }\n"
+        "    assert constraint ac { true }\n"
+        "    assert not constraint anc { false }\n"
+        "    attribute y default = 100;\n"
+        "}\n";
+
+    /* First round */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+    char *output1 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model1, &output1), SYSML2_OK);
+
+    /* Second round */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+    char *output2 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model2, &output2), SYSML2_OK);
+
+    /* Third round for idempotency */
+    SysmlSemanticModel *model3 = parse_sysml_string(&arena, &intern, output2);
+    ASSERT_NOT_NULL(model3);
+    char *output3 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model3, &output3), SYSML2_OK);
+
+    /* Idempotency check */
+    ASSERT_STR_EQ(output2, output3);
+
+    /* All syntax should be preserved */
+    ASSERT(strstr(output3, "binding b of x = y") != NULL);
+    ASSERT(strstr(output3, "flow f from source to sink") != NULL);
+    ASSERT(strstr(output3, "snapshot") != NULL);
+    ASSERT(strstr(output3, "timeslice") != NULL);
+    ASSERT(strstr(output3, "connect portA to portB") != NULL);
+    ASSERT(strstr(output3, "x > 0") != NULL);
+    ASSERT(strstr(output3, "assert constraint") != NULL);
+    ASSERT(strstr(output3, "assert not constraint") != NULL);
+    ASSERT(strstr(output3, "attribute y default") != NULL);
+
+    free(output1);
+    free(output2);
+    free(output3);
+    FIXTURE_TEARDOWN();
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -2099,6 +2327,17 @@ int main(void) {
     RUN_TEST(sysml_interface_to_syntax_preserved);
     RUN_TEST(sysml_succession_first_then_preserved);
     RUN_TEST(sysml_roundtrip_specialized_syntax);
+
+    /* Phase 2: Round-trip regression tests */
+    RUN_TEST(sysml_binding_connector_endpoints_preserved);
+    RUN_TEST(sysml_flow_named_endpoints_preserved);
+    RUN_TEST(sysml_snapshot_timeslice_preserved);
+    RUN_TEST(sysml_interface_connect_keyword_preserved);
+    RUN_TEST(sysml_result_expression_preserved);
+    RUN_TEST(sysml_assert_constraint_preserved);
+    RUN_TEST(sysml_perform_action_preserved);
+    RUN_TEST(sysml_default_value_keyword_preserved);
+    RUN_TEST(sysml_roundtrip_phase2_all_fixes);
 
     printf("\n%d/%d tests passed.\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;
