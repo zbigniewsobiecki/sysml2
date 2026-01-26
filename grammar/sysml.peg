@@ -1810,8 +1810,8 @@ DecisionBranch <- KW_IF OwnedExpression KW_THEN ConnectorEndMember SEMICOLON / K
 RefBehavioralKeyword <- KW_STATE / KW_ACTION / KW_OCCURRENCE / KW_CASE
                       / KW_REQUIREMENT / KW_MESSAGE / KW_CALC / KW_CONSTRAINT
                       / KW_VIEWPOINT / KW_CONCERN / KW_VIEW / KW_RENDERING
-ReferenceUsage <- Direction? KW_REF PrefixMetadata* RefBehavioralKeyword? UsageDeclaration UsageBody
-                / Direction? RefPrefix PrefixMetadata* UsageDeclaration UsageBody
+ReferenceUsage <- Direction? KW_REF { if (auxil->build_ctx) sysml2_capture_ref(auxil->build_ctx); } PrefixMetadata* RefBehavioralKeyword? < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_FEATURE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
+                / Direction? RefPrefix PrefixMetadata* < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_FEATURE, $2, $2e - $2s); } UsageBody { sysml2_pop(auxil); }
 StructureUsageElement <- AttributeUsage / ItemUsage / PartUsage / PortUsage / ConnectionUsage / FlowUsage / InterfaceUsage
 BehaviorUsageElement <- ActionUsage / StateUsage / ConstraintUsage / CalcUsage
 # GuardedSuccession/ElseSuccession before IfAction: 'if cond then target;' and 'else target;' are successions, not if-then with body
