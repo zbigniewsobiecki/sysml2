@@ -1370,6 +1370,9 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
     } else if (node->kind == SYSML_KIND_PORTION_USAGE && node->portion_kind) {
         /* Use snapshot/timeslice instead of generic "portion" */
         keyword = node->portion_kind;
+    } else if (node->kind == SYSML_KIND_PERFORM_ACTION_USAGE && node->has_action_keyword) {
+        /* Use "perform action" when action keyword was present, otherwise just "perform" */
+        keyword = "perform action";
     } else if (node->ref_behavioral_keyword) {
         /* If ref behavioral keyword is set, it replaces the kind keyword */
         keyword = NULL;

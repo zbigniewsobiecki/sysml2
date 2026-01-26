@@ -2665,3 +2665,14 @@ void sysml2_set_connect_keyword_on_current(SysmlBuildContext *ctx) {
         current->has_connect_keyword = true;
     }
 }
+
+/*
+ * Set has_action_keyword flag on current perform action node
+ */
+void sysml2_set_action_keyword_on_current(SysmlBuildContext *ctx) {
+    if (!ctx || ctx->element_count == 0) return;
+    SysmlNode *current = ctx->elements[ctx->element_count - 1];
+    if (current) {
+        current->has_action_keyword = true;
+    }
+}

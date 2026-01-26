@@ -98,6 +98,7 @@ const char *sysml2_kind_to_json_type(SysmlNodeKind kind) {
         case SYSML_KIND_ACTOR_USAGE:       return "Actor";
         case SYSML_KIND_STAKEHOLDER_USAGE: return "Stakeholder";
         case SYSML_KIND_MESSAGE_USAGE:     return "Message";
+        case SYSML_KIND_PERFORM_ACTION_USAGE: return "PerformAction";
         case SYSML_KIND_PARAMETER:         return "Parameter";
         case SYSML_KIND_SHORTHAND_USAGE:   return "ShorthandUsage";
 
@@ -228,6 +229,7 @@ const char *sysml2_kind_to_string(SysmlNodeKind kind) {
         case SYSML_KIND_ACTOR_USAGE:       return "ActorUsage";
         case SYSML_KIND_STAKEHOLDER_USAGE: return "StakeholderUsage";
         case SYSML_KIND_MESSAGE_USAGE:     return "MessageUsage";
+        case SYSML_KIND_PERFORM_ACTION_USAGE: return "PerformActionUsage";
         case SYSML_KIND_SHORTHAND_USAGE:   return "ShorthandUsage";
 
         /* KerML Features */
@@ -359,6 +361,7 @@ const char *sysml2_kind_to_keyword(SysmlNodeKind kind) {
         case SYSML_KIND_ACTOR_USAGE:      return "actor";
         case SYSML_KIND_STAKEHOLDER_USAGE: return "stakeholder";
         case SYSML_KIND_MESSAGE_USAGE:    return "message";
+        case SYSML_KIND_PERFORM_ACTION_USAGE: return "perform";
         case SYSML_KIND_PARAMETER:        return "";  /* Bare parameter has no keyword */
         case SYSML_KIND_SHORTHAND_USAGE:  return ":>>";  /* Shorthand uses redefines */
 

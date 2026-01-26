@@ -1763,7 +1763,8 @@ DoAction <- KW_DO < (KW_ACTION UsageDeclaration ActionBody / AssignmentAction / 
 # perform action name; OR perform name;
 # perform action name { } OR perform name.feature { } OR perform name; OR perform name redefines other;
 # variation perform action doXorY { variant action doX; variant action doY; }
-PerformActionUsage <- KW_VARIATION? KW_PERFORM (KW_ACTION UsageDeclaration ActionBody / QualifiedName FeatureChain? FeatureSpecialization* ActionBody)
+PerformActionUsage <- KW_VARIATION? KW_PERFORM (KW_ACTION < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_PERFORM_ACTION_USAGE, $1, $1e - $1s); } { if (auxil->build_ctx) sysml2_set_action_keyword_on_current(auxil->build_ctx); } ActionBody { sysml2_pop(auxil); }
+                                              / < QualifiedName FeatureChain? FeatureSpecialization* > { sysml2_build_push(auxil, SYSML_KIND_PERFORM_ACTION_USAGE, $2, $2e - $2s); } ActionBody { sysml2_pop(auxil); })
 EntryTransition <- < KW_ENTRY? TransitionDeclaration TransitionBody > { if (auxil->build_ctx) sysml2_capture_entry_transition(auxil->build_ctx, $1, $1e - $1s); }
 ConstraintDefinition <- DefinitionPrefix* KW_CONSTRAINT KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_DEF, $1, $1e - $1s); } ConstraintBody { sysml2_pop(auxil); }
 ConstraintBody <- SEMICOLON / LBRACE ConstraintBodyElement* ResultExpression? { sysml2_capture_body_end_trivia(auxil); } RBRACE

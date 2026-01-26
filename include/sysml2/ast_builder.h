@@ -1255,4 +1255,11 @@ void sysml2_capture_binding_endpoints(
  */
 void sysml2_set_connect_keyword_on_current(SysmlBuildContext *ctx);
 
+/*
+ * Set has_action_keyword flag on current perform action node
+ *
+ * @param ctx Build context
+ */
+void sysml2_set_action_keyword_on_current(SysmlBuildContext *ctx);
+
 #endif /* SYSML2_AST_BUILDER_H */

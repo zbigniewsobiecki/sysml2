@@ -131,6 +131,7 @@ typedef enum {
     SYSML_KIND_ACTOR_USAGE,
     SYSML_KIND_STAKEHOLDER_USAGE,
     SYSML_KIND_MESSAGE_USAGE,
+    SYSML_KIND_PERFORM_ACTION_USAGE,  /* perform action usage */
     SYSML_KIND_PARAMETER,         /* Bare parameter (no keyword, just direction) */
     SYSML_KIND_SHORTHAND_USAGE,   /* Anonymous usage with :>> redefines (scope container) */
 
@@ -431,6 +432,7 @@ typedef struct SysmlNode {
     bool is_asserted;            /* true if 'assert' keyword was present */
     bool is_negated;             /* true if 'not' keyword was present (assert not) */
     bool has_connect_keyword;    /* true if 'connect' keyword was present in interface */
+    bool has_action_keyword;     /* true if 'action' keyword was present in perform */
 
     /* Specialized keyword for ref behavioral features (state, action, etc.) */
     const char *ref_behavioral_keyword;  /* NULL or "state", "action", etc. */
