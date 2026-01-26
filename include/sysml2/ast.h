@@ -18,9 +18,10 @@
  * for pretty-printing purposes.
  */
 typedef enum {
-    SYSML_TRIVIA_LINE_COMMENT,   /* // ... */
-    SYSML_TRIVIA_BLOCK_COMMENT,  /* block comment */
-    SYSML_TRIVIA_BLANK_LINE,     /* Preserved blank lines */
+    SYSML_TRIVIA_LINE_COMMENT,      /* // ... */
+    SYSML_TRIVIA_BLOCK_COMMENT,     /* doc block comments: slash-star-star or slash-slash-star */
+    SYSML_TRIVIA_REGULAR_COMMENT,   /* regular block comments: slash-star */
+    SYSML_TRIVIA_BLANK_LINE,        /* Preserved blank lines */
 } SysmlTriviaKind;
 
 /*
@@ -33,6 +34,7 @@ typedef struct SysmlTrivia {
     const char *text;            /* Comment content (without delimiters) */
     Sysml2SourceLoc loc;
     struct SysmlTrivia *next;    /* Linked list */
+    uint16_t count;              /* For BLANK_LINE: number of consecutive blank lines */
 } SysmlTrivia;
 
 /*

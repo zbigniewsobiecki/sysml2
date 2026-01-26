@@ -129,8 +129,21 @@ static void write_trivia(Sysml2Writer *w, SysmlTrivia *trivia) {
                 write_newline(w);
                 break;
 
-            case SYSML_TRIVIA_BLANK_LINE:
+            case SYSML_TRIVIA_REGULAR_COMMENT:
+                write_indent(w);
+                fputs("/*", w->out);
+                if (trivia->text) {
+                    fputs(trivia->text, w->out);
+                }
+                fputs("*/", w->out);
                 write_newline(w);
+                break;
+
+            case SYSML_TRIVIA_BLANK_LINE:
+                /* Output count blank lines (or 1 if count is 0) */
+                for (int i = 0; i < (trivia->count > 0 ? trivia->count : 1); i++) {
+                    write_newline(w);
+                }
                 break;
         }
         trivia = trivia->next;
@@ -152,6 +165,14 @@ static void write_trailing_trivia(Sysml2Writer *w, SysmlTrivia *trivia) {
 
             case SYSML_TRIVIA_BLOCK_COMMENT:
                 fputs("  /**", w->out);
+                if (trivia->text) {
+                    fputs(trivia->text, w->out);
+                }
+                fputs("*/", w->out);
+                break;
+
+            case SYSML_TRIVIA_REGULAR_COMMENT:
+                fputs("  /*", w->out);
                 if (trivia->text) {
                     fputs(trivia->text, w->out);
                 }
@@ -1084,7 +1105,10 @@ static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
     if (node->trailing_trivia) {
         for (SysmlTrivia *t = node->trailing_trivia; t; t = t->next) {
             if (t->kind == SYSML_TRIVIA_BLANK_LINE) {
-                write_newline(w);  /* Preserve blank line */
+                /* Output count blank lines (or 1 if count is 0) */
+                for (int i = 0; i < (t->count > 0 ? t->count : 1); i++) {
+                    write_newline(w);
+                }
             } else if (t->kind == SYSML_TRIVIA_LINE_COMMENT) {
                 write_indent(w);
                 fputs("// ", w->out);
@@ -1092,9 +1116,15 @@ static void write_body(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
                 write_newline(w);
             } else if (t->kind == SYSML_TRIVIA_BLOCK_COMMENT) {
                 write_indent(w);
-                fputs("/* ", w->out);
+                fputs("/**", w->out);
                 if (t->text) fputs(t->text, w->out);
-                fputs(" */", w->out);
+                fputs("*/", w->out);
+                write_newline(w);
+            } else if (t->kind == SYSML_TRIVIA_REGULAR_COMMENT) {
+                write_indent(w);
+                fputs("/*", w->out);
+                if (t->text) fputs(t->text, w->out);
+                fputs("*/", w->out);
                 write_newline(w);
             }
         }

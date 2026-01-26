@@ -655,6 +655,7 @@ SysmlTrivia *sysml2_build_trivia(
     trivia->text = text ? sysml2_intern(ctx->intern, text) : NULL;
     trivia->loc = loc;
     trivia->next = NULL;
+    trivia->count = 1;  /* Default to 1, callers can override for BLANK_LINE */
 
     return trivia;
 }
@@ -1147,6 +1148,53 @@ void sysml2_capture_block_comment(struct Sysml2ParserContext *pctx, size_t start
     }
 }
 
+void sysml2_capture_regular_block_comment(struct Sysml2ParserContext *pctx, size_t start_offset, size_t end_offset) {
+    if (!pctx) return;
+
+    typedef struct {
+        const char *filename;
+        const char *input;
+        size_t input_len;
+        size_t input_pos;
+        int error_count;
+        int line;
+        int col;
+        size_t furthest_pos;
+        int furthest_line;
+        int furthest_col;
+        const char *failed_rules[16];
+        int failed_rule_count;
+        const char *context_rule;
+        const char *last_keyword;
+        size_t last_keyword_pos;
+        SysmlBuildContext *build_ctx;
+    } ParserCtx;
+
+    ParserCtx *ctx = (ParserCtx *)pctx;
+    SysmlBuildContext *build_ctx = ctx->build_ctx;
+    if (!build_ctx) return;
+
+    /* Convert offsets to pointers */
+    const char *start = ctx->input + start_offset;
+    const char *end = ctx->input + end_offset;
+
+    /* Extract comment text (2 chars open + 2 chars close for slash-star comments) */
+    size_t len = end - start;
+    if (len < 4) return;  /* Must have at least 4 chars */
+
+    const char *text = start + 2;  /* Skip opening delimiter */
+    size_t text_len = len - 4;     /* Remove 4 chars total for delimiters */
+
+    /* Intern the comment text */
+    const char *interned_text = text_len > 0 ? sysml2_intern_n(build_ctx->intern, text, text_len) : NULL;
+
+    /* Create trivia node */
+    SysmlTrivia *trivia = sysml2_build_trivia(build_ctx, SYSML_TRIVIA_REGULAR_COMMENT, interned_text, SYSML2_LOC_INVALID);
+    if (trivia) {
+        sysml2_build_add_pending_trivia(build_ctx, trivia);
+    }
+}
+
 void sysml2_capture_blank_lines(struct Sysml2ParserContext *pctx, size_t start_offset, size_t end_offset) {
     if (!pctx) return;
 
@@ -1173,13 +1221,31 @@ void sysml2_capture_blank_lines(struct Sysml2ParserContext *pctx, size_t start_o
     SysmlBuildContext *build_ctx = ctx->build_ctx;
     if (!build_ctx) return;
 
-    /* Count the number of blank lines (consecutive newlines indicate blank lines) */
-    size_t len = end_offset - start_offset;
-    if (len < 2) return;  /* Need at least 2 newlines for a blank line */
+    /* Count the number of newlines (handle \r\n as single newline) */
+    const char *start = ctx->input + start_offset;
+    const char *end = ctx->input + end_offset;
+    size_t newline_count = 0;
+    for (const char *p = start; p < end; p++) {
+        if (*p == '\n') {
+            newline_count++;
+        } else if (*p == '\r') {
+            /* Count \r as newline only if not followed by \n */
+            if (p + 1 < end && *(p + 1) == '\n') {
+                /* \r\n pair - skip, the \n will be counted */
+            } else {
+                newline_count++;
+            }
+        }
+    }
+
+    /* blank_count = newline_count - 1 (first newline ends previous line, rest are blank lines) */
+    if (newline_count < 2) return;  /* Need at least 2 newlines for 1 blank line */
+    uint16_t blank_count = (uint16_t)(newline_count - 1);
 
     /* Create trivia node - text is NULL for blank lines */
     SysmlTrivia *trivia = sysml2_build_trivia(build_ctx, SYSML_TRIVIA_BLANK_LINE, NULL, SYSML2_LOC_INVALID);
     if (trivia) {
+        trivia->count = blank_count;
         sysml2_build_add_pending_trivia(build_ctx, trivia);
     }
 }

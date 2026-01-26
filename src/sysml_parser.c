@@ -17,6 +17,7 @@
 /* Forward declarations for trivia capture functions (use size_t offsets) */
 void sysml2_capture_line_comment(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
 void sysml2_capture_block_comment(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
+void sysml2_capture_regular_block_comment(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
 void sysml2_capture_blank_lines(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
 void sysml2_capture_documentation(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
 
