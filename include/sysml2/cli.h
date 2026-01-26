@@ -47,6 +47,7 @@ typedef struct {
     size_t delete_pattern_capacity;
 
     bool create_scope;              /* --create-scope flag */
+    bool replace_scope;             /* --replace-scope flag: clear scope before inserting */
     bool dry_run;                   /* --dry-run flag */
 
     /* Diagnostics */

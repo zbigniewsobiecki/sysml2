@@ -433,7 +433,7 @@ TEST(merge_into_existing_scope) {
     /* Merge into Pkg */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -466,7 +466,7 @@ TEST(merge_replaces_existing) {
     /* Merge into Pkg (should replace Pkg::A) */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -500,7 +500,7 @@ TEST(merge_with_create_scope) {
     /* Merge into non-existent A::B scope with create_scope=true */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        &base, fragment, "A::B", true, &arena, &intern, &added, &replaced
+        &base, fragment, "A::B", true, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -528,7 +528,7 @@ TEST(merge_without_create_scope_fails) {
     /* Merge into non-existent scope with create_scope=false */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        &base, fragment, "NonExistent", false, &arena, &intern, &added, &replaced
+        &base, fragment, "NonExistent", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NULL(result);  /* Should fail */
@@ -558,7 +558,7 @@ TEST(merge_remaps_relationships) {
     /* Merge into Pkg */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -786,7 +786,7 @@ TEST(merge_empty_fragment) {
     /* Merge empty fragment */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, &fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, &fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     /* Empty fragment merge should succeed but add nothing */
@@ -821,7 +821,7 @@ TEST(merge_remap_deep_nesting) {
     /* Merge into A::B */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "A::B", false, &arena, &intern, &added, &replaced
+        base, fragment, "A::B", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -854,7 +854,7 @@ TEST(merge_preserves_element_properties) {
     /* Merge */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -892,7 +892,7 @@ TEST(merge_relationship_remap_both_endpoints) {
     /* Merge into Pkg */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -927,7 +927,7 @@ TEST(merge_import_source_remapped) {
     /* Merge into Pkg */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -1185,7 +1185,7 @@ TEST(merge_no_metadata_accumulation) {
     /* Merge into Pkg */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -1250,7 +1250,7 @@ TEST(merge_preserves_sibling_metadata) {
     /* Merge into Pkg */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -1299,7 +1299,7 @@ TEST(merge_clears_body_metadata) {
     /* Merge into Pkg */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -1348,7 +1348,7 @@ TEST(merge_clears_trailing_trivia) {
     /* Merge into Pkg */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -1397,7 +1397,7 @@ TEST(merge_clears_leading_trivia) {
     /* Merge into Pkg */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -1446,7 +1446,7 @@ TEST(merge_preserves_scope_metadata_when_fragment_has_none) {
     /* Merge into Pkg */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -1501,7 +1501,7 @@ TEST(merge_preserves_replaced_element_metadata) {
     /* Merge into Pkg */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -1551,7 +1551,7 @@ TEST(merge_repeated_upserts_no_accumulation) {
 
         size_t added = 0, replaced = 0;
         model = sysml2_modify_merge_fragment(
-            model, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+            model, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
         );
         ASSERT_NOT_NULL(model);
     }
@@ -1602,7 +1602,7 @@ TEST(upsert_comment_stability) {
     for (int round = 0; round < 3; round++) {
         size_t added = 0, replaced = 0;
         model = sysml2_modify_merge_fragment(
-            model, fragment, "TestPkg", false, &arena, &intern, &added, &replaced
+            model, fragment, "TestPkg", false, false, &arena, &intern, &added, &replaced
         );
         ASSERT_NOT_NULL(model);
     }
@@ -1671,7 +1671,7 @@ TEST(upsert_trailing_comment_no_duplication) {
     for (int round = 0; round < 3; round++) {
         size_t added = 0, replaced = 0;
         model = sysml2_modify_merge_fragment(
-            model, fragment, "TestPkg", false, &arena, &intern, &added, &replaced
+            model, fragment, "TestPkg", false, false, &arena, &intern, &added, &replaced
         );
         ASSERT_NOT_NULL(model);
     }
@@ -1732,7 +1732,7 @@ TEST(upsert_body_comment_stability) {
     for (int round = 0; round < 3; round++) {
         size_t added = 0, replaced = 0;
         model = sysml2_modify_merge_fragment(
-            model, fragment, "TestPkg", false, &arena, &intern, &added, &replaced
+            model, fragment, "TestPkg", false, false, &arena, &intern, &added, &replaced
         );
         ASSERT_NOT_NULL(model);
     }
@@ -1803,7 +1803,7 @@ TEST(merge_preserves_children_of_replaced_parent) {
     /* Merge into Pkg */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -1866,7 +1866,7 @@ TEST(merge_replaces_matching_children) {
     /* Merge into Pkg */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -1914,7 +1914,7 @@ TEST(auto_unwrap_single_matching_package) {
     /* Merge into Foo - should auto-unwrap */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Foo", false, &arena, &intern, &added, &replaced
+        base, fragment, "Foo", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -1963,7 +1963,7 @@ TEST(auto_unwrap_preserves_nested_elements) {
     /* Merge into Foo - should auto-unwrap */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Foo", false, &arena, &intern, &added, &replaced
+        base, fragment, "Foo", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -2007,7 +2007,7 @@ TEST(auto_unwrap_no_unwrap_multiple_top_level) {
     /* Merge into Foo - should NOT auto-unwrap (multiple top-level) */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Foo", false, &arena, &intern, &added, &replaced
+        base, fragment, "Foo", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -2049,7 +2049,7 @@ TEST(auto_unwrap_no_unwrap_different_name) {
     /* Merge into Foo - should NOT auto-unwrap (different names) */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Foo", false, &arena, &intern, &added, &replaced
+        base, fragment, "Foo", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -2102,7 +2102,7 @@ TEST(auto_unwrap_nested_target_scope) {
     /* Merge into A::B::Foo - should auto-unwrap based on local name "Foo" */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "A::B::Foo", false, &arena, &intern, &added, &replaced
+        base, fragment, "A::B::Foo", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -2163,7 +2163,7 @@ TEST(auto_unwrap_strips_import_owner_scopes) {
     /* Merge into Foo - should auto-unwrap and fix import owner_scope */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Foo", false, &arena, &intern, &added, &replaced
+        base, fragment, "Foo", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -2228,7 +2228,7 @@ TEST(merge_preserves_replaced_element_body_stmts) {
     /* Merge into Pkg */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -2289,7 +2289,7 @@ TEST(merge_preserves_replaced_element_doc) {
     /* Merge into Pkg */
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, fragment, "Pkg", false, &arena, &intern, &added, &replaced
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
     );
 
     ASSERT_NOT_NULL(result);
@@ -2327,7 +2327,7 @@ TEST(merge_preserves_states_before_transitions) {
 
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, frag, "StateMachines", false, &arena, &intern, &added, &replaced
+        base, frag, "StateMachines", false, false, &arena, &intern, &added, &replaced
     );
     ASSERT_NOT_NULL(result);
 
@@ -2371,7 +2371,7 @@ TEST(merge_deduplicates_imports_after_unwrap) {
 
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, frag, "TestMappings", false, &arena, &intern, &added, &replaced
+        base, frag, "TestMappings", false, false, &arena, &intern, &added, &replaced
     );
     ASSERT_NOT_NULL(result);
 
@@ -2409,7 +2409,7 @@ TEST(merge_preserves_wrapper_documentation) {
 
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, frag, "MyPkg", false, &arena, &intern, &added, &replaced
+        base, frag, "MyPkg", false, false, &arena, &intern, &added, &replaced
     );
     ASSERT_NOT_NULL(result);
 
@@ -2477,7 +2477,7 @@ TEST(merge_new_packages_append_at_end) {
 
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base, frag, "Root", false, &arena, &intern, &added, &replaced
+        base, frag, "Root", false, false, &arena, &intern, &added, &replaced
     );
     ASSERT_NOT_NULL(result);
 
@@ -2845,7 +2845,7 @@ TEST(merge_preserves_element_order) {
 
     size_t added = 0, replaced = 0;
     SysmlSemanticModel *result = sysml2_modify_merge_fragment(
-        base_model, frag_model, "Container", true, &result_arena, &result_intern, &added, &replaced);
+        base_model, frag_model, "Container", true, false, &result_arena, &result_intern, &added, &replaced);
     ASSERT_NOT_NULL(result);
 
     char *output = NULL;

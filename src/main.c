@@ -100,13 +100,14 @@ static const struct option long_options[] = {
     {"at",           required_argument, 0, 'a'},
     {"delete",       required_argument, 0, 'd'},
     {"create-scope", no_argument,       0, 'C'},
+    {"replace-scope", no_argument,      0, 'r'},
     {"dry-run",      no_argument,       0, 'D'},
     {"help",         no_argument,       0, 'h'},
     {"version",      no_argument,       0, 'V'},
     {0, 0, 0, 0}
 };
 
-static const char *short_options = "o:f:s:W:I:S:a:d:hVvTAPFRCD";
+static const char *short_options = "o:f:s:W:I:S:a:d:hVvTAPFRCDr";
 
 /* Parse color mode from string */
 static Sysml2ColorMode parse_color_mode(const char *arg) {
@@ -265,6 +266,10 @@ Sysml2Result sysml2_cli_parse(Sysml2CliOptions *options, int argc, char **argv) 
                 options->create_scope = true;
                 break;
 
+            case 'r':
+                options->replace_scope = true;
+                break;
+
             case 'D':
                 options->dry_run = true;
                 break;
@@ -346,6 +351,7 @@ void sysml2_cli_print_help(FILE *output) {
         "  --set <file> --at <scope>  Insert elements from file into scope\n"
         "  --delete <pattern>         Delete elements matching pattern (repeatable)\n"
         "  --create-scope             Create target scope if it doesn't exist\n"
+        "  --replace-scope            Clear target scope before inserting (preserves order)\n"
         "  --dry-run                  Preview changes without writing files\n"
         "\n"
         "Query/Delete patterns:\n"
@@ -942,6 +948,7 @@ static int run_modify_mode(
             fragment,
             target_scope,
             options->create_scope,
+            options->replace_scope,
             arena,
             intern,
             &added_count,

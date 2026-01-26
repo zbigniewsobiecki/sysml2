@@ -951,6 +951,7 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
     const SysmlSemanticModel *fragment,
     const char *target_scope,
     bool create_scope,
+    bool replace_scope,
     Sysml2Arena *arena,
     Sysml2Intern *intern,
     size_t *out_added_count,
@@ -1131,6 +1132,33 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
     size_t remove_count = 0;
     size_t remove_capacity = 0;
 
+    /* Step 1.5: If replace_scope is set, mark ALL direct children for removal.
+     * This clears the scope so fragment elements preserve their order.
+     * The target scope itself is NOT removed, only its direct children.
+     * Also cascade to grandchildren by adding to cascade tracking.
+     */
+    const char **replace_scope_removed = NULL;
+    size_t replace_scope_count = 0;
+    size_t replace_scope_capacity = 0;
+
+    if (replace_scope) {
+        for (size_t i = 0; i < working_base->element_count; i++) {
+            SysmlNode *node = working_base->elements[i];
+            if (!node || !node->id || !node->parent_id) continue;
+
+            /* Mark direct children of target scope for removal */
+            if (strcmp(node->parent_id, target_scope) == 0) {
+                add_to_id_set(node->id, &ids_to_remove, &remove_count, &remove_capacity, arena);
+                add_to_id_set(node->id, &replace_scope_removed, &replace_scope_count, &replace_scope_capacity, arena);
+            }
+        }
+
+        if (getenv("SYSML2_DEBUG_MODIFY")) {
+            fprintf(stderr, "DEBUG: replace_scope=true, marked %zu direct children for removal\n",
+                    replace_scope_count);
+        }
+    }
+
     /* Step 2a: Only remove elements that are being REPLACED (matched by ID).
      *
      * Children of replaced elements are preserved unless they are also being
@@ -1199,10 +1227,11 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
         }
     }
 
-    /* Step 2c: Cascade deletion only from explicitly matched children (not replaced parents).
+    /* Step 2c: Cascade deletion from explicitly matched children and replace_scope elements.
      *
      * Replaced parents preserve their children (unless also matched by name).
      * Only children that are being replaced should cascade to their descendants.
+     * When replace_scope is used, ALL descendants of removed elements are also removed.
      */
     bool changed = true;
     while (changed) {
@@ -1212,10 +1241,16 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
             if (!node || !node->id) continue;
             if (id_in_set(node->id, ids_to_remove, remove_count)) continue;
 
-            /* Only cascade from children_to_remove, not from replaced_ids */
+            /* Cascade from children_to_remove (matched by name) */
             if (node->parent_id && id_in_set(node->parent_id, children_to_remove, children_remove_count)) {
                 add_to_id_set(node->id, &ids_to_remove, &remove_count, &remove_capacity, arena);
                 add_to_id_set(node->id, &children_to_remove, &children_remove_count, &children_remove_capacity, arena);
+                changed = true;
+            }
+            /* Also cascade from replace_scope removed elements */
+            else if (node->parent_id && id_in_set(node->parent_id, replace_scope_removed, replace_scope_count)) {
+                add_to_id_set(node->id, &ids_to_remove, &remove_count, &remove_capacity, arena);
+                add_to_id_set(node->id, &replace_scope_removed, &replace_scope_count, &replace_scope_capacity, arena);
                 changed = true;
             }
         }

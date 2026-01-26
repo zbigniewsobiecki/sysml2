@@ -149,6 +149,7 @@ SysmlSemanticModel *sysml2_modify_clone_with_deletions(
  *
  * This is the core set algorithm:
  * 1. Validate target scope exists (or create if --create-scope)
+ * 1.5. If replace_scope, mark all direct children for removal (clears scope)
  * 2. Remap fragment element IDs to target scope
  * 3. Replace existing elements with same IDs
  * 4. Add new elements
@@ -158,6 +159,7 @@ SysmlSemanticModel *sysml2_modify_clone_with_deletions(
  * @param fragment Fragment to merge
  * @param target_scope Target scope for insertion
  * @param create_scope Create scope chain if doesn't exist
+ * @param replace_scope Clear target scope before inserting (preserves fragment order)
  * @param arena Memory arena for new model
  * @param intern String intern table
  * @param out_added_count Output: number of elements added
@@ -169,6 +171,7 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
     const SysmlSemanticModel *fragment,
     const char *target_scope,
     bool create_scope,
+    bool replace_scope,
     Sysml2Arena *arena,
     Sysml2Intern *intern,
     size_t *out_added_count,
