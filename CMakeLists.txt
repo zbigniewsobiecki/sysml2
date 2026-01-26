@@ -269,6 +269,12 @@ add_test(NAME cli_exit_codes
         $<TARGET_FILE:sysml2>
 )
 
+# Package discovery tests - verifies that imports work when filename != package name
+add_test(NAME cli_package_discovery
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_package_discovery.sh
+        $<TARGET_FILE:sysml2>
+)
+
 # Ensure tests run without external library path pollution
 get_property(all_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${all_tests} PROPERTIES

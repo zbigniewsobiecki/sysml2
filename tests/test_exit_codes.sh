@@ -10,7 +10,10 @@
 set -e
 
 SYSML2="$1"
-TMPDIR="${TMPDIR:-/tmp}"
+BASETMPDIR="${TMPDIR:-/tmp}"
+# Use an isolated subdirectory to avoid scanning unrelated files in /tmp
+TMPDIR="$BASETMPDIR/sysml2-exit-tests-$$"
+mkdir -p "$TMPDIR"
 PASSED=0
 FAILED=0
 
@@ -69,7 +72,7 @@ VALID_FILE="$TMPDIR/sysml2_test_valid_$$.sysml"
 FRAGMENT_FILE="$TMPDIR/sysml2_test_fragment_$$.sysml"
 
 cleanup() {
-    rm -f "$PARSE_ERROR_FILE" "$SEMANTIC_ERROR_FILE" "$VALID_FILE" "$FRAGMENT_FILE"
+    rm -rf "$TMPDIR"
 }
 trap cleanup EXIT
 

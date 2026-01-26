@@ -21,20 +21,30 @@
  * Validation Options - controls which checks are performed
  */
 typedef struct {
-    bool check_undefined_types;    /* E3001 - default: true */
-    bool check_duplicate_names;    /* E3004 - default: true */
-    bool check_circular_specs;     /* E3005 - default: true */
-    bool check_type_compatibility; /* E3006 - default: true */
-    bool suggest_corrections;      /* "did you mean?" hints */
-    size_t max_suggestions;        /* default: 3 */
+    bool check_undefined_types;        /* E3001 - default: true */
+    bool check_undefined_features;     /* E3002 - default: true */
+    bool check_undefined_namespaces;   /* E3003 - default: true */
+    bool check_duplicate_names;        /* E3004 - default: true */
+    bool check_circular_specs;         /* E3005 - default: true */
+    bool check_type_compatibility;     /* E3006 - default: true */
+    bool check_multiplicity;           /* E3007 - default: true */
+    bool check_redefinition_compat;    /* E3008 - default: true */
+    bool warn_abstract_instantiation;  /* default: true */
+    bool suggest_corrections;          /* "did you mean?" hints */
+    size_t max_suggestions;            /* default: 3 */
 } Sysml2ValidationOptions;
 
 /* Default validation options (all checks enabled) */
 #define SYSML_VALIDATION_OPTIONS_DEFAULT ((Sysml2ValidationOptions){ \
     .check_undefined_types = true, \
+    .check_undefined_features = true, \
+    .check_undefined_namespaces = true, \
     .check_duplicate_names = true, \
     .check_circular_specs = true, \
     .check_type_compatibility = true, \
+    .check_multiplicity = true, \
+    .check_redefinition_compat = true, \
+    .warn_abstract_instantiation = true, \
     .suggest_corrections = true, \
     .max_suggestions = 3 \
 })
@@ -53,9 +63,14 @@ bool sysml2_is_type_compatible(SysmlNodeKind usage_kind, SysmlNodeKind def_kind)
  *
  * Performs the following checks based on options:
  * - E3001: Undefined type references
+ * - E3002: Undefined feature in redefines
+ * - E3003: Undefined namespace in imports
  * - E3004: Duplicate names in same scope
  * - E3005: Circular specializations
  * - E3006: Type compatibility mismatches
+ * - E3007: Multiplicity errors (invalid bounds)
+ * - E3008: Redefinition compatibility errors
+ * - Abstract instantiation warnings
  *
  * @param model Parsed semantic model
  * @param diag_ctx Diagnostic context for error reporting

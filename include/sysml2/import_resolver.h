@@ -29,6 +29,19 @@ typedef struct Sysml2FileCache {
 } Sysml2FileCache;
 
 /*
+ * Package map entry - maps package name to file path
+ *
+ * Used for automatic package discovery: when importing "SystemBehavior::*",
+ * the resolver can find the file even if it's named "_index.sysml" in a
+ * "behavior/" subdirectory.
+ */
+typedef struct Sysml2PackageEntry {
+    const char *package_name;        /* Package name (interned, not owned) */
+    char *file_path;                 /* Full path to file (owned) */
+    struct Sysml2PackageEntry *next; /* Next entry in bucket chain */
+} Sysml2PackageEntry;
+
+/*
  * Import Resolver - manages library paths, file caching, and cycle detection
  */
 struct Sysml2ImportResolver {
@@ -39,6 +52,11 @@ struct Sysml2ImportResolver {
 
     /* File cache */
     Sysml2FileCache *cache;           /* Linked list of parsed files */
+
+    /* Package map - maps package names to files */
+    Sysml2PackageEntry **package_map; /* Hash table of package->file mappings */
+    size_t package_map_capacity;      /* Number of hash buckets */
+    size_t package_map_count;         /* Number of entries */
 
     /* Cycle detection */
     char **resolution_stack;         /* Stack of files being resolved (owned) */
@@ -164,6 +182,28 @@ SysmlSemanticModel **sysml2_resolver_get_all_models(
  */
 Sysml2Result sysml2_resolver_preload_libraries(
     Sysml2ImportResolver *resolver,
+    Sysml2DiagContext *diag
+);
+
+/*
+ * Discover packages in a directory for import resolution
+ *
+ * Scans a directory to build a package name -> file path mapping.
+ * This allows imports to find packages even when the filename doesn't
+ * match the package name (e.g., package SystemBehavior in _index.sysml).
+ *
+ * Unlike preload_libraries, this does NOT cache models for validation.
+ * Files are only parsed to extract package names; they will be fully
+ * cached when actually imported.
+ *
+ * @param resolver Import resolver
+ * @param dir_path Directory to scan
+ * @param diag Diagnostic context for parse errors
+ * @return SYSML2_OK on success
+ */
+Sysml2Result sysml2_resolver_discover_packages(
+    Sysml2ImportResolver *resolver,
+    const char *dir_path,
     Sysml2DiagContext *diag
 );
 

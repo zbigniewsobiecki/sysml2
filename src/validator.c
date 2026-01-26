@@ -9,8 +9,73 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>
+#include <errno.h>
+#include <stdint.h>
 
 /* Symbol table implementation is now in symtab.c */
+
+/* ========== Multiplicity Parsing ========== */
+
+/*
+ * Parsed multiplicity bounds
+ */
+typedef struct {
+    int64_t lower;      /* -1 for invalid */
+    int64_t upper;      /* INT64_MAX for "*" */
+    bool valid;
+} ParsedMultiplicity;
+
+/*
+ * Parse a single multiplicity bound string
+ * Returns -1 for invalid, INT64_MAX for "*"
+ */
+static int64_t parse_mult_bound(const char *s) {
+    if (!s || !*s) return -1;
+
+    /* Handle "*" as unbounded */
+    if (strcmp(s, "*") == 0) return INT64_MAX;
+
+    /* Parse as integer */
+    char *endptr;
+    errno = 0;
+    long long val = strtoll(s, &endptr, 10);
+
+    /* Check for parse errors */
+    if (errno != 0 || endptr == s || *endptr != '\0') {
+        return -1;
+    }
+
+    /* Check for negative values */
+    if (val < 0) {
+        return -1;
+    }
+
+    return (int64_t)val;
+}
+
+/*
+ * Parse multiplicity from lower and upper bound strings
+ */
+static ParsedMultiplicity parse_multiplicity(const char *lower, const char *upper) {
+    ParsedMultiplicity result = { .lower = -1, .upper = -1, .valid = false };
+
+    if (!lower) return result;
+
+    result.lower = parse_mult_bound(lower);
+    if (result.lower < 0) return result;
+
+    /* If no upper bound, it's the same as lower (e.g., [5] means [5..5]) */
+    if (!upper || !*upper) {
+        result.upper = result.lower;
+    } else {
+        result.upper = parse_mult_bound(upper);
+        if (result.upper < 0) return result;
+    }
+
+    result.valid = true;
+    return result;
+}
 
 /* ========== Type Compatibility ========== */
 
@@ -224,6 +289,22 @@ static void pass1_build_symtab(
         /* Also create scope for this element if it can contain children */
         if (SYSML_KIND_IS_PACKAGE(node->kind) || SYSML_KIND_IS_DEFINITION(node->kind)) {
             sysml2_symtab_get_or_create_scope(vctx->symtab, node->id);
+        }
+    }
+
+    /* Add implicit imports from standard library packages to root scope */
+    for (size_t i = 0; i < model->element_count; i++) {
+        SysmlNode *node = model->elements[i];
+        if (node->kind == SYSML_KIND_LIBRARY_PACKAGE && node->id) {
+            /* Add implicit import entry to root scope */
+            Sysml2Scope *root = vctx->symtab->root_scope;
+            Sysml2ImportEntry *entry = sysml2_arena_alloc(vctx->symtab->arena, sizeof(Sysml2ImportEntry));
+            if (entry) {
+                entry->target = node->id;
+                entry->import_kind = SYSML_KIND_IMPORT_ALL;
+                entry->next = root->imports;
+                root->imports = entry;
+            }
         }
     }
 
@@ -535,6 +616,547 @@ static void pass3_detect_cycles(
     }
 }
 
+/* ========== Pass 4: Validate Multiplicities (E3007) ========== */
+
+static void pass4_validate_multiplicities(
+    ValidationContext *vctx,
+    const SysmlSemanticModel *model
+) {
+    for (size_t i = 0; i < model->element_count; i++) {
+        SysmlNode *node = model->elements[i];
+        if (!node->multiplicity_lower) continue;
+
+        ParsedMultiplicity m = parse_multiplicity(
+            node->multiplicity_lower,
+            node->multiplicity_upper
+        );
+
+        Sysml2SourceRange range = SYSML2_RANGE_INVALID;
+        range.start = node->loc;
+        range.end = node->loc;
+
+        if (!m.valid) {
+            /* E3007: invalid multiplicity format */
+            char msg[256];
+            if (node->multiplicity_upper) {
+                snprintf(msg, sizeof(msg),
+                    "invalid multiplicity bounds [%s..%s]",
+                    node->multiplicity_lower, node->multiplicity_upper);
+            } else {
+                snprintf(msg, sizeof(msg),
+                    "invalid multiplicity bound [%s]",
+                    node->multiplicity_lower);
+            }
+
+            Sysml2Diagnostic *diag = sysml2_diag_create(
+                vctx->diag_ctx,
+                SYSML2_DIAG_E3007_MULTIPLICITY_ERROR,
+                SYSML2_SEVERITY_ERROR,
+                vctx->source_file,
+                range,
+                sysml2_intern(vctx->symtab->intern, msg)
+            );
+            sysml2_diag_emit(vctx->diag_ctx, diag);
+            vctx->has_errors = true;
+        } else if (m.upper != INT64_MAX && m.lower > m.upper) {
+            /* E3007: lower bound exceeds upper bound */
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                "multiplicity lower bound (%s) exceeds upper bound (%s)",
+                node->multiplicity_lower, node->multiplicity_upper);
+
+            Sysml2Diagnostic *diag = sysml2_diag_create(
+                vctx->diag_ctx,
+                SYSML2_DIAG_E3007_MULTIPLICITY_ERROR,
+                SYSML2_SEVERITY_ERROR,
+                vctx->source_file,
+                range,
+                sysml2_intern(vctx->symtab->intern, msg)
+            );
+
+            char help_msg[128];
+            snprintf(help_msg, sizeof(help_msg),
+                "swap the bounds: [%s..%s]",
+                node->multiplicity_upper, node->multiplicity_lower);
+            sysml2_diag_add_help(diag, vctx->diag_ctx,
+                sysml2_intern(vctx->symtab->intern, help_msg));
+
+            sysml2_diag_emit(vctx->diag_ctx, diag);
+            vctx->has_errors = true;
+        }
+    }
+}
+
+/* ========== Pass 5: Validate Redefines (E3002, E3008) ========== */
+
+/*
+ * Find a feature in a type's direct members
+ */
+static SysmlNode *find_feature_in_scope(
+    ValidationContext *vctx,
+    const char *scope_id,
+    const char *feature_name
+) {
+    if (!scope_id || !feature_name) return NULL;
+
+    Sysml2Scope *scope = sysml2_symtab_get_or_create_scope(vctx->symtab, scope_id);
+    Sysml2Symbol *sym = sysml2_symtab_lookup(scope, feature_name);
+    if (sym && sym->node) {
+        return sym->node;
+    }
+    return NULL;
+}
+
+/*
+ * Find a feature in a type's inheritance chain (typed_by + specializes)
+ * Returns the feature node if found, NULL otherwise.
+ *
+ * @param skip_self If true, don't check direct features of type_node (for redefines)
+ */
+static SysmlNode *find_inherited_feature(
+    ValidationContext *vctx,
+    SysmlNode *type_node,
+    const char *feature_name,
+    int depth,
+    bool skip_self
+) {
+    if (!type_node || !feature_name || depth > 20) return NULL;
+
+    /* Check direct features of this type (unless skip_self) */
+    if (!skip_self) {
+        SysmlNode *found = find_feature_in_scope(vctx, type_node->id, feature_name);
+        if (found) return found;
+    }
+
+    /* Check base types (typed_by) */
+    Sysml2Scope *type_scope = sysml2_symtab_get_or_create_scope(
+        vctx->symtab, type_node->parent_id);
+
+    for (size_t i = 0; i < type_node->typed_by_count; i++) {
+        Sysml2Symbol *base_sym = sysml2_symtab_resolve(
+            vctx->symtab, type_scope, type_node->typed_by[i]);
+        if (base_sym && base_sym->node) {
+            SysmlNode *found = find_inherited_feature(vctx, base_sym->node, feature_name, depth + 1, false);
+            if (found) return found;
+        }
+    }
+
+    /* Check specialized types */
+    for (size_t i = 0; i < type_node->specializes_count; i++) {
+        Sysml2Symbol *base_sym = sysml2_symtab_resolve(
+            vctx->symtab, type_scope, type_node->specializes[i]);
+        if (base_sym && base_sym->node) {
+            SysmlNode *found = find_inherited_feature(vctx, base_sym->node, feature_name, depth + 1, false);
+            if (found) return found;
+        }
+    }
+
+    return NULL;
+}
+
+/*
+ * Get the parent type node for an element (for redefines context)
+ */
+static SysmlNode *get_parent_type_node(
+    ValidationContext *vctx,
+    SysmlNode *node
+) {
+    if (!node || !node->parent_id) return NULL;
+
+    /* Look up the parent in the symbol table */
+    Sysml2Scope *parent_scope = sysml2_symtab_get_or_create_scope(
+        vctx->symtab, node->parent_id);
+
+    /* The parent scope ID is the parent's qualified ID */
+    /* Find the symbol for that ID in the parent's parent scope */
+    const char *last_sep = strrchr(node->parent_id, ':');
+    const char *parent_name = last_sep ? (last_sep + 1) : node->parent_id;
+
+    /* Skip second colon if present (::) */
+    while (*parent_name == ':') parent_name++;
+
+    Sysml2Symbol *parent_sym = sysml2_symtab_lookup(parent_scope->parent, parent_name);
+    if (parent_sym && parent_sym->node) {
+        return parent_sym->node;
+    }
+
+    /* Alternative: look up by qualified ID directly */
+    Sysml2Symbol *direct_sym = sysml2_symtab_resolve(
+        vctx->symtab, vctx->symtab->root_scope, node->parent_id);
+    if (direct_sym && direct_sym->node) {
+        return direct_sym->node;
+    }
+
+    return NULL;
+}
+
+/*
+ * Check if new_type specializes or is the same as orig_type
+ */
+static bool is_subtype_of(
+    ValidationContext *vctx,
+    const char *new_type,
+    const char *orig_type,
+    Sysml2Scope *scope,
+    int depth
+) {
+    if (!new_type || !orig_type || depth > 20) return false;
+
+    /* Same type is valid */
+    if (strcmp(new_type, orig_type) == 0) return true;
+
+    /* Resolve new_type and check its base types */
+    Sysml2Symbol *new_sym = sysml2_symtab_resolve(vctx->symtab, scope, new_type);
+    if (!new_sym || !new_sym->node) return false;
+
+    SysmlNode *new_node = new_sym->node;
+    Sysml2Scope *new_scope = sysml2_symtab_get_or_create_scope(
+        vctx->symtab, new_node->parent_id);
+
+    /* Check typed_by */
+    for (size_t i = 0; i < new_node->typed_by_count; i++) {
+        if (is_subtype_of(vctx, new_node->typed_by[i], orig_type, new_scope, depth + 1)) {
+            return true;
+        }
+    }
+
+    /* Check specializes */
+    for (size_t i = 0; i < new_node->specializes_count; i++) {
+        if (is_subtype_of(vctx, new_node->specializes[i], orig_type, new_scope, depth + 1)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/*
+ * Check if new multiplicity is a valid narrowing of original
+ * (new_lower >= orig_lower AND new_upper <= orig_upper)
+ */
+static bool is_valid_multiplicity_narrowing(
+    ParsedMultiplicity orig,
+    ParsedMultiplicity new_mult
+) {
+    if (!orig.valid || !new_mult.valid) return true; /* Skip if invalid */
+
+    /* new_lower must be >= orig_lower */
+    if (new_mult.lower < orig.lower) return false;
+
+    /* new_upper must be <= orig_upper (unless orig is unbounded) */
+    if (orig.upper != INT64_MAX && new_mult.upper > orig.upper) return false;
+
+    return true;
+}
+
+static void pass5_validate_redefines(
+    ValidationContext *vctx,
+    const SysmlSemanticModel *model
+) {
+    for (size_t i = 0; i < model->element_count; i++) {
+        SysmlNode *node = model->elements[i];
+        if (node->redefines_count == 0) continue;
+
+        /* Get the parent type for context */
+        SysmlNode *parent_type = get_parent_type_node(vctx, node);
+
+        Sysml2Scope *scope = sysml2_symtab_get_or_create_scope(
+            vctx->symtab, node->parent_id);
+
+        for (size_t j = 0; j < node->redefines_count; j++) {
+            const char *ref = node->redefines[j];
+            SysmlNode *orig_feature = NULL;
+
+            /* If simple name, must exist in parent type hierarchy */
+            if (!strchr(ref, ':')) {
+                if (parent_type) {
+                    /* Skip self (B) and look only in inherited types (A, etc.) */
+                    orig_feature = find_inherited_feature(vctx, parent_type, ref, 0, true);
+                }
+
+                if (!orig_feature && vctx->options->check_undefined_features) {
+                    /* E3002: feature not found in parent type */
+                    char msg[256];
+                    snprintf(msg, sizeof(msg),
+                        "feature '%s' not found in parent type%s%s",
+                        ref,
+                        parent_type && parent_type->name ? " '" : "",
+                        parent_type && parent_type->name ? parent_type->name : "");
+                    if (parent_type && parent_type->name) {
+                        strcat(msg, "'");
+                    }
+
+                    Sysml2SourceRange range = SYSML2_RANGE_INVALID;
+                    range.start = node->loc;
+                    range.end = node->loc;
+
+                    Sysml2Diagnostic *diag = sysml2_diag_create(
+                        vctx->diag_ctx,
+                        SYSML2_DIAG_E3002_UNDEFINED_FEATURE,
+                        SYSML2_SEVERITY_ERROR,
+                        vctx->source_file,
+                        range,
+                        sysml2_intern(vctx->symtab->intern, msg)
+                    );
+                    sysml2_diag_emit(vctx->diag_ctx, diag);
+                    vctx->has_errors = true;
+                    continue;
+                }
+            } else {
+                /* Qualified name - resolve it */
+                Sysml2Symbol *ref_sym = sysml2_symtab_resolve(vctx->symtab, scope, ref);
+                if (ref_sym && ref_sym->node) {
+                    orig_feature = ref_sym->node;
+                } else if (vctx->options->check_undefined_features) {
+                    /* E3002: qualified feature not found */
+                    char msg[256];
+                    snprintf(msg, sizeof(msg), "undefined feature '%s'", ref);
+
+                    Sysml2SourceRange range = SYSML2_RANGE_INVALID;
+                    range.start = node->loc;
+                    range.end = node->loc;
+
+                    Sysml2Diagnostic *diag = sysml2_diag_create(
+                        vctx->diag_ctx,
+                        SYSML2_DIAG_E3002_UNDEFINED_FEATURE,
+                        SYSML2_SEVERITY_ERROR,
+                        vctx->source_file,
+                        range,
+                        sysml2_intern(vctx->symtab->intern, msg)
+                    );
+                    sysml2_diag_emit(vctx->diag_ctx, diag);
+                    vctx->has_errors = true;
+                    continue;
+                }
+            }
+
+            /* E3008: Check redefinition compatibility */
+            if (orig_feature && vctx->options->check_redefinition_compat) {
+                /* Check type narrowing if redefining node has a type */
+                if (node->typed_by_count > 0 && orig_feature->typed_by_count > 0) {
+                    const char *new_type = node->typed_by[0];
+                    const char *orig_type = orig_feature->typed_by[0];
+
+                    if (!is_subtype_of(vctx, new_type, orig_type, scope, 0)) {
+                        char msg[256];
+                        snprintf(msg, sizeof(msg),
+                            "redefinition type '%s' is not a subtype of '%s'",
+                            new_type, orig_type);
+
+                        Sysml2SourceRange range = SYSML2_RANGE_INVALID;
+                        range.start = node->loc;
+                        range.end = node->loc;
+
+                        Sysml2Diagnostic *diag = sysml2_diag_create(
+                            vctx->diag_ctx,
+                            SYSML2_DIAG_E3008_REDEFINITION_ERROR,
+                            SYSML2_SEVERITY_ERROR,
+                            vctx->source_file,
+                            range,
+                            sysml2_intern(vctx->symtab->intern, msg)
+                        );
+
+                        char help_msg[256];
+                        snprintf(help_msg, sizeof(help_msg),
+                            "redefinition must use same type or a subtype of '%s'",
+                            orig_type);
+                        sysml2_diag_add_help(diag, vctx->diag_ctx,
+                            sysml2_intern(vctx->symtab->intern, help_msg));
+
+                        sysml2_diag_emit(vctx->diag_ctx, diag);
+                        vctx->has_errors = true;
+                    }
+                }
+
+                /* Check multiplicity narrowing */
+                if (node->multiplicity_lower && orig_feature->multiplicity_lower) {
+                    ParsedMultiplicity new_mult = parse_multiplicity(
+                        node->multiplicity_lower, node->multiplicity_upper);
+                    ParsedMultiplicity orig_mult = parse_multiplicity(
+                        orig_feature->multiplicity_lower, orig_feature->multiplicity_upper);
+
+                    if (!is_valid_multiplicity_narrowing(orig_mult, new_mult)) {
+                        char msg[256];
+                        if (orig_feature->multiplicity_upper) {
+                            snprintf(msg, sizeof(msg),
+                                "redefinition multiplicity [%s..%s] widens original [%s..%s]",
+                                node->multiplicity_lower,
+                                node->multiplicity_upper ? node->multiplicity_upper : node->multiplicity_lower,
+                                orig_feature->multiplicity_lower,
+                                orig_feature->multiplicity_upper);
+                        } else {
+                            snprintf(msg, sizeof(msg),
+                                "redefinition multiplicity [%s..%s] widens original [%s]",
+                                node->multiplicity_lower,
+                                node->multiplicity_upper ? node->multiplicity_upper : node->multiplicity_lower,
+                                orig_feature->multiplicity_lower);
+                        }
+
+                        Sysml2SourceRange range = SYSML2_RANGE_INVALID;
+                        range.start = node->loc;
+                        range.end = node->loc;
+
+                        Sysml2Diagnostic *diag = sysml2_diag_create(
+                            vctx->diag_ctx,
+                            SYSML2_DIAG_E3008_REDEFINITION_ERROR,
+                            SYSML2_SEVERITY_ERROR,
+                            vctx->source_file,
+                            range,
+                            sysml2_intern(vctx->symtab->intern, msg)
+                        );
+
+                        sysml2_diag_add_help(diag, vctx->diag_ctx,
+                            sysml2_intern(vctx->symtab->intern,
+                                "redefinition can only narrow (not widen) the multiplicity"));
+
+                        sysml2_diag_emit(vctx->diag_ctx, diag);
+                        vctx->has_errors = true;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/* ========== Pass 6: Validate Imports (E3003) ========== */
+
+/*
+ * Extract namespace from import target (without ::* or ::** suffix)
+ */
+static const char *extract_import_namespace(const char *target, Sysml2Arena *arena) {
+    if (!target) return NULL;
+
+    size_t len = strlen(target);
+
+    /* Remove ::** suffix */
+    if (len >= 4 && strcmp(target + len - 4, "::**") == 0) {
+        char *ns = sysml2_arena_alloc(arena, len - 3);
+        strncpy(ns, target, len - 4);
+        ns[len - 4] = '\0';
+        return ns;
+    }
+
+    /* Remove ::* suffix */
+    if (len >= 3 && strcmp(target + len - 3, "::*") == 0) {
+        char *ns = sysml2_arena_alloc(arena, len - 2);
+        strncpy(ns, target, len - 3);
+        ns[len - 3] = '\0';
+        return ns;
+    }
+
+    return target;
+}
+
+static void pass6_validate_imports(
+    ValidationContext *vctx,
+    const SysmlSemanticModel *model
+) {
+    for (size_t i = 0; i < model->import_count; i++) {
+        SysmlImport *imp = model->imports[i];
+        if (!imp->target) continue;
+
+        const char *ns = extract_import_namespace(imp->target, vctx->symtab->arena);
+        if (!ns) continue;
+
+        /* Try to resolve the namespace */
+        Sysml2Symbol *sym = sysml2_symtab_resolve(
+            vctx->symtab, vctx->symtab->root_scope, ns);
+
+        if (!sym) {
+            /* E3003: namespace not found */
+            char msg[256];
+            snprintf(msg, sizeof(msg), "undefined namespace '%s'", ns);
+
+            Sysml2SourceRange range = SYSML2_RANGE_INVALID;
+            range.start = imp->loc;
+            range.end = imp->loc;
+
+            Sysml2Diagnostic *diag = sysml2_diag_create(
+                vctx->diag_ctx,
+                SYSML2_DIAG_E3003_UNDEFINED_NAMESPACE,
+                SYSML2_SEVERITY_ERROR,
+                vctx->source_file,
+                range,
+                sysml2_intern(vctx->symtab->intern, msg)
+            );
+
+            /* Try to find similar namespaces */
+            if (vctx->options->suggest_corrections) {
+                const char *suggestions[8];
+                size_t count = sysml2_symtab_find_similar(
+                    vctx->symtab, vctx->symtab->root_scope, ns,
+                    suggestions, vctx->options->max_suggestions);
+
+                if (count > 0) {
+                    char help[512];
+                    snprintf(help, sizeof(help), "did you mean '%s'?", suggestions[0]);
+                    sysml2_diag_add_help(diag, vctx->diag_ctx,
+                        sysml2_intern(vctx->symtab->intern, help));
+                }
+            }
+
+            sysml2_diag_emit(vctx->diag_ctx, diag);
+            vctx->has_errors = true;
+        }
+    }
+}
+
+/* ========== Pass 7: Abstract Instantiation Warnings ========== */
+
+static void pass7_check_abstract_instantiation(
+    ValidationContext *vctx,
+    const SysmlSemanticModel *model
+) {
+    for (size_t i = 0; i < model->element_count; i++) {
+        SysmlNode *node = model->elements[i];
+
+        /* Only check usages (not definitions) */
+        if (!SYSML_KIND_IS_USAGE(node->kind)) continue;
+
+        /* Skip abstract usages - they're not concrete instantiations */
+        if (node->is_abstract) continue;
+
+        /* Get scope for type resolution */
+        Sysml2Scope *scope = sysml2_symtab_get_or_create_scope(
+            vctx->symtab, node->parent_id);
+
+        for (size_t j = 0; j < node->typed_by_count; j++) {
+            const char *type_ref = node->typed_by[j];
+
+            Sysml2Symbol *type_sym = sysml2_symtab_resolve(
+                vctx->symtab, scope, type_ref);
+
+            if (type_sym && type_sym->node && type_sym->node->is_abstract) {
+                /* Warning: instantiating abstract type */
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                    "instantiation of abstract type '%s'",
+                    type_ref);
+
+                Sysml2SourceRange range = SYSML2_RANGE_INVALID;
+                range.start = node->loc;
+                range.end = node->loc;
+
+                Sysml2Diagnostic *diag = sysml2_diag_create(
+                    vctx->diag_ctx,
+                    SYSML2_DIAG_W1003_DEPRECATED, /* Reuse deprecated code for warning */
+                    SYSML2_SEVERITY_WARNING,
+                    vctx->source_file,
+                    range,
+                    sysml2_intern(vctx->symtab->intern, msg)
+                );
+
+                sysml2_diag_add_help(diag, vctx->diag_ctx,
+                    sysml2_intern(vctx->symtab->intern,
+                        "abstract types should not be directly instantiated; use a concrete subtype"));
+
+                sysml2_diag_emit(vctx->diag_ctx, diag);
+                /* Note: this is a warning, not an error */
+            }
+        }
+    }
+}
+
 /* ========== Main Validation Entry Point ========== */
 
 Sysml2Result sysml2_validate(
@@ -588,6 +1210,26 @@ Sysml2Result sysml2_validate(
     /* Pass 3: Detect circular specializations (E3005) */
     if (options->check_circular_specs) {
         pass3_detect_cycles(&vctx, model);
+    }
+
+    /* Pass 4: Validate multiplicities (E3007) */
+    if (options->check_multiplicity) {
+        pass4_validate_multiplicities(&vctx, model);
+    }
+
+    /* Pass 5: Validate redefines (E3002, E3008) */
+    if (options->check_undefined_features || options->check_redefinition_compat) {
+        pass5_validate_redefines(&vctx, model);
+    }
+
+    /* Pass 6: Validate imports (E3003) */
+    if (options->check_undefined_namespaces) {
+        pass6_validate_imports(&vctx, model);
+    }
+
+    /* Pass 7: Abstract instantiation warnings */
+    if (options->warn_abstract_instantiation) {
+        pass7_check_abstract_instantiation(&vctx, model);
     }
 
     /* Cleanup */
@@ -648,6 +1290,42 @@ Sysml2Result sysml2_validate_multi(
         for (size_t i = 0; i < model_count; i++) {
             if (models[i]) {
                 pass3_detect_cycles(&vctx, models[i]);
+            }
+        }
+    }
+
+    /* Pass 4: Validate multiplicities (E3007) */
+    if (options->check_multiplicity) {
+        for (size_t i = 0; i < model_count; i++) {
+            if (models[i]) {
+                pass4_validate_multiplicities(&vctx, models[i]);
+            }
+        }
+    }
+
+    /* Pass 5: Validate redefines (E3002, E3008) */
+    if (options->check_undefined_features || options->check_redefinition_compat) {
+        for (size_t i = 0; i < model_count; i++) {
+            if (models[i]) {
+                pass5_validate_redefines(&vctx, models[i]);
+            }
+        }
+    }
+
+    /* Pass 6: Validate imports (E3003) */
+    if (options->check_undefined_namespaces) {
+        for (size_t i = 0; i < model_count; i++) {
+            if (models[i]) {
+                pass6_validate_imports(&vctx, models[i]);
+            }
+        }
+    }
+
+    /* Pass 7: Abstract instantiation warnings */
+    if (options->warn_abstract_instantiation) {
+        for (size_t i = 0; i < model_count; i++) {
+            if (models[i]) {
+                pass7_check_abstract_instantiation(&vctx, models[i]);
             }
         }
     }

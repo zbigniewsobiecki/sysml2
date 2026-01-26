@@ -420,24 +420,10 @@ TEST(validate_e3004_duplicate_name) {
 
     /* Reset anon counter to avoid ID collision */
     SysmlNode *part2 = sysml2_arena_alloc(&ctx.arena, sizeof(SysmlNode));
+    memset(part2, 0, sizeof(SysmlNode));  /* Zero all fields first */
     part2->id = sysml2_intern(&ctx.intern, "sensor_dup");
     part2->name = sysml2_intern(&ctx.intern, "sensor");
     part2->kind = SYSML_KIND_PART_USAGE;
-    part2->parent_id = NULL;
-    part2->typed_by = NULL;
-    part2->typed_by_count = 0;
-    part2->specializes = NULL;
-    part2->specializes_count = 0;
-    part2->redefines = NULL;
-    part2->redefines_count = 0;
-    part2->references = NULL;
-    part2->references_count = 0;
-    part2->metadata = NULL;
-    part2->metadata_count = 0;
-    part2->prefix_metadata = NULL;
-    part2->prefix_metadata_count = 0;
-    part2->leading_trivia = NULL;
-    part2->trailing_trivia = NULL;
     part2->loc.line = 8;
     sysml2_build_add_element(ctx.build_ctx, part2);
 
@@ -602,6 +588,321 @@ TEST(find_similar_basic) {
     FIXTURE_TEARDOWN();
 }
 
+/* ========== E3007 Multiplicity Validation Tests ========== */
+
+TEST(validate_e3007_inverted_bounds) {
+    TestContext ctx;
+    test_ctx_init(&ctx);
+
+    /* Create part with inverted multiplicity [5..2] */
+    SysmlNode *part = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "wheels");
+    part->multiplicity_lower = sysml2_intern(&ctx.intern, "5");
+    part->multiplicity_upper = sysml2_intern(&ctx.intern, "2");
+    sysml2_build_add_element(ctx.build_ctx, part);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx.build_ctx);
+
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2Result result = sysml2_validate(model, &ctx.diag_ctx, NULL,
+        &ctx.arena, &ctx.intern, &opts);
+
+    ASSERT_EQ(result, SYSML2_ERROR_SEMANTIC);
+    ASSERT_EQ(ctx.diag_ctx.error_count, 1);
+
+    test_ctx_destroy(&ctx);
+}
+
+TEST(validate_e3007_negative_bound) {
+    TestContext ctx;
+    test_ctx_init(&ctx);
+
+    /* Create part with negative multiplicity [-1] */
+    SysmlNode *part = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "wheels");
+    part->multiplicity_lower = sysml2_intern(&ctx.intern, "-1");
+    sysml2_build_add_element(ctx.build_ctx, part);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx.build_ctx);
+
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2Result result = sysml2_validate(model, &ctx.diag_ctx, NULL,
+        &ctx.arena, &ctx.intern, &opts);
+
+    ASSERT_EQ(result, SYSML2_ERROR_SEMANTIC);
+    ASSERT_EQ(ctx.diag_ctx.error_count, 1);
+
+    test_ctx_destroy(&ctx);
+}
+
+TEST(validate_e3007_valid_multiplicity) {
+    TestContext ctx;
+    test_ctx_init(&ctx);
+
+    /* Create parts with valid multiplicities */
+    SysmlNode *p1 = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "p1");
+    p1->multiplicity_lower = sysml2_intern(&ctx.intern, "0");
+    p1->multiplicity_upper = sysml2_intern(&ctx.intern, "1");
+    sysml2_build_add_element(ctx.build_ctx, p1);
+
+    SysmlNode *p2 = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "p2");
+    p2->multiplicity_lower = sysml2_intern(&ctx.intern, "1");
+    p2->multiplicity_upper = sysml2_intern(&ctx.intern, "*");
+    sysml2_build_add_element(ctx.build_ctx, p2);
+
+    SysmlNode *p3 = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "p3");
+    p3->multiplicity_lower = sysml2_intern(&ctx.intern, "4");
+    sysml2_build_add_element(ctx.build_ctx, p3);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx.build_ctx);
+
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2Result result = sysml2_validate(model, &ctx.diag_ctx, NULL,
+        &ctx.arena, &ctx.intern, &opts);
+
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_EQ(ctx.diag_ctx.error_count, 0);
+
+    test_ctx_destroy(&ctx);
+}
+
+/* ========== E3002 Undefined Feature Tests ========== */
+
+TEST(validate_e3002_undefined_redefines) {
+    TestContext ctx;
+    test_ctx_init(&ctx);
+
+    /* Create part def A with feature x */
+    SysmlNode *def_a = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_DEF, "A");
+    sysml2_build_add_element(ctx.build_ctx, def_a);
+    sysml2_build_push_scope(ctx.build_ctx, def_a->id);
+
+    SysmlNode *x = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "x");
+    sysml2_build_add_element(ctx.build_ctx, x);
+
+    sysml2_build_pop_scope(ctx.build_ctx);
+
+    /* Create part def B :> A */
+    SysmlNode *def_b = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_DEF, "B");
+    sysml2_build_add_specializes(ctx.build_ctx, def_b, "A");
+    sysml2_build_add_element(ctx.build_ctx, def_b);
+    sysml2_build_push_scope(ctx.build_ctx, def_b->id);
+
+    /* Create part redefines y (y doesn't exist in A) */
+    SysmlNode *y = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "y");
+    sysml2_build_add_redefines(ctx.build_ctx, y, "y");
+    sysml2_build_add_element(ctx.build_ctx, y);
+
+    sysml2_build_pop_scope(ctx.build_ctx);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx.build_ctx);
+
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2Result result = sysml2_validate(model, &ctx.diag_ctx, NULL,
+        &ctx.arena, &ctx.intern, &opts);
+
+    ASSERT_EQ(result, SYSML2_ERROR_SEMANTIC);
+    ASSERT(ctx.diag_ctx.error_count >= 1);
+
+    test_ctx_destroy(&ctx);
+}
+
+/* ========== E3008 Redefinition Compatibility Tests ========== */
+
+TEST(validate_e3008_multiplicity_widening) {
+    TestContext ctx;
+    test_ctx_init(&ctx);
+
+    /* Create part def A with x[0..5] */
+    SysmlNode *def_a = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_DEF, "A");
+    sysml2_build_add_element(ctx.build_ctx, def_a);
+    sysml2_build_push_scope(ctx.build_ctx, def_a->id);
+
+    SysmlNode *x = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "x");
+    x->multiplicity_lower = sysml2_intern(&ctx.intern, "0");
+    x->multiplicity_upper = sysml2_intern(&ctx.intern, "5");
+    sysml2_build_add_element(ctx.build_ctx, x);
+
+    sysml2_build_pop_scope(ctx.build_ctx);
+
+    /* Create part def B :> A */
+    SysmlNode *def_b = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_DEF, "B");
+    sysml2_build_add_specializes(ctx.build_ctx, def_b, "A");
+    sysml2_build_add_element(ctx.build_ctx, def_b);
+    sysml2_build_push_scope(ctx.build_ctx, def_b->id);
+
+    /* Create part redefines x[0..10] - widening is an error */
+    SysmlNode *x_redef = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "x");
+    x_redef->multiplicity_lower = sysml2_intern(&ctx.intern, "0");
+    x_redef->multiplicity_upper = sysml2_intern(&ctx.intern, "10");
+    sysml2_build_add_redefines(ctx.build_ctx, x_redef, "x");
+    sysml2_build_add_element(ctx.build_ctx, x_redef);
+
+    sysml2_build_pop_scope(ctx.build_ctx);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx.build_ctx);
+
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2Result result = sysml2_validate(model, &ctx.diag_ctx, NULL,
+        &ctx.arena, &ctx.intern, &opts);
+
+    ASSERT_EQ(result, SYSML2_ERROR_SEMANTIC);
+    ASSERT(ctx.diag_ctx.error_count >= 1);
+
+    test_ctx_destroy(&ctx);
+}
+
+TEST(validate_e3008_valid_narrowing) {
+    TestContext ctx;
+    test_ctx_init(&ctx);
+
+    /* Create part def A with x[0..5] */
+    SysmlNode *def_a = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_DEF, "A");
+    sysml2_build_add_element(ctx.build_ctx, def_a);
+    sysml2_build_push_scope(ctx.build_ctx, def_a->id);
+
+    SysmlNode *x = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "x");
+    x->multiplicity_lower = sysml2_intern(&ctx.intern, "0");
+    x->multiplicity_upper = sysml2_intern(&ctx.intern, "5");
+    sysml2_build_add_element(ctx.build_ctx, x);
+
+    sysml2_build_pop_scope(ctx.build_ctx);
+
+    /* Create part def B :> A */
+    SysmlNode *def_b = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_DEF, "B");
+    sysml2_build_add_specializes(ctx.build_ctx, def_b, "A");
+    sysml2_build_add_element(ctx.build_ctx, def_b);
+    sysml2_build_push_scope(ctx.build_ctx, def_b->id);
+
+    /* Create part redefines x[1..3] - narrowing is valid */
+    SysmlNode *x_redef = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "x");
+    x_redef->multiplicity_lower = sysml2_intern(&ctx.intern, "1");
+    x_redef->multiplicity_upper = sysml2_intern(&ctx.intern, "3");
+    sysml2_build_add_redefines(ctx.build_ctx, x_redef, "x");
+    sysml2_build_add_element(ctx.build_ctx, x_redef);
+
+    sysml2_build_pop_scope(ctx.build_ctx);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx.build_ctx);
+
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2Result result = sysml2_validate(model, &ctx.diag_ctx, NULL,
+        &ctx.arena, &ctx.intern, &opts);
+
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_EQ(ctx.diag_ctx.error_count, 0);
+
+    test_ctx_destroy(&ctx);
+}
+
+/* ========== E3003 Undefined Namespace Tests ========== */
+
+TEST(validate_e3003_undefined_namespace) {
+    TestContext ctx;
+    test_ctx_init(&ctx);
+
+    /* Create package with import of non-existent namespace */
+    SysmlNode *pkg = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PACKAGE, "TestPkg");
+    sysml2_build_add_element(ctx.build_ctx, pkg);
+    sysml2_build_push_scope(ctx.build_ctx, pkg->id);
+
+    sysml2_build_add_import(ctx.build_ctx, SYSML_KIND_IMPORT_ALL, "NonExistent::*");
+
+    sysml2_build_pop_scope(ctx.build_ctx);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx.build_ctx);
+
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2Result result = sysml2_validate(model, &ctx.diag_ctx, NULL,
+        &ctx.arena, &ctx.intern, &opts);
+
+    ASSERT_EQ(result, SYSML2_ERROR_SEMANTIC);
+    ASSERT(ctx.diag_ctx.error_count >= 1);
+
+    test_ctx_destroy(&ctx);
+}
+
+TEST(validate_e3003_valid_import) {
+    TestContext ctx;
+    test_ctx_init(&ctx);
+
+    /* Create library package */
+    SysmlNode *lib = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PACKAGE, "LibPkg");
+    sysml2_build_add_element(ctx.build_ctx, lib);
+
+    /* Create package with import of existing namespace */
+    SysmlNode *pkg = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PACKAGE, "TestPkg");
+    sysml2_build_add_element(ctx.build_ctx, pkg);
+    sysml2_build_push_scope(ctx.build_ctx, pkg->id);
+
+    sysml2_build_add_import(ctx.build_ctx, SYSML_KIND_IMPORT_ALL, "LibPkg::*");
+
+    sysml2_build_pop_scope(ctx.build_ctx);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx.build_ctx);
+
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2Result result = sysml2_validate(model, &ctx.diag_ctx, NULL,
+        &ctx.arena, &ctx.intern, &opts);
+
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_EQ(ctx.diag_ctx.error_count, 0);
+
+    test_ctx_destroy(&ctx);
+}
+
+/* ========== Abstract Instantiation Tests ========== */
+
+TEST(validate_abstract_instantiation_warning) {
+    TestContext ctx;
+    test_ctx_init(&ctx);
+
+    /* Create abstract part def */
+    SysmlNode *abs_def = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_DEF, "Vehicle");
+    abs_def->is_abstract = true;
+    sysml2_build_add_element(ctx.build_ctx, abs_def);
+
+    /* Create concrete part typed by abstract def */
+    SysmlNode *part = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "myVehicle");
+    sysml2_build_add_typed_by(ctx.build_ctx, part, "Vehicle");
+    sysml2_build_add_element(ctx.build_ctx, part);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx.build_ctx);
+
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2Result result = sysml2_validate(model, &ctx.diag_ctx, NULL,
+        &ctx.arena, &ctx.intern, &opts);
+
+    /* This should succeed but emit a warning */
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_EQ(ctx.diag_ctx.warning_count, 1);
+
+    test_ctx_destroy(&ctx);
+}
+
+TEST(validate_options_disable_new_checks) {
+    TestContext ctx;
+    test_ctx_init(&ctx);
+
+    /* Create part with inverted multiplicity */
+    SysmlNode *part = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "wheels");
+    part->multiplicity_lower = sysml2_intern(&ctx.intern, "5");
+    part->multiplicity_upper = sysml2_intern(&ctx.intern, "2");
+    sysml2_build_add_element(ctx.build_ctx, part);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx.build_ctx);
+
+    /* Disable multiplicity check */
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    opts.check_multiplicity = false;
+
+    Sysml2Result result = sysml2_validate(model, &ctx.diag_ctx, NULL,
+        &ctx.arena, &ctx.intern, &opts);
+
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_EQ(ctx.diag_ctx.error_count, 0);
+
+    test_ctx_destroy(&ctx);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -655,6 +956,34 @@ int main(void) {
     /* Find Similar tests */
     printf("\n  Find Similar tests:\n");
     RUN_TEST(find_similar_basic);
+
+    /* E3007 Multiplicity Validation tests */
+    printf("\n  E3007 Multiplicity Validation tests:\n");
+    RUN_TEST(validate_e3007_inverted_bounds);
+    RUN_TEST(validate_e3007_negative_bound);
+    RUN_TEST(validate_e3007_valid_multiplicity);
+
+    /* E3002 Undefined Feature tests */
+    printf("\n  E3002 Undefined Feature tests:\n");
+    RUN_TEST(validate_e3002_undefined_redefines);
+
+    /* E3008 Redefinition Compatibility tests */
+    printf("\n  E3008 Redefinition Compatibility tests:\n");
+    RUN_TEST(validate_e3008_multiplicity_widening);
+    RUN_TEST(validate_e3008_valid_narrowing);
+
+    /* E3003 Undefined Namespace tests */
+    printf("\n  E3003 Undefined Namespace tests:\n");
+    RUN_TEST(validate_e3003_undefined_namespace);
+    RUN_TEST(validate_e3003_valid_import);
+
+    /* Abstract Instantiation tests */
+    printf("\n  Abstract Instantiation tests:\n");
+    RUN_TEST(validate_abstract_instantiation_warning);
+
+    /* Validation Options tests */
+    printf("\n  Validation Options tests:\n");
+    RUN_TEST(validate_options_disable_new_checks);
 
     printf("\n%d/%d tests passed\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;

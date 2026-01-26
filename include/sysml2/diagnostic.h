@@ -129,6 +129,9 @@ typedef struct {
 /* Initialize diagnostic context */
 void sysml2_diag_context_init(Sysml2DiagContext *ctx, Sysml2Arena *arena);
 
+/* Clear all diagnostics and reset counts */
+void sysml2_diag_clear(Sysml2DiagContext *ctx);
+
 /* Set maximum number of errors before stopping */
 void sysml2_diag_set_max_errors(Sysml2DiagContext *ctx, size_t max);
 

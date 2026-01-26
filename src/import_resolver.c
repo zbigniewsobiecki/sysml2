@@ -21,9 +21,113 @@
 /* Initial capacities */
 #define RESOLVER_INITIAL_PATH_CAPACITY 8
 #define RESOLVER_INITIAL_STACK_CAPACITY 16
+#define RESOLVER_INITIAL_PACKAGE_MAP_CAPACITY 64
 
 /* Environment variable name */
 #define SYSML2_LIBRARY_PATH_ENV "SYSML2_LIBRARY_PATH"
+
+/* Hash function for package names (djb2) */
+static size_t hash_string(const char *str) {
+    size_t hash = 5381;
+    int c;
+    while ((c = *str++)) {
+        hash = ((hash << 5) + hash) + (size_t)c;
+    }
+    return hash;
+}
+
+/* Extract top-level package name from a model
+ * Returns the name of the first package with no parent (top-level).
+ * Returns NULL if no top-level package found.
+ */
+static const char *extract_top_level_package(const SysmlSemanticModel *model) {
+    if (!model) return NULL;
+
+    for (size_t i = 0; i < model->element_count; i++) {
+        SysmlNode *node = model->elements[i];
+        if (!node) continue;
+
+        /* Check if it's a package (SYSML_KIND_PACKAGE or SYSML_KIND_LIBRARY_PACKAGE) */
+        if (SYSML_KIND_IS_PACKAGE(node->kind)) {
+            /* Top-level package has no parent */
+            if (node->parent_id == NULL || node->parent_id[0] == '\0') {
+                return node->name;
+            }
+        }
+    }
+    return NULL;
+}
+
+/* Register a package->file mapping in the resolver
+ * If the package already exists, first-wins (don't overwrite).
+ */
+static void register_package_file(
+    Sysml2ImportResolver *resolver,
+    const char *pkg_name,
+    const char *file_path
+) {
+    if (!resolver || !pkg_name || !file_path) return;
+    if (!resolver->package_map) return;
+
+    size_t bucket = hash_string(pkg_name) % resolver->package_map_capacity;
+
+    /* Check if already registered */
+    Sysml2PackageEntry *entry = resolver->package_map[bucket];
+    while (entry) {
+        if (strcmp(entry->package_name, pkg_name) == 0) {
+            /* Already registered - first-wins, just warn in verbose mode */
+            if (resolver->verbose) {
+                fprintf(stderr, "note: package '%s' already mapped to %s, ignoring %s\n",
+                        pkg_name, entry->file_path, file_path);
+            }
+            return;
+        }
+        entry = entry->next;
+    }
+
+    /* Create new entry */
+    Sysml2PackageEntry *new_entry = malloc(sizeof(Sysml2PackageEntry));
+    if (!new_entry) return;
+
+    new_entry->package_name = pkg_name;  /* Interned string, not owned */
+    new_entry->file_path = strdup(file_path);
+    if (!new_entry->file_path) {
+        free(new_entry);
+        return;
+    }
+
+    /* Insert at head of bucket chain */
+    new_entry->next = resolver->package_map[bucket];
+    resolver->package_map[bucket] = new_entry;
+    resolver->package_map_count++;
+
+    if (resolver->verbose) {
+        fprintf(stderr, "note: registered package '%s' -> %s\n", pkg_name, file_path);
+    }
+}
+
+/* Lookup a package in the package map
+ * Returns the file path if found, NULL otherwise.
+ * The returned path is owned by the resolver - caller should strdup if needed.
+ */
+static const char *lookup_package_file(
+    Sysml2ImportResolver *resolver,
+    const char *pkg_name
+) {
+    if (!resolver || !pkg_name) return NULL;
+    if (!resolver->package_map) return NULL;
+
+    size_t bucket = hash_string(pkg_name) % resolver->package_map_capacity;
+
+    Sysml2PackageEntry *entry = resolver->package_map[bucket];
+    while (entry) {
+        if (strcmp(entry->package_name, pkg_name) == 0) {
+            return entry->file_path;
+        }
+        entry = entry->next;
+    }
+    return NULL;
+}
 
 /* File I/O and path utilities are now in sysml2/utils.h */
 
@@ -105,6 +209,17 @@ Sysml2ImportResolver *sysml2_resolver_create(
     }
     resolver->stack_capacity = RESOLVER_INITIAL_STACK_CAPACITY;
 
+    /* Initialize package map */
+    resolver->package_map = calloc(RESOLVER_INITIAL_PACKAGE_MAP_CAPACITY, sizeof(Sysml2PackageEntry *));
+    if (!resolver->package_map) {
+        free(resolver->resolution_stack);
+        free(resolver->library_paths);
+        free(resolver);
+        return NULL;
+    }
+    resolver->package_map_capacity = RESOLVER_INITIAL_PACKAGE_MAP_CAPACITY;
+    resolver->package_map_count = 0;
+
     resolver->cache = NULL;
     resolver->verbose = false;
     resolver->disabled = false;
@@ -135,6 +250,20 @@ void sysml2_resolver_destroy(Sysml2ImportResolver *resolver) {
         free(cache->path);
         free(cache);
         cache = next;
+    }
+
+    /* Free package map */
+    if (resolver->package_map) {
+        for (size_t i = 0; i < resolver->package_map_capacity; i++) {
+            Sysml2PackageEntry *entry = resolver->package_map[i];
+            while (entry) {
+                Sysml2PackageEntry *next = entry->next;
+                free(entry->file_path);
+                free(entry);
+                entry = next;
+            }
+        }
+        free(resolver->package_map);
     }
 
     free(resolver);
@@ -239,6 +368,14 @@ void sysml2_resolver_cache_model(
     entry->model = model;
     entry->next = resolver->cache;
     resolver->cache = entry;
+
+    /* Register the top-level package for discovery.
+     * This allows imports to find packages even when the filename
+     * doesn't match the package name (e.g., SystemBehavior in _index.sysml). */
+    const char *pkg_name = extract_top_level_package(model);
+    if (pkg_name) {
+        register_package_file(resolver, pkg_name, abs_path);
+    }
 }
 
 SysmlSemanticModel *sysml2_resolver_get_cached(
@@ -276,6 +413,17 @@ char *sysml2_resolver_find_file(
     /* Extract the package name from the import target */
     char *package_name = extract_package_name(import_target);
     if (!package_name) return NULL;
+
+    /* NEW: Check package map first (populated by preload) */
+    const char *mapped_path = lookup_package_file(resolver, package_name);
+    if (mapped_path) {
+        if (resolver->verbose) {
+            fprintf(stderr, "note: found '%s' via package map -> %s\n",
+                    package_name, mapped_path);
+        }
+        free(package_name);
+        return strdup(mapped_path);
+    }
 
     /* Try each library path */
     for (size_t i = 0; i < resolver->path_count; i++) {
@@ -669,8 +817,8 @@ static void preload_directory(
 
     struct dirent *entry;
     while ((entry = readdir(d)) != NULL) {
-        /* Skip . and .. */
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+        /* Skip hidden files/directories (starting with .) */
+        if (entry->d_name[0] == '.') {
             continue;
         }
 
@@ -696,6 +844,70 @@ static void preload_directory(
                     SysmlSemanticModel *model = parse_file(resolver, abs_path, diag);
                     if (model) {
                         sysml2_resolver_cache_model(resolver, abs_path, model);
+
+                        /* NEW: Register top-level package for discovery */
+                        const char *pkg_name = extract_top_level_package(model);
+                        if (pkg_name) {
+                            register_package_file(resolver, pkg_name, abs_path);
+                        }
+                    }
+                }
+                free(abs_path);
+            }
+        }
+        free(full_path);
+    }
+
+    closedir(d);
+}
+
+/* Discover packages in a directory for package map (without full caching).
+ * This parses files only to extract package names, doesn't add to validation set. */
+static void discover_packages_in_directory(
+    Sysml2ImportResolver *resolver,
+    const char *dir_path,
+    Sysml2DiagContext *diag,
+    int max_depth
+) {
+    if (max_depth <= 0) return;
+
+    DIR *d = opendir(dir_path);
+    if (!d) return;
+
+    struct dirent *entry;
+    while ((entry = readdir(d)) != NULL) {
+        /* Skip hidden files/directories (starting with .) */
+        if (entry->d_name[0] == '.') {
+            continue;
+        }
+
+        char *full_path = sysml2_path_join(dir_path, entry->d_name);
+        if (!full_path) continue;
+
+        if (sysml2_is_directory(full_path)) {
+            /* Recurse into subdirectory */
+            discover_packages_in_directory(resolver, full_path, diag, max_depth - 1);
+        } else if (sysml2_is_file(full_path)) {
+            /* Check if it's a SysML or KerML file */
+            size_t len = strlen(entry->d_name);
+            bool is_sysml = (len > 6 && strcmp(entry->d_name + len - 6, ".sysml") == 0);
+            bool is_kerml = (len > 6 && strcmp(entry->d_name + len - 6, ".kerml") == 0);
+
+            if (is_sysml || is_kerml) {
+                char *abs_path = sysml2_get_realpath(full_path);
+                if (!abs_path) abs_path = strdup(full_path);
+
+                /* Check if package already registered for this file */
+                if (abs_path && !sysml2_resolver_get_cached(resolver, abs_path)) {
+                    /* Parse file just for package discovery */
+                    SysmlSemanticModel *model = parse_file(resolver, abs_path, diag);
+                    if (model) {
+                        /* Only register the package, don't cache the model.
+                         * The file will be fully cached when actually imported. */
+                        const char *pkg_name = extract_top_level_package(model);
+                        if (pkg_name) {
+                            register_package_file(resolver, pkg_name, abs_path);
+                        }
                     }
                 }
                 free(abs_path);
@@ -721,6 +933,21 @@ Sysml2Result sysml2_resolver_preload_libraries(
         }
         preload_directory(resolver, lib_path, diag, 10);
     }
+
+    return SYSML2_OK;
+}
+
+Sysml2Result sysml2_resolver_discover_packages(
+    Sysml2ImportResolver *resolver,
+    const char *dir_path,
+    Sysml2DiagContext *diag
+) {
+    if (!resolver || !dir_path) return SYSML2_ERROR_SEMANTIC;
+
+    if (resolver->verbose) {
+        fprintf(stderr, "note: discovering packages in %s\n", dir_path);
+    }
+    discover_packages_in_directory(resolver, dir_path, diag, 10);
 
     return SYSML2_OK;
 }

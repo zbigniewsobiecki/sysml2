@@ -34,6 +34,18 @@ void sysml2_diag_context_init(Sysml2DiagContext *ctx, Sysml2Arena *arena) {
     ctx->has_fatal = false;
 }
 
+void sysml2_diag_clear(Sysml2DiagContext *ctx) {
+    /* Note: Diagnostics are arena-allocated, so we just reset pointers and counts.
+     * The actual memory will be freed when the arena is destroyed. */
+    ctx->first = NULL;
+    ctx->last = NULL;
+    ctx->error_count = 0;
+    ctx->warning_count = 0;
+    ctx->parse_error_count = 0;
+    ctx->semantic_error_count = 0;
+    ctx->has_fatal = false;
+}
+
 void sysml2_diag_set_max_errors(Sysml2DiagContext *ctx, size_t max) {
     ctx->max_errors = max;
 }

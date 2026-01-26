@@ -422,9 +422,33 @@ static int run_fix_mode(
     Sysml2DiagContext *diag = sysml2_pipeline_get_diag(ctx);
     resolver->strict_imports = true;  /* Fail on missing imports in --fix mode */
 
+    /* Preload from configured library paths */
+    if (!options->no_resolve) {
+        sysml2_resolver_preload_libraries(resolver, diag);
+    }
+
     /* Add directories containing input files to search paths */
     for (size_t i = 0; i < options->input_file_count; i++) {
         add_file_directory_to_resolver(resolver, options->input_files[i]);
+    }
+
+    /* Discover packages in input file directories */
+    if (!options->no_resolve) {
+        for (size_t i = 0; i < options->input_file_count; i++) {
+            char *path_copy = strdup(options->input_files[i]);
+            if (path_copy) {
+                char *last_slash = strrchr(path_copy, '/');
+                if (last_slash) {
+                    *last_slash = '\0';
+                    sysml2_resolver_discover_packages(resolver, path_copy, diag);
+                } else {
+                    sysml2_resolver_discover_packages(resolver, ".", diag);
+                }
+                free(path_copy);
+            }
+        }
+        /* Clear any parse errors from discovery - they shouldn't affect exit code */
+        sysml2_diag_clear(diag);
     }
 
     /* Allocate model array */
@@ -516,9 +540,40 @@ static int run_normal_mode(
     Sysml2ImportResolver *resolver = sysml2_pipeline_get_resolver(ctx);
     Sysml2DiagContext *diag = sysml2_pipeline_get_diag(ctx);
 
+    /* Preload from configured library paths (-I and SYSML2_LIBRARY_PATH).
+     * These files are fully cached for validation. */
+    if (!options->no_resolve) {
+        sysml2_resolver_preload_libraries(resolver, diag);
+    }
+
     /* Add directories containing input files to search paths */
     for (size_t i = 0; i < options->input_file_count; i++) {
         add_file_directory_to_resolver(resolver, options->input_files[i]);
+    }
+
+    /* Discover packages in input file directories.
+     * This builds the package map without caching files for validation,
+     * allowing imports to find packages even when filename != package name.
+     *
+     * We clear diagnostics after discovery because errors in sibling files
+     * shouldn't affect the exit code - only errors in the actual input files
+     * and their imports matter. */
+    if (!options->no_resolve) {
+        for (size_t i = 0; i < options->input_file_count; i++) {
+            char *path_copy = strdup(options->input_files[i]);
+            if (path_copy) {
+                char *last_slash = strrchr(path_copy, '/');
+                if (last_slash) {
+                    *last_slash = '\0';
+                    sysml2_resolver_discover_packages(resolver, path_copy, diag);
+                } else {
+                    sysml2_resolver_discover_packages(resolver, ".", diag);
+                }
+                free(path_copy);
+            }
+        }
+        /* Clear any parse errors from discovery - they shouldn't affect exit code */
+        sysml2_diag_clear(diag);
     }
 
     Sysml2Result final_result = SYSML2_OK;
@@ -689,6 +744,11 @@ static int run_modify_mode(
     Sysml2Arena *arena = sysml2_pipeline_get_arena(ctx);
     Sysml2Intern *intern = ctx->intern;
 
+    /* Preload from configured library paths */
+    if (!options->no_resolve) {
+        sysml2_resolver_preload_libraries(resolver, diag);
+    }
+
     /* Add directories containing input files to search paths */
     for (size_t i = 0; i < options->input_file_count; i++) {
         char *path_copy = strdup(options->input_files[i]);
@@ -702,6 +762,25 @@ static int run_modify_mode(
             }
             free(path_copy);
         }
+    }
+
+    /* Discover packages in input file directories */
+    if (!options->no_resolve) {
+        for (size_t i = 0; i < options->input_file_count; i++) {
+            char *path_copy = strdup(options->input_files[i]);
+            if (path_copy) {
+                char *last_slash = strrchr(path_copy, '/');
+                if (last_slash) {
+                    *last_slash = '\0';
+                    sysml2_resolver_discover_packages(resolver, path_copy, diag);
+                } else {
+                    sysml2_resolver_discover_packages(resolver, ".", diag);
+                }
+                free(path_copy);
+            }
+        }
+        /* Clear any parse errors from discovery - they shouldn't affect exit code */
+        sysml2_diag_clear(diag);
     }
 
     /* Allocate model array */
