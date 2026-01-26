@@ -2071,7 +2071,8 @@ BindUsageSimple <- KW_BIND Multiplicity? < QualifiedName FeatureChain? > EQ Mult
 # Assert constraint needs scope for body elements (parameters, etc.)
 # With 'constraint' keyword: assert constraint myName { } - creates named constraint
 # Without keyword: assert ExistingConstraint { } - anonymous assertion referencing type
-AssertConstraintUsage <- KW_ASSERT KW_NOT? AssertConstraintBody
+AssertConstraintUsage <- KW_ASSERT KW_NOT { if (auxil->build_ctx) sysml2_capture_assert_flags(auxil->build_ctx, true, true); } AssertConstraintBody
+                       / KW_ASSERT { if (auxil->build_ctx) sysml2_capture_assert_flags(auxil->build_ctx, true, false); } AssertConstraintBody
 AssertConstraintBody <- AssertConstraintWithKW / AssertConstraintReference
 AssertConstraintWithKW <- KW_CONSTRAINT < UsageDeclaration? > { sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_USAGE, $1, $1e - $1s); } ConstraintBody { sysml2_pop(auxil); }
 # Reference to existing constraint - anonymous assertion (identifier is TYPE not NAME)

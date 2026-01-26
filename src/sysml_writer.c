@@ -1309,6 +1309,14 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
         }
     }
 
+    /* Write assert modifier (for asserted constraints) */
+    if (node->is_asserted) {
+        fputs("assert ", w->out);
+        if (node->is_negated) {
+            fputs("not ", w->out);
+        }
+    }
+
     /* Write abstract modifier */
     if (node->is_abstract) {
         fputs("abstract ", w->out);
