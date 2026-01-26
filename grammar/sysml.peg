@@ -1829,7 +1829,8 @@ OccurrenceUsageMember <- MemberPrefix (OccurrenceDefinitionElement / AssertConst
 ItemUsage <- UsagePrefix* KW_ITEM < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_ITEM_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
 PartUsage <- UsagePrefix* KW_PART < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_PART_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
 ConnectionUsage <- ConnectionUsageNamed / ConnectionUsageAnon
-ConnectionUsageNamed <- UsagePrefix* KW_CONNECTION < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_CONNECTION_USAGE, $1, $1e - $1s); } (KW_CONNECT ConnectionPart)? UsageBody { sysml2_pop(auxil); }
+ConnectionUsageNamed <- UsagePrefix* KW_CONNECTION < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_CONNECTION_USAGE, $1, $1e - $1s); } KW_CONNECT < ConnectorEndMember > KW_TO < ConnectorEndMember > { if (auxil->build_ctx) sysml2_capture_connect(auxil->build_ctx, $2, $2e - $2s, $3, $3e - $3s); } UsageBody { sysml2_pop(auxil); }
+                      / UsagePrefix* KW_CONNECTION < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_CONNECTION_USAGE, $4, $4e - $4s); } (KW_CONNECT NaryConnectorPart)? UsageBody { sysml2_pop(auxil); }
                       / UsagePrefix* KW_CONNECTION (KW_CONNECT ConnectionPart)? UsageBody
 ConnectionUsageAnon <- UsagePrefix* KW_CONNECT NaryConnectorPart UsageBody
                      / UsagePrefix* KW_CONNECT < ConnectorEndMember > KW_TO < ConnectorEndMember > UsageBody { if (auxil->build_ctx) sysml2_capture_connect(auxil->build_ctx, $1, $1e - $1s, $2, $2e - $2s); }

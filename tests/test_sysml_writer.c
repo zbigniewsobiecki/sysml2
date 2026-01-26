@@ -281,6 +281,37 @@ TEST(sysml_write_connection_usage) {
     ASSERT_NOT_NULL(output);
 
     ASSERT(strstr(output, "connection authLink") != NULL);
+    /* Verify endpoints are preserved (regression test for data loss bug) */
+    ASSERT(strstr(output, "connect A to B") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test connection with dotted endpoint names to verify complex endpoints preserved */
+TEST(sysml_write_connection_endpoint_preservation) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package TestPkg {\n"
+        "    connection authWiring connect authModule.api to authService.api;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify connection name preserved */
+    ASSERT(strstr(output, "connection authWiring") != NULL);
+    /* Verify endpoints with dotted names preserved (was bug: endpoints lost during round-trip) */
+    ASSERT(strstr(output, "authModule.api") != NULL);
+    ASSERT(strstr(output, "authService.api") != NULL);
+    ASSERT(strstr(output, "connect") != NULL);
+    ASSERT(strstr(output, "to") != NULL);
 
     free(output);
     FIXTURE_TEARDOWN();
@@ -789,6 +820,7 @@ int main(void) {
     RUN_TEST(sysml_write_part_usage);
     RUN_TEST(sysml_write_attribute_usage);
     RUN_TEST(sysml_write_connection_usage);
+    RUN_TEST(sysml_write_connection_endpoint_preservation);
 
     /* Imports */
     RUN_TEST(sysml_write_import);
