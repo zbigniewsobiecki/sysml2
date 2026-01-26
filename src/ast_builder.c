@@ -2447,16 +2447,24 @@ void sysml2_capture_nary_connector(SysmlBuildContext *ctx, const char *text, siz
         for (size_t i = ctx->element_count; i > 0; i--) {
             SysmlNode *node = ctx->elements[i - 1];
             if (node->id == current_scope) {
-                /* Format as "connect (a, b, c)" for the connector_part field */
+                /* Format as "connect (a, b, c)" or "allocate (a, b, c)" */
                 const char *trimmed = trim_and_intern(ctx, text, len);
                 if (trimmed) {
-                    /* Prepend "connect " to the captured text */
+                    /* Determine keyword based on node kind */
+                    const char *keyword = "connect ";
+                    size_t keyword_len = 8;
+                    if (node->kind == SYSML_KIND_ALLOCATION_USAGE ||
+                        node->kind == SYSML_KIND_ALLOCATION_DEF) {
+                        keyword = "allocate ";
+                        keyword_len = 9;
+                    }
+
                     size_t trimmed_len = strlen(trimmed);
-                    size_t total_len = 8 + trimmed_len + 1; /* "connect " + text + null */
+                    size_t total_len = keyword_len + trimmed_len + 1;
                     char *buf = sysml2_arena_alloc(ctx->arena, total_len);
                     if (buf) {
-                        memcpy(buf, "connect ", 8);
-                        memcpy(buf + 8, trimmed, trimmed_len);
+                        memcpy(buf, keyword, keyword_len);
+                        memcpy(buf + keyword_len, trimmed, trimmed_len);
                         buf[total_len - 1] = '\0';
                         node->connector_part = sysml2_intern(ctx->intern, buf);
                     }

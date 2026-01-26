@@ -1870,8 +1870,11 @@ FlowEndMember <- QualifiedName FeatureChain?
 InterfaceUsage <- UsagePrefix* KW_INTERFACE &(ConnectorEndMember KW_TO) ConnectionPart InterfaceBody
                 / UsagePrefix* KW_INTERFACE UsageDeclaration? (KW_CONNECT ConnectionPart)? InterfaceBody
 PortUsage <- UsagePrefix* KW_PORT < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_PORT_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
-AllocationUsage <- UsagePrefix* KW_ALLOCATION UsageDeclaration? AllocationPart? UsageBody / UsagePrefix* KW_ALLOCATE AllocationPart UsageBody
-AllocationPart <- KW_ALLOCATE? (BinaryConnectorPart / NaryConnectorPart)
+AllocationUsage <- UsagePrefix* KW_ALLOCATION < UsageDeclaration? > { sysml2_build_push(auxil, SYSML_KIND_ALLOCATION_USAGE, $1, $1e - $1s); } AllocationPart? UsageBody { sysml2_pop(auxil); }
+                 / UsagePrefix* KW_ALLOCATE BinaryAllocatePart UsageBody
+                 / UsagePrefix* KW_ALLOCATE NaryConnectorPart UsageBody
+AllocationPart <- KW_ALLOCATE? (BinaryAllocatePart / NaryConnectorPart)
+BinaryAllocatePart <- < ConnectorEndMember > KW_TO < ConnectorEndMember > { if (auxil->build_ctx) sysml2_capture_allocate(auxil->build_ctx, $1, $1e - $1s, $2, $2e - $2s); }
 # Action can be: action name; OR action name { } OR action name send/accept/while/for ...
 # Also supports ref action name (params) :>> other;
 ActionUsage <- UsagePrefix* KW_ACTION < ActionDeclaration > { sysml2_build_push(auxil, SYSML_KIND_ACTION_USAGE, $1, $1e - $1s); } ActionUsageBody { sysml2_pop(auxil); }
