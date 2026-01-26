@@ -70,6 +70,17 @@ static int sysml2_is_marker(char c, char next) {
     return 0;
 }
 
+/* Helper: check if position starts with keyword "default" followed by non-identifier char */
+static int sysml2_is_default_keyword(const char *text, size_t remaining) {
+    if (remaining < 7) return 0;  /* "default" is 7 chars */
+    if (strncmp(text, "default", 7) != 0) return 0;
+    /* Check that it's followed by non-identifier char (or end) */
+    if (remaining == 7) return 1;  /* at end */
+    char next = text[7];
+    return !((next >= 'a' && next <= 'z') || (next >= 'A' && next <= 'Z') ||
+             (next >= '0' && next <= '9') || next == '_');
+}
+
 /* Helper: extract just the name portion from captured text (stops at type markers) */
 static const char *sysml2_extract_name(SysmlParserContext *ctx, const char *text, size_t len) {
     if (!ctx->build_ctx || !text || len == 0) return NULL;
@@ -88,13 +99,27 @@ static const char *sysml2_extract_name(SysmlParserContext *ctx, const char *text
         if (len == 0) return NULL;
     }
 
-    /* Find end of name (stop at type markers) */
+    /* Find end of name (stop at type markers or keywords like 'default') */
     size_t name_end = 0;
     int in_quote = 0;
+    int at_word_start = 1;  /* Track if we're at the start of a word */
     for (size_t i = 0; i < len; i++) {
-        if (text[i] == '\'') in_quote = !in_quote;
-        if (!in_quote && sysml2_is_marker(text[i], (i + 1 < len) ? text[i + 1] : 0)) {
-            break;
+        char c = text[i];
+        if (c == '\'') in_quote = !in_quote;
+        if (!in_quote) {
+            if (sysml2_is_marker(c, (i + 1 < len) ? text[i + 1] : 0)) {
+                break;
+            }
+            /* Check for 'default' keyword at word start */
+            if (at_word_start && sysml2_is_default_keyword(text + i, len - i)) {
+                break;
+            }
+            /* Track word boundaries */
+            if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+                at_word_start = 1;
+            } else {
+                at_word_start = 0;
+            }
         }
         name_end = i + 1;
     }
