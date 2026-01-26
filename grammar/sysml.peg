@@ -1799,7 +1799,7 @@ PortionUsage <- BasicUsagePrefix* KW_INDIVIDUAL? PortionKind PortionUsageKind? <
 PortionKind <- KW_SNAPSHOT / KW_TIMESLICE
 PortionUsageKind <- KW_ITEM / KW_PART / KW_OCCURRENCE / KW_ATTRIBUTE
 # Succession: the optional UsageDeclaration can't consume 'first' keyword
-SuccessionUsage <- UsagePrefix* KW_SUCCESSION (!KW_FIRST UsageDeclaration)? SuccessionFirstPart? SuccessionUsageBody
+SuccessionUsage <- UsagePrefix* KW_SUCCESSION (!KW_FIRST < UsageDeclaration >)? { sysml2_build_push(auxil, SYSML_KIND_SUCCESSION, $1, $1e - $1s); } SuccessionFirstPart? SuccessionUsageBody { sysml2_pop(auxil); }
 SuccessionFirstPart <- KW_FIRST ConnectorEndMember (KW_THEN ConnectorEndMember)?
 SuccessionUsageBody <- DecisionBranches / UsageBody
 DecisionBranches <- DecisionBranch+
@@ -1829,14 +1829,14 @@ AttributeUsage <- UsagePrefix* KW_ATTRIBUTE < UsageDeclaration > { sysml2_build_
 EnumerationUsage <- UsagePrefix* KW_ENUM < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_ENUMERATION_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
 OccurrenceUsage <- UsagePrefix* KW_OCCURRENCE < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_OCCURRENCE_USAGE, $1, $1e - $1s); } OccurrenceUsageBody { sysml2_pop(auxil); }
                  / UsagePrefix+ UsageDeclaration OccurrenceUsageBody
-EventOccurrenceUsage <- UsagePrefix* KW_EVENT KW_OCCURRENCE UsageDeclaration OccurrenceUsageBody
+EventOccurrenceUsage <- UsagePrefix* KW_EVENT KW_OCCURRENCE < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, $1, $1e - $1s); } OccurrenceUsageBody { sysml2_pop(auxil); }
 # Event can have feature chain with redefines: event x.y[1] :>> z;
 # Or just reference: event name.feature;
-EventUsage <- UsagePrefix* KW_EVENT QualifiedName FeatureChain? Multiplicity? REDEFINES QualifiedName SEMICOLON
-            / UsagePrefix* KW_EVENT QualifiedName FeatureChain? Multiplicity SEMICOLON
-            / UsagePrefix* KW_EVENT QualifiedName FeatureChain SEMICOLON
-            / UsagePrefix* KW_EVENT QualifiedName SEMICOLON
-            / UsagePrefix* KW_EVENT UsageDeclaration UsageBody
+EventUsage <- UsagePrefix* KW_EVENT < QualifiedName FeatureChain? Multiplicity? REDEFINES QualifiedName > { sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, $1, $1e - $1s); } SEMICOLON { sysml2_pop(auxil); }
+            / UsagePrefix* KW_EVENT < QualifiedName FeatureChain? Multiplicity > { sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, $2, $2e - $2s); } SEMICOLON { sysml2_pop(auxil); }
+            / UsagePrefix* KW_EVENT < QualifiedName FeatureChain > { sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, $3, $3e - $3s); } SEMICOLON { sysml2_pop(auxil); }
+            / UsagePrefix* KW_EVENT < QualifiedName > { sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, $4, $4e - $4s); } SEMICOLON { sysml2_pop(auxil); }
+            / UsagePrefix* KW_EVENT < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, $5, $5e - $5s); } UsageBody { sysml2_pop(auxil); }
 OccurrenceUsageBody <- SEMICOLON / LBRACE OccurrenceUsageMember* { sysml2_capture_body_end_trivia(auxil); } RBRACE
 OccurrenceUsageMember <- MemberPrefix (OccurrenceDefinitionElement / AssertConstraintUsage / PortionUsage / EventOccurrenceUsage / EventUsage / OccurrenceUsage / MessageUsage / BindUsage / ShorthandFeatureMember / SuccessionMember / StructureUsageElement / AnnotatingElement)
 ItemUsage <- UsagePrefix* KW_ITEM < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_ITEM_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
@@ -1867,8 +1867,8 @@ FlowConnectionPartTo <- < FlowEndMember > KW_TO < FlowEndMember > { if (auxil->b
 FlowConnectionPartReverse <- < FlowEndMember > KW_FROM < FlowEndMember > { if (auxil->build_ctx) sysml2_capture_flow(auxil->build_ctx, NULL, 0, $2, $2e - $2s, $1, $1e - $1s); }
 FlowEndMember <- QualifiedName FeatureChain?
 # Interface: anonymous connection, or named with optional connect keyword
-InterfaceUsage <- UsagePrefix* KW_INTERFACE &(ConnectorEndMember KW_TO) ConnectionPart InterfaceBody
-                / UsagePrefix* KW_INTERFACE UsageDeclaration? (KW_CONNECT ConnectionPart)? InterfaceBody
+InterfaceUsage <- UsagePrefix* KW_INTERFACE { sysml2_build_push(auxil, SYSML_KIND_INTERFACE_USAGE, "", 0); } &(ConnectorEndMember KW_TO) ConnectionPart InterfaceBody { sysml2_pop(auxil); }
+                / UsagePrefix* KW_INTERFACE < UsageDeclaration? > { sysml2_build_push(auxil, SYSML_KIND_INTERFACE_USAGE, $1, $1e - $1s); } (KW_CONNECT ConnectionPart)? InterfaceBody { sysml2_pop(auxil); }
 PortUsage <- UsagePrefix* KW_PORT < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_PORT_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
 AllocationUsage <- UsagePrefix* KW_ALLOCATION < UsageDeclaration? > { sysml2_build_push(auxil, SYSML_KIND_ALLOCATION_USAGE, $1, $1e - $1s); } AllocationPart? UsageBody { sysml2_pop(auxil); }
                  / UsagePrefix* KW_ALLOCATE BinaryAllocatePart UsageBody
@@ -1890,8 +1890,8 @@ ActionWhileBody <- KW_WHILE OwnedExpression ActionBodyParameter (KW_UNTIL OwnedE
 ActionForBody <- KW_FOR NAME ForVariableSpec (ActionBodyParameter / ActionBody) SEMICOLON?
 ForVariableSpec <- COLON QualifiedName (KW_IN OwnedExpression)? / KW_IN OwnedExpression
 StateUsage <- UsagePrefix* (KW_PARALLEL { if (auxil->build_ctx) sysml2_capture_parallel(auxil->build_ctx); })? KW_STATE < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_STATE_USAGE, $1, $1e - $1s); } (KW_PARALLEL { if (auxil->build_ctx) sysml2_set_parallel_on_current(auxil->build_ctx); })? StateBody { sysml2_pop(auxil); }
-ExhibitStateUsage <- KW_EXHIBIT KW_STATE? QualifiedName FeatureChain KW_PARALLEL? ExhibitStateBody
-                   / KW_EXHIBIT KW_STATE? UsageDeclaration KW_PARALLEL? ExhibitStateBody
+ExhibitStateUsage <- KW_EXHIBIT KW_STATE? < QualifiedName FeatureChain > { sysml2_build_push(auxil, SYSML_KIND_STATE_USAGE, $1, $1e - $1s); } (KW_PARALLEL { if (auxil->build_ctx) sysml2_set_parallel_on_current(auxil->build_ctx); })? ExhibitStateBody { sysml2_pop(auxil); }
+                   / KW_EXHIBIT KW_STATE? < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_STATE_USAGE, $2, $2e - $2s); } (KW_PARALLEL { if (auxil->build_ctx) sysml2_set_parallel_on_current(auxil->build_ctx); })? ExhibitStateBody { sysml2_pop(auxil); }
 ExhibitStateBody <- SEMICOLON / StateBody
 ConstraintUsage <- UsagePrefix* KW_CONSTRAINT < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_USAGE, $1, $1e - $1s); } ConstraintBody { sysml2_pop(auxil); }
 RequirementUsage <- UsagePrefix* KW_REQUIREMENT < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_REQUIREMENT_USAGE, $1, $1e - $1s); } RequirementBody { sysml2_pop(auxil); }
