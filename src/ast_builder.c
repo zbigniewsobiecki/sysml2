@@ -63,7 +63,9 @@ SysmlBuildContext *sysml2_build_context_create(
     ctx->pending_variation = false;
     ctx->pending_readonly = false;
     ctx->pending_derived = false;
+    ctx->pending_constant = false;
     ctx->pending_ref = false;
+    ctx->pending_parallel = false;
     ctx->pending_direction = SYSML_DIR_NONE;
     ctx->pending_visibility = SYSML_VIS_PUBLIC;
 
@@ -74,6 +76,9 @@ SysmlBuildContext *sysml2_build_context_create(
     /* Initialize pending default value */
     ctx->pending_default_value = NULL;
     ctx->pending_has_default_keyword = false;
+
+    /* Initialize pending enum keyword */
+    ctx->pending_has_enum_keyword = false;
 
     /* Initialize pending import visibility */
     ctx->pending_import_private = false;
@@ -270,12 +275,18 @@ SysmlNode *sysml2_build_node(
     node->is_variation = ctx->pending_variation;
     node->is_readonly = ctx->pending_readonly;
     node->is_derived = ctx->pending_derived;
+    node->is_constant = ctx->pending_constant;
     node->is_ref = ctx->pending_ref;
+    node->is_parallel = ctx->pending_parallel;
+    node->has_enum_keyword = ctx->pending_has_enum_keyword;
     ctx->pending_abstract = false;
     ctx->pending_variation = false;
     ctx->pending_readonly = false;
     ctx->pending_derived = false;
+    ctx->pending_constant = false;
     ctx->pending_ref = false;
+    ctx->pending_parallel = false;
+    ctx->pending_has_enum_keyword = false;
 
     /* Apply pending direction */
     node->direction = ctx->pending_direction;
@@ -1501,7 +1512,9 @@ void sysml2_build_clear_pending_modifiers(SysmlBuildContext *ctx) {
     ctx->pending_variation = false;
     ctx->pending_readonly = false;
     ctx->pending_derived = false;
+    ctx->pending_constant = false;
     ctx->pending_ref = false;
+    ctx->pending_parallel = false;
     ctx->pending_direction = SYSML_DIR_NONE;
     ctx->pending_visibility = SYSML_VIS_PUBLIC;
     ctx->pending_multiplicity_lower = NULL;
@@ -1510,6 +1523,58 @@ void sysml2_build_clear_pending_modifiers(SysmlBuildContext *ctx) {
     ctx->pending_has_default_keyword = false;
     ctx->pending_param_kind = SYSML_KIND_UNKNOWN;
     ctx->pending_param_list = NULL;
+    ctx->pending_has_enum_keyword = false;
+}
+
+/*
+ * Capture the readonly modifier
+ */
+void sysml2_capture_readonly(SysmlBuildContext *ctx) {
+    if (!ctx) return;
+    ctx->pending_readonly = true;
+}
+
+/*
+ * Capture the derived modifier
+ */
+void sysml2_capture_derived(SysmlBuildContext *ctx) {
+    if (!ctx) return;
+    ctx->pending_derived = true;
+}
+
+/*
+ * Capture the constant modifier
+ */
+void sysml2_capture_constant(SysmlBuildContext *ctx) {
+    if (!ctx) return;
+    ctx->pending_constant = true;
+}
+
+/*
+ * Capture the parallel keyword for states (before push)
+ */
+void sysml2_capture_parallel(SysmlBuildContext *ctx) {
+    if (!ctx) return;
+    ctx->pending_parallel = true;
+}
+
+/*
+ * Set parallel flag on current node (after push)
+ */
+void sysml2_set_parallel_on_current(SysmlBuildContext *ctx) {
+    if (!ctx || ctx->element_count == 0) return;
+    SysmlNode *current = ctx->elements[ctx->element_count - 1];
+    if (current) {
+        current->is_parallel = true;
+    }
+}
+
+/*
+ * Capture the enum keyword for enumerated values
+ */
+void sysml2_capture_enum_keyword(SysmlBuildContext *ctx) {
+    if (!ctx) return;
+    ctx->pending_has_enum_keyword = true;
 }
 
 /*

@@ -6,8 +6,8 @@ package EnumTest {
     }
 
     enum def Priority {
-        Low;
-        Medium;
-        High;
+        enum Low;
+        enum Medium;
+        enum High;
     }
 }

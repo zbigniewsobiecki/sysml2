@@ -70,7 +70,10 @@ typedef struct SysmlBuildContext {
     bool pending_variation;
     bool pending_readonly;
     bool pending_derived;
+    bool pending_constant;
     bool pending_ref;
+    bool pending_parallel;
+    bool pending_has_enum_keyword;
     SysmlDirection pending_direction;
     SysmlVisibility pending_visibility;
 
@@ -600,6 +603,60 @@ void sysml2_capture_variation(SysmlBuildContext *ctx);
  * @param ctx Build context
  */
 void sysml2_capture_ref(SysmlBuildContext *ctx);
+
+/*
+ * Capture the readonly modifier
+ *
+ * Will be applied to the next created node.
+ *
+ * @param ctx Build context
+ */
+void sysml2_capture_readonly(SysmlBuildContext *ctx);
+
+/*
+ * Capture the derived modifier
+ *
+ * Will be applied to the next created node.
+ *
+ * @param ctx Build context
+ */
+void sysml2_capture_derived(SysmlBuildContext *ctx);
+
+/*
+ * Capture the constant modifier
+ *
+ * Will be applied to the next created node.
+ *
+ * @param ctx Build context
+ */
+void sysml2_capture_constant(SysmlBuildContext *ctx);
+
+/*
+ * Capture the parallel keyword for states (before push)
+ *
+ * Will be applied to the next created state node.
+ *
+ * @param ctx Build context
+ */
+void sysml2_capture_parallel(SysmlBuildContext *ctx);
+
+/*
+ * Set parallel flag on current node (after push)
+ *
+ * Directly sets is_parallel on the current node in the build stack.
+ *
+ * @param ctx Build context
+ */
+void sysml2_set_parallel_on_current(SysmlBuildContext *ctx);
+
+/*
+ * Capture the enum keyword for enumeration values
+ *
+ * Will be applied to the next created enumeration usage node.
+ *
+ * @param ctx Build context
+ */
+void sysml2_capture_enum_keyword(SysmlBuildContext *ctx);
 
 /*
  * Capture direction (in/out/inout)

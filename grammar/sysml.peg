@@ -1689,7 +1689,10 @@ LifeclassPrefix <- KW_SNAPSHOT / KW_TIMESLICE
 UsagePrefix <- PrefixMetadata / AbstractModifier / VariationModifier / KW_VARIANT / BasicUsagePrefix
 BasicUsagePrefix <- Direction? RefPrefix? KW_INDIVIDUAL? / KW_INDIVIDUAL
 RefPrefix <- KW_REF { if (auxil->build_ctx) sysml2_capture_ref(auxil->build_ctx); }
-           / KW_READONLY / KW_DERIVED / KW_CONSTANT / KW_END
+           / KW_READONLY { if (auxil->build_ctx) sysml2_capture_readonly(auxil->build_ctx); }
+           / KW_DERIVED { if (auxil->build_ctx) sysml2_capture_derived(auxil->build_ctx); }
+           / KW_CONSTANT { if (auxil->build_ctx) sysml2_capture_constant(auxil->build_ctx); }
+           / KW_END
 
 # Definitions
 AttributeDefinition <- DefinitionPrefix* KW_ATTRIBUTE KW_DEF < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_ATTRIBUTE_DEF, $1, $1e - $1s); } DefinitionBody { sysml2_pop(auxil); }
@@ -1697,7 +1700,8 @@ EnumerationDefinition <- DefinitionPrefix* KW_ENUM KW_DEF < Identification Defin
 DatatypeDefinition <- DefinitionPrefix* KW_DATATYPE < Identification DefinitionSpecializations? > { sysml2_build_push(auxil, SYSML_KIND_DATATYPE, $1, $1e - $1s); } DefinitionBody { sysml2_pop(auxil); }
 EnumerationBody <- SEMICOLON / LBRACE (EnumeratedValue / AnnotatingElement)* RBRACE
 EnumeratedValue <- _ MemberPrefix EnumeratedValueVariant
-EnumeratedValueVariant <- KW_ENUM? < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_ENUMERATION_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
+EnumeratedValueVariant <- KW_ENUM < UsageDeclaration > { if (auxil->build_ctx) sysml2_capture_enum_keyword(auxil->build_ctx); sysml2_build_push(auxil, SYSML_KIND_ENUMERATION_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
+                        / < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_ENUMERATION_USAGE, $2, $2e - $2s); } UsageBody { sysml2_pop(auxil); }
                         / KW_VARIANT UsageElement
 # OccurrenceDefinition: occurrence def X or individual def X (shorthand)
 OccurrenceDefinition <- OccurrenceDefinitionExplicit / OccurrenceDefinitionShorthand
@@ -1873,7 +1877,7 @@ SendActionTail <- (!KW_VIA !KW_TO OwnedExpression)? (KW_VIA QualifiedName Featur
 ActionWhileBody <- KW_WHILE OwnedExpression ActionBodyParameter (KW_UNTIL OwnedExpression)? SEMICOLON?
 ActionForBody <- KW_FOR NAME ForVariableSpec (ActionBodyParameter / ActionBody) SEMICOLON?
 ForVariableSpec <- COLON QualifiedName (KW_IN OwnedExpression)? / KW_IN OwnedExpression
-StateUsage <- UsagePrefix* KW_PARALLEL? KW_STATE < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_STATE_USAGE, $1, $1e - $1s); } KW_PARALLEL? StateBody { sysml2_pop(auxil); }
+StateUsage <- UsagePrefix* (KW_PARALLEL { if (auxil->build_ctx) sysml2_capture_parallel(auxil->build_ctx); })? KW_STATE < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_STATE_USAGE, $1, $1e - $1s); } (KW_PARALLEL { if (auxil->build_ctx) sysml2_set_parallel_on_current(auxil->build_ctx); })? StateBody { sysml2_pop(auxil); }
 ExhibitStateUsage <- KW_EXHIBIT KW_STATE? QualifiedName FeatureChain KW_PARALLEL? ExhibitStateBody
                    / KW_EXHIBIT KW_STATE? UsageDeclaration KW_PARALLEL? ExhibitStateBody
 ExhibitStateBody <- SEMICOLON / StateBody

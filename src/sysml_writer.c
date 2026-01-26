@@ -639,11 +639,15 @@ static void write_statement(Sysml2Writer *w, const SysmlStatement *stmt) {
             break;
 
         case SYSML_STMT_METADATA_USAGE:
-            /* metadata X about Y, Z; */
+            /* metadata X about Y, Z; or metadata X { ... } */
             if (stmt->raw_text) {
                 fputs(stmt->raw_text, w->out);
+                /* Only add semicolon if not already ending with } or ; */
+                size_t len = strlen(stmt->raw_text);
+                if (len > 0 && stmt->raw_text[len-1] != '}' && stmt->raw_text[len-1] != ';') {
+                    fputs(";", w->out);
+                }
             }
-            fputs(";", w->out);
             break;
 
         case SYSML_STMT_SHORTHAND_FEATURE:
@@ -711,6 +715,34 @@ static void write_statement(Sysml2Writer *w, const SysmlStatement *stmt) {
 
         case SYSML_STMT_FRAME:
             fputs("frame ", w->out);
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_SATISFY:
+            /* raw_text already includes the full statement */
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_INCLUDE_USE_CASE:
+            /* raw_text already includes the full statement */
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_EXPOSE:
+            /* raw_text already includes the full statement */
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
+        case SYSML_STMT_RENDER:
+            /* raw_text already includes the full statement */
             if (stmt->raw_text) {
                 fputs(stmt->raw_text, w->out);
             }
@@ -1237,8 +1269,9 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
             break;
         case SYSML_VIS_PUBLIC:
             /* Public is the default, only write if explicitly marked */
-            /* Note: we don't have an is_public_explicit field on nodes,
-             * so we don't write public unless we add that field */
+            if (node->is_public_explicit) {
+                fputs("public ", w->out);
+            }
             break;
         default:
             break;
@@ -1279,24 +1312,47 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
         fputs("variation ", w->out);
     }
 
+    /* Write parallel modifier (for states) */
+    if (node->is_parallel && node->kind == SYSML_KIND_STATE_USAGE) {
+        fputs("parallel ", w->out);
+    }
+
+    /* Write attribute prefixes */
+    if (node->is_readonly) {
+        fputs("readonly ", w->out);
+    }
+    if (node->is_derived) {
+        fputs("derived ", w->out);
+    }
+    if (node->is_constant) {
+        fputs("constant ", w->out);
+    }
+
     /* Write ref modifier */
     if (node->is_ref) {
         fputs("ref ", w->out);
+    }
+
+    /* Write end modifier */
+    if (node->is_end) {
+        fputs("end ", w->out);
     }
 
     /* Write keyword */
     const char *keyword = sysml2_kind_to_keyword(node->kind);
     bool has_keyword = keyword && keyword[0];
 
-    /* Enum literals (ENUMERATION_USAGE) inside enum defs don't get the "enum" keyword.
-     * In SysML v2, they're written as bare names like "Unit;" not "enum Unit;" */
+    /* Enum literals (ENUMERATION_USAGE) inside enum defs:
+     * - Use the "enum" keyword if it was explicitly present (has_enum_keyword)
+     * - Otherwise skip the keyword (they're written as bare names like "Unit;") */
     if (has_keyword && node->kind == SYSML_KIND_ENUMERATION_USAGE && node->parent_id) {
         /* Check if parent is an enumeration def */
         for (size_t i = 0; i < model->element_count; i++) {
             if (model->elements[i] && model->elements[i]->id &&
                 strcmp(model->elements[i]->id, node->parent_id) == 0) {
                 if (model->elements[i]->kind == SYSML_KIND_ENUMERATION_DEF) {
-                    has_keyword = false;  /* Skip the keyword */
+                    /* Inside enum def - only write keyword if explicitly marked */
+                    has_keyword = node->has_enum_keyword;
                 }
                 break;
             }
@@ -1304,6 +1360,10 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
     }
 
     if (has_keyword) {
+        /* Handle standard library package prefix */
+        if (node->kind == SYSML_KIND_LIBRARY_PACKAGE && node->is_standard_library) {
+            fputs("standard ", w->out);
+        }
         fputs(keyword, w->out);
     }
 
@@ -1400,6 +1460,12 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
         }
         fputs(" = ", w->out);
         fputs(node->default_value, w->out);
+    }
+
+    /* Write connector/allocation part (connect (a, b, c) or allocate X to Y) */
+    if (node->connector_part) {
+        fputc(' ', w->out);
+        fputs(node->connector_part, w->out);
     }
 
     /* Write body for container elements */

@@ -802,6 +802,381 @@ TEST(sysml_roundtrip_idempotent) {
     FIXTURE_TEARDOWN();
 }
 
+/* ========== Batch 1: Simple Keyword Capture Tests ========== */
+
+/* Test: constant attribute keyword preserved */
+TEST(sysml_constant_attribute_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "part def Vehicle {\n"
+        "    constant attribute maxSpeed : Real = 200;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify constant keyword is preserved */
+    ASSERT(strstr(output, "constant") != NULL);
+    ASSERT(strstr(output, "maxSpeed") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: derived attribute keyword preserved */
+TEST(sysml_derived_attribute_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "part def Vehicle {\n"
+        "    attribute baseSpeed : Real;\n"
+        "    derived attribute effectiveSpeed :> baseSpeed;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify derived keyword is preserved */
+    ASSERT(strstr(output, "derived") != NULL);
+    ASSERT(strstr(output, "effectiveSpeed") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: readonly attribute keyword preserved */
+TEST(sysml_readonly_attribute_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "part def Vehicle {\n"
+        "    readonly attribute vin : String;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify readonly keyword is preserved */
+    ASSERT(strstr(output, "readonly") != NULL);
+    ASSERT(strstr(output, "vin") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: parallel state keyword preserved */
+TEST(sysml_parallel_state_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "state def MachineState {\n"
+        "    state operational parallel {\n"
+        "        state monitor;\n"
+        "        state control;\n"
+        "    }\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify parallel keyword is preserved */
+    ASSERT(strstr(output, "parallel") != NULL);
+    ASSERT(strstr(output, "operational") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: enum keyword on enumeration member preserved */
+TEST(sysml_enum_member_keyword_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "enum def Priority {\n"
+        "    enum Low;\n"
+        "    enum Medium;\n"
+        "    enum High;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify enum keyword is preserved for members */
+    ASSERT(strstr(output, "enum Low") != NULL);
+    ASSERT(strstr(output, "enum Medium") != NULL);
+    ASSERT(strstr(output, "enum High") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: enum members without keyword should NOT add keyword */
+TEST(sysml_enum_member_no_keyword_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "enum def Status {\n"
+        "    Pending;\n"
+        "    Active;\n"
+        "    Completed;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify enum keyword is NOT added to members that didn't have it */
+    ASSERT(strstr(output, "enum Pending") == NULL);
+    ASSERT(strstr(output, "enum Active") == NULL);
+    ASSERT(strstr(output, "enum Completed") == NULL);
+    /* But members should still be present */
+    ASSERT(strstr(output, "Pending") != NULL);
+    ASSERT(strstr(output, "Active") != NULL);
+    ASSERT(strstr(output, "Completed") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* ========== Batch 3: Endpoint Capture Tests ========== */
+
+/* Test: flow endpoints preserved */
+TEST(sysml_flow_endpoints_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "action def DataFlow {\n"
+        "    action source;\n"
+        "    action target;\n"
+        "    flow dataStream from source to target;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify flow with endpoints */
+    ASSERT(strstr(output, "flow") != NULL);
+    ASSERT(strstr(output, "dataStream") != NULL);
+    ASSERT(strstr(output, "from") != NULL);
+    ASSERT(strstr(output, "source") != NULL);
+    ASSERT(strstr(output, "to") != NULL);
+    ASSERT(strstr(output, "target") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* ========== Batch 4: Body and Ref Tests ========== */
+
+/* Test: nested port body preserved */
+TEST(sysml_nested_port_body_preserved) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "port def CompositePort {\n"
+        "    port subPort {\n"
+        "        in item dataIn;\n"
+        "        out item dataOut;\n"
+        "    }\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Verify nested port body is preserved */
+    ASSERT(strstr(output, "port subPort") != NULL);
+    ASSERT(strstr(output, "dataIn") != NULL);
+    ASSERT(strstr(output, "dataOut") != NULL);
+    /* Make sure it has a body, not just a semicolon */
+    ASSERT(strstr(output, "subPort;") == NULL || strstr(output, "subPort {") != NULL);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* ========== Comprehensive Round-Trip Tests ========== */
+
+/* Test: round-trip preserves all batch 1 keywords */
+TEST(sysml_roundtrip_batch1_keywords) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package KeywordTest {\n"
+        "    part def P {\n"
+        "        constant attribute maxVal : Real = 100;\n"
+        "        readonly attribute id : String;\n"
+        "        derived attribute computed :> maxVal;\n"
+        "    }\n"
+        "    state def S {\n"
+        "        state concurrent parallel {\n"
+        "            state a;\n"
+        "            state b;\n"
+        "        }\n"
+        "    }\n"
+        "    enum def E {\n"
+        "        enum First;\n"
+        "        Second;\n"
+        "        enum Third;\n"
+        "    }\n"
+        "}\n";
+
+    /* First round */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+    char *output1 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model1, &output1), SYSML2_OK);
+
+    /* Second round */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+    char *output2 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model2, &output2), SYSML2_OK);
+
+    /* Verify keywords preserved after round-trip */
+    ASSERT(strstr(output2, "constant") != NULL);
+    ASSERT(strstr(output2, "readonly") != NULL);
+    ASSERT(strstr(output2, "derived") != NULL);
+    ASSERT(strstr(output2, "parallel") != NULL);
+    ASSERT(strstr(output2, "enum First") != NULL);
+    ASSERT(strstr(output2, "enum Third") != NULL);
+    /* Second should NOT have enum keyword */
+    ASSERT(strstr(output2, "enum Second") == NULL);
+    ASSERT(strstr(output2, "Second") != NULL);
+
+    /* Idempotency: third round should match second */
+    SysmlSemanticModel *model3 = parse_sysml_string(&arena, &intern, output2);
+    ASSERT_NOT_NULL(model3);
+    char *output3 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model3, &output3), SYSML2_OK);
+    ASSERT_STR_EQ(output2, output3);
+
+    free(output1);
+    free(output2);
+    free(output3);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: round-trip preserves flow endpoints */
+TEST(sysml_roundtrip_flow_endpoints) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "action def Flow {\n"
+        "    action src;\n"
+        "    action dst;\n"
+        "    flow f from src to dst;\n"
+        "}\n";
+
+    /* First round */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+    char *output1 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model1, &output1), SYSML2_OK);
+
+    /* Second round */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+    char *output2 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model2, &output2), SYSML2_OK);
+
+    /* Verify flow preserved */
+    ASSERT(strstr(output2, "flow") != NULL);
+    ASSERT(strstr(output2, "from") != NULL);
+    ASSERT(strstr(output2, "to") != NULL);
+
+    /* Idempotency */
+    SysmlSemanticModel *model3 = parse_sysml_string(&arena, &intern, output2);
+    ASSERT_NOT_NULL(model3);
+    char *output3 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model3, &output3), SYSML2_OK);
+    ASSERT_STR_EQ(output2, output3);
+
+    free(output1);
+    free(output2);
+    free(output3);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: round-trip preserves nested port bodies */
+TEST(sysml_roundtrip_nested_port_body) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "port def CompositePort {\n"
+        "    port nested {\n"
+        "        in item x;\n"
+        "    }\n"
+        "}\n";
+
+    /* First round */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+    char *output1 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model1, &output1), SYSML2_OK);
+
+    /* Second round */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+    char *output2 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model2, &output2), SYSML2_OK);
+
+    /* Verify nested body preserved */
+    ASSERT(strstr(output2, "port nested") != NULL);
+    ASSERT(strstr(output2, "in item x") != NULL);
+
+    /* Idempotency */
+    SysmlSemanticModel *model3 = parse_sysml_string(&arena, &intern, output2);
+    ASSERT_NOT_NULL(model3);
+    char *output3 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model3, &output3), SYSML2_OK);
+    ASSERT_STR_EQ(output2, output3);
+
+    free(output1);
+    free(output2);
+    free(output3);
+    FIXTURE_TEARDOWN();
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -851,6 +1226,25 @@ int main(void) {
     RUN_TEST(sysml_typing_vs_redefines_separate);
     RUN_TEST(sysml_multiplicity_spacing_preserved);
     RUN_TEST(sysml_roundtrip_idempotent);
+
+    /* Batch 1: Simple keyword captures */
+    RUN_TEST(sysml_constant_attribute_preserved);
+    RUN_TEST(sysml_derived_attribute_preserved);
+    RUN_TEST(sysml_readonly_attribute_preserved);
+    RUN_TEST(sysml_parallel_state_preserved);
+    RUN_TEST(sysml_enum_member_keyword_preserved);
+    RUN_TEST(sysml_enum_member_no_keyword_preserved);
+
+    /* Batch 3: Flow endpoints */
+    RUN_TEST(sysml_flow_endpoints_preserved);
+
+    /* Batch 4: Nested port bodies */
+    RUN_TEST(sysml_nested_port_body_preserved);
+
+    /* Comprehensive round-trip tests */
+    RUN_TEST(sysml_roundtrip_batch1_keywords);
+    RUN_TEST(sysml_roundtrip_flow_endpoints);
+    RUN_TEST(sysml_roundtrip_nested_port_body);
 
     printf("\n%d/%d tests passed.\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;

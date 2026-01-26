@@ -268,6 +268,10 @@ typedef enum {
     SYSML_STMT_STAKEHOLDER,        /* stakeholder s : Type; */
     SYSML_STMT_OBJECTIVE,          /* objective o {...} */
     SYSML_STMT_FRAME,              /* frame requirement r {...} */
+    SYSML_STMT_SATISFY,            /* satisfy requirement by part; */
+    SYSML_STMT_INCLUDE_USE_CASE,   /* include use case x; */
+    SYSML_STMT_EXPOSE,             /* expose Vehicle::*; */
+    SYSML_STMT_RENDER,             /* render rendering r : R; */
 
     /* Connection/interface body statements */
     SYSML_STMT_END_MEMBER,         /* end port x : Type; */
@@ -414,7 +418,13 @@ typedef struct SysmlNode {
     bool is_variation;
     bool is_readonly;
     bool is_derived;
+    bool is_constant;
     bool is_ref;
+    bool is_end;                 /* true if 'end' keyword was present */
+    bool is_parallel;            /* true if 'parallel' keyword on state */
+    bool is_standard_library;    /* true if library package declared with 'standard' prefix */
+    bool is_public_explicit;     /* true if 'public' keyword was explicit */
+    bool has_enum_keyword;       /* true if enum usage has 'enum' keyword prefix */
 
     /* Direction (for parameters) */
     SysmlDirection direction;
@@ -424,6 +434,9 @@ typedef struct SysmlNode {
 
     /* Parameter list for action/state definitions */
     const char *parameter_list;  /* Raw "(in x : T, out y)" for definitions */
+
+    /* Connector/allocation parts for connections and allocations */
+    const char *connector_part;  /* Raw "connect (a, b, c)" or "allocate X to Y" */
 
     /* Source location for debugging */
     Sysml2SourceLoc loc;
