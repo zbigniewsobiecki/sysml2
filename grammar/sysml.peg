@@ -1657,19 +1657,27 @@ SuccessionConnectorEnd <- Multiplicity? ConnectorEndMember
 KerMLFlowDefinition <- KerMLFlowNamed / KerMLFlowAnon
 KerMLFlowNamed <- KerMLFeaturePrefix KW_FLOW < KerMLFeatureDeclaration > (KW_OF QualifiedName)?
     { sysml2_build_push(auxil, SYSML_KIND_KERML_FLOW, $1, $1e - $1s); }
-    (KW_FROM ConnectorEndMember KW_TO ConnectorEndMember / ConnectorEndMember KW_TO ConnectorEndMember)? KerMLTypeBody { sysml2_pop(auxil); }
+    (KW_FROM < ConnectorEndMember > KW_TO < ConnectorEndMember > { if (auxil->build_ctx) sysml2_capture_flow(auxil->build_ctx, NULL, 0, $2, $2e - $2s, $3, $3e - $3s); }
+    / < ConnectorEndMember > KW_TO < ConnectorEndMember > { if (auxil->build_ctx) sysml2_capture_flow(auxil->build_ctx, NULL, 0, $4, $4e - $4s, $5, $5e - $5s); })?
+    KerMLTypeBody { sysml2_pop(auxil); }
 KerMLFlowAnon <- KerMLFeaturePrefix KW_FLOW (KW_OF QualifiedName)?
     { sysml2_build_push(auxil, SYSML_KIND_KERML_FLOW, "", 0); }
-    (KW_FROM ConnectorEndMember KW_TO ConnectorEndMember / ConnectorEndMember KW_TO ConnectorEndMember)? KerMLTypeBody { sysml2_pop(auxil); }
+    (KW_FROM < ConnectorEndMember > KW_TO < ConnectorEndMember > { if (auxil->build_ctx) sysml2_capture_flow(auxil->build_ctx, NULL, 0, $1, $1e - $1s, $2, $2e - $2s); }
+    / < ConnectorEndMember > KW_TO < ConnectorEndMember > { if (auxil->build_ctx) sysml2_capture_flow(auxil->build_ctx, NULL, 0, $3, $3e - $3s, $4, $4e - $4s); })?
+    KerMLTypeBody { sysml2_pop(auxil); }
 
 # SuccessionFlow: succession flow Name of Payload from A to B { ... }
 SuccessionFlowDefinition <- SuccessionFlowNamed / SuccessionFlowAnon
 SuccessionFlowNamed <- KerMLFeaturePrefix KW_SUCCESSION KW_FLOW < KerMLFeatureDeclaration > (KW_OF QualifiedName)?
     { sysml2_build_push(auxil, SYSML_KIND_SUCCESSION_FLOW, $1, $1e - $1s); }
-    (KW_FROM ConnectorEndMember KW_TO ConnectorEndMember / ConnectorEndMember KW_TO ConnectorEndMember)? KerMLTypeBody { sysml2_pop(auxil); }
+    (KW_FROM < ConnectorEndMember > KW_TO < ConnectorEndMember > { if (auxil->build_ctx) sysml2_capture_flow(auxil->build_ctx, NULL, 0, $2, $2e - $2s, $3, $3e - $3s); }
+    / < ConnectorEndMember > KW_TO < ConnectorEndMember > { if (auxil->build_ctx) sysml2_capture_flow(auxil->build_ctx, NULL, 0, $4, $4e - $4s, $5, $5e - $5s); })?
+    KerMLTypeBody { sysml2_pop(auxil); }
 SuccessionFlowAnon <- KerMLFeaturePrefix KW_SUCCESSION KW_FLOW (KW_OF QualifiedName)?
     { sysml2_build_push(auxil, SYSML_KIND_SUCCESSION_FLOW, "", 0); }
-    (KW_FROM ConnectorEndMember KW_TO ConnectorEndMember / ConnectorEndMember KW_TO ConnectorEndMember)? KerMLTypeBody { sysml2_pop(auxil); }
+    (KW_FROM < ConnectorEndMember > KW_TO < ConnectorEndMember > { if (auxil->build_ctx) sysml2_capture_flow(auxil->build_ctx, NULL, 0, $1, $1e - $1s, $2, $2e - $2s); }
+    / < ConnectorEndMember > KW_TO < ConnectorEndMember > { if (auxil->build_ctx) sysml2_capture_flow(auxil->build_ctx, NULL, 0, $3, $3e - $3s, $4, $4e - $4s); })?
+    KerMLTypeBody { sysml2_pop(auxil); }
 
 # Metadata
 PrefixMetadata <- HASH < QualifiedName > { sysml2_capture_prefix_metadata(auxil, $1, $1e - $1s); }

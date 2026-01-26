@@ -1730,6 +1730,30 @@ void sysml2_capture_flow(
 ) {
     if (!ctx) return;
 
+    /* Check if we're inside a flow usage context - if so, set connector_part on that node */
+    if (ctx->element_count > 0) {
+        SysmlNode *current = ctx->elements[ctx->element_count - 1];
+        if (current && (current->kind == SYSML_KIND_FLOW_USAGE ||
+                        current->kind == SYSML_KIND_KERML_FLOW ||
+                        current->kind == SYSML_KIND_SUCCESSION_FLOW) &&
+            !current->connector_part) {
+            const char *src = trim_and_intern(ctx, source, source_len);
+            const char *tgt = trim_and_intern(ctx, target, target_len);
+            if (src && tgt) {
+                size_t src_len = strlen(src);
+                size_t tgt_len = strlen(tgt);
+                size_t total_len = 5 + src_len + 4 + tgt_len + 1;  /* "from " + " to " */
+                char *buf = sysml2_arena_alloc(ctx->arena, total_len);
+                if (buf) {
+                    snprintf(buf, total_len, "from %s to %s", src, tgt);
+                    current->connector_part = sysml2_intern(ctx->intern, buf);
+                }
+            }
+            return;  /* Don't create statement */
+        }
+    }
+
+    /* Fall back to creating a statement for nested flows */
     SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_FLOW);
     if (!stmt) return;
 
