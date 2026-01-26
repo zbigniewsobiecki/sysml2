@@ -272,6 +272,7 @@ typedef enum {
     SYSML_STMT_INCLUDE_USE_CASE,   /* include use case x; */
     SYSML_STMT_EXPOSE,             /* expose Vehicle::*; */
     SYSML_STMT_RENDER,             /* render rendering r : R; */
+    SYSML_STMT_VERIFY,             /* verify requirement x; */
 
     /* Connection/interface body statements */
     SYSML_STMT_END_MEMBER,         /* end port x : Type; */

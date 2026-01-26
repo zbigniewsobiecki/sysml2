@@ -2340,3 +2340,129 @@ void sysml2_capture_frame(SysmlBuildContext *ctx, const char *text, size_t len) 
     add_pending_stmt(ctx, stmt);
     sysml2_build_clear_pending_modifiers(ctx);
 }
+
+/*
+ * Capture a satisfy usage statement
+ */
+void sysml2_capture_satisfy(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_SATISFY);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+    sysml2_build_clear_pending_modifiers(ctx);
+}
+
+/*
+ * Capture an include use case usage statement
+ */
+void sysml2_capture_include_use_case(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_INCLUDE_USE_CASE);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+    sysml2_build_clear_pending_modifiers(ctx);
+}
+
+/*
+ * Capture an expose usage statement
+ */
+void sysml2_capture_expose(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_EXPOSE);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+    sysml2_build_clear_pending_modifiers(ctx);
+}
+
+/*
+ * Capture a render usage statement
+ */
+void sysml2_capture_render(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_RENDER);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+    sysml2_build_clear_pending_modifiers(ctx);
+}
+
+/*
+ * Capture a verify requirement usage statement
+ */
+void sysml2_capture_verify(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_VERIFY);
+    if (!stmt) return;
+
+    stmt->raw_text = trim_and_intern(ctx, text, len);
+
+    add_pending_stmt(ctx, stmt);
+    sysml2_build_clear_pending_modifiers(ctx);
+}
+
+/*
+ * Capture an allocate statement
+ */
+void sysml2_capture_allocate(
+    SysmlBuildContext *ctx,
+    const char *source, size_t source_len,
+    const char *target, size_t target_len
+) {
+    if (!ctx) return;
+
+    SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_ALLOCATE);
+    if (!stmt) return;
+
+    stmt->source.target = trim_and_intern(ctx, source, source_len);
+    stmt->target.target = trim_and_intern(ctx, target, target_len);
+
+    add_pending_stmt(ctx, stmt);
+}
+
+/*
+ * Capture n-ary connector part
+ */
+void sysml2_capture_nary_connector(SysmlBuildContext *ctx, const char *text, size_t len) {
+    if (!ctx || !text || len == 0) return;
+
+    /* Find the current scope's node and set connector_part */
+    const char *current_scope = sysml2_build_current_scope(ctx);
+    if (current_scope) {
+        for (size_t i = ctx->element_count; i > 0; i--) {
+            SysmlNode *node = ctx->elements[i - 1];
+            if (node->id == current_scope) {
+                /* Format as "connect (a, b, c)" for the connector_part field */
+                const char *trimmed = trim_and_intern(ctx, text, len);
+                if (trimmed) {
+                    /* Prepend "connect " to the captured text */
+                    size_t trimmed_len = strlen(trimmed);
+                    size_t total_len = 8 + trimmed_len + 1; /* "connect " + text + null */
+                    char *buf = sysml2_arena_alloc(ctx->arena, total_len);
+                    if (buf) {
+                        memcpy(buf, "connect ", 8);
+                        memcpy(buf + 8, trimmed, trimmed_len);
+                        buf[total_len - 1] = '\0';
+                        node->connector_part = sysml2_intern(ctx->intern, buf);
+                    }
+                }
+                break;
+            }
+        }
+    }
+}

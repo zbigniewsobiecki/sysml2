@@ -1071,4 +1071,73 @@ void sysml2_capture_objective(SysmlBuildContext *ctx, const char *text, size_t l
  */
 void sysml2_capture_frame(SysmlBuildContext *ctx, const char *text, size_t len);
 
+/*
+ * Capture a satisfy usage statement
+ *
+ * @param ctx Build context
+ * @param text Raw text of the satisfy usage
+ * @param len Length of text
+ */
+void sysml2_capture_satisfy(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture an include use case usage statement
+ *
+ * @param ctx Build context
+ * @param text Raw text of the include use case usage
+ * @param len Length of text
+ */
+void sysml2_capture_include_use_case(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture an expose usage statement
+ *
+ * @param ctx Build context
+ * @param text Raw text of the expose usage
+ * @param len Length of text
+ */
+void sysml2_capture_expose(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture a render usage statement
+ *
+ * @param ctx Build context
+ * @param text Raw text of the render usage
+ * @param len Length of text
+ */
+void sysml2_capture_render(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture a verify requirement usage statement
+ *
+ * @param ctx Build context
+ * @param text Raw text of the verify requirement usage
+ * @param len Length of text
+ */
+void sysml2_capture_verify(SysmlBuildContext *ctx, const char *text, size_t len);
+
+/*
+ * Capture an allocate statement
+ *
+ * @param ctx Build context
+ * @param source Source qualified name
+ * @param source_len Length of source
+ * @param target Target qualified name
+ * @param target_len Length of target
+ */
+void sysml2_capture_allocate(
+    SysmlBuildContext *ctx,
+    const char *source, size_t source_len,
+    const char *target, size_t target_len
+);
+
+/*
+ * Capture n-ary connector part
+ *
+ * @param ctx Build context
+ * @param text Raw text of the n-ary connector part including parentheses
+ * @param len Length of text
+ */
+void sysml2_capture_nary_connector(SysmlBuildContext *ctx, const char *text, size_t len);
+
 #endif /* SYSML2_AST_BUILDER_H */

@@ -748,6 +748,13 @@ static void write_statement(Sysml2Writer *w, const SysmlStatement *stmt) {
             }
             break;
 
+        case SYSML_STMT_VERIFY:
+            /* raw_text already includes the full statement */
+            if (stmt->raw_text) {
+                fputs(stmt->raw_text, w->out);
+            }
+            break;
+
         default:
             /* Unknown statement - write raw_text if available */
             if (stmt->raw_text) {

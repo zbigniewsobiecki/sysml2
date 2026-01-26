@@ -365,6 +365,15 @@ void sysml2_capture_textual_rep(SysmlBuildContext *ctx, const char *name, size_t
 void sysml2_capture_result_expr(SysmlBuildContext *ctx, const char *expr, size_t len);
 void sysml2_attach_pending_stmts(SysmlBuildContext *ctx, SysmlNode *node);
 
+/* Forward declarations for additional statement captures */
+void sysml2_capture_satisfy(SysmlBuildContext *ctx, const char *text, size_t len);
+void sysml2_capture_include_use_case(SysmlBuildContext *ctx, const char *text, size_t len);
+void sysml2_capture_expose(SysmlBuildContext *ctx, const char *text, size_t len);
+void sysml2_capture_render(SysmlBuildContext *ctx, const char *text, size_t len);
+void sysml2_capture_verify(SysmlBuildContext *ctx, const char *text, size_t len);
+void sysml2_capture_allocate(SysmlBuildContext *ctx, const char *source, size_t source_len, const char *target, size_t target_len);
+void sysml2_capture_nary_connector(SysmlBuildContext *ctx, const char *text, size_t len);
+
 /* Helper: check if character is a type/specialization marker */
 static int sysml2_is_marker(char c, char next) {
     if (c == '[' || c == '=' || c == '{' || c == ';') return 1;
@@ -1811,9 +1820,9 @@ ConstraintUsageElement <- ParameterUsage / ReturnUsage / ConstraintUsage
 RequirementUsageElement <- SubjectUsage / ActorUsage / StakeholderUsage / AssumeConstraint / RequireConstraint / AssertSatisfyUsage / SatisfyUsage / RequirementUsage / ConcernUsage / ConstraintUsage / ObjectiveUsage / FrameUsage / VerifyRequirementUsage / RequirementReference / VerificationUsage / CalcUsage / ActionUsage / AllocationUsage / ParameterUsage / StructureUsageElement
 CalcUsageElement <- CalcUsage / ReturnUsage / ActionUsageElement / ConstraintUsage / StructureUsageElement
 CaseUsageElement <- SubjectUsage / ActorUsage / StakeholderUsage / ObjectiveUsage / IncludeUseCaseUsage / UseCaseUsage / AnalysisUsage / VerificationUsage / AssertConstraintUsage / CalcUsageElement
-IncludeUseCaseUsage <- KW_INCLUDE (KW_USE KW_CASE UsageDeclaration / QualifiedName FeatureChain? Multiplicity?) UsageBody
+IncludeUseCaseUsage <- < KW_INCLUDE (KW_USE KW_CASE UsageDeclaration / QualifiedName FeatureChain? Multiplicity?) UsageBody > { if (auxil->build_ctx) sysml2_capture_include_use_case(auxil->build_ctx, $1, $1e - $1s); }
 ViewUsageElement <- RenderUsage / ViewUsage / ViewpointUsage / RenderingUsage / ExposeUsage / RequireConstraint / SatisfyUsage / StructureUsageElement
-ExposeUsage <- KW_EXPOSE (QualifiedName (COLONCOLON_STAR COLONCOLON_STARSTAR? / COLONCOLON_STARSTAR) / QualifiedName FeatureChain?) ImportFilter? UsageBody
+ExposeUsage <- < KW_EXPOSE (QualifiedName (COLONCOLON_STAR COLONCOLON_STARSTAR? / COLONCOLON_STARSTAR) / QualifiedName FeatureChain?) ImportFilter? UsageBody > { if (auxil->build_ctx) sysml2_capture_expose(auxil->build_ctx, $1, $1e - $1s); }
 
 # Usages
 AttributeUsage <- UsagePrefix* KW_ATTRIBUTE < UsageDeclaration > { sysml2_build_push(auxil, SYSML_KIND_ATTRIBUTE_USAGE, $1, $1e - $1s); } UsageBody { sysml2_pop(auxil); }
@@ -1917,11 +1926,11 @@ ObjectiveUsage <- KW_OBJECTIVE { if (auxil->build_ctx) sysml2_mark_raw_constrain
 FrameUsage <- KW_FRAME < (KW_CONCERN / KW_REQUIREMENT)? UsageDeclaration RequirementBody > { if (auxil->build_ctx) sysml2_capture_frame(auxil->build_ctx, $1, $1e - $1s); }
 RequirementReference <- RequirementConstraintKind UsageDeclaration? UsageBody
 RequirementConstraintKind <- KW_ASSUME KW_CONSTRAINT? / KW_REQUIRE KW_CONSTRAINT?
-VerifyRequirementUsage <- KW_VERIFY KW_REQUIREMENT? UsageDeclaration? UsageBody
-                        / KW_VERIFY QualifiedName FeatureChain UsageBody
+VerifyRequirementUsage <- < KW_VERIFY KW_REQUIREMENT? UsageDeclaration? UsageBody > { if (auxil->build_ctx) sysml2_capture_verify(auxil->build_ctx, $1, $1e - $1s); }
+                        / < KW_VERIFY QualifiedName FeatureChain UsageBody > { if (auxil->build_ctx) sysml2_capture_verify(auxil->build_ctx, $2, $2e - $2s); }
 ReturnUsage <- KW_RETURN < ReturnUsageKind? UsageDeclaration UsageBody > { if (auxil->build_ctx) sysml2_capture_return_usage(auxil->build_ctx, $1, $1e - $1s); }
 ReturnUsageKind <- KW_ATTRIBUTE / KW_PART / KW_ITEM / KW_REF
-RenderUsage <- KW_RENDER KW_RENDERING? UsageDeclaration UsageBody
+RenderUsage <- < KW_RENDER KW_RENDERING? UsageDeclaration UsageBody > { if (auxil->build_ctx) sysml2_capture_render(auxil->build_ctx, $1, $1e - $1s); }
 
 # Action Elements
 SendAction <- KW_SEND < OwnedExpression (KW_VIA QualifiedName FeatureChain?)? (KW_TO QualifiedName FeatureChain?)? > SEMICOLON { if (auxil->build_ctx) sysml2_capture_send(auxil->build_ctx, $1, $1e - $1s); }
@@ -2065,10 +2074,10 @@ AssertConstraintReference <- UsageDeclaration { sysml2_build_push(auxil, SYSML_K
 # === SATISFY USAGE ===
 # Pattern 1: satisfy [requirement] usageDecl by target body
 # Pattern 2: satisfy qualifiedName by target body (reference existing requirement)
-SatisfyUsage <- KW_NOT? KW_SATISFY KW_REQUIREMENT? UsageDeclaration (KW_BY QualifiedName FeatureChain?)? UsageBody
-              / KW_NOT? KW_SATISFY QualifiedName FeatureChain? (KW_BY QualifiedName FeatureChain?)? UsageBody
-AssertSatisfyUsage <- KW_ASSERT KW_NOT? KW_SATISFY KW_REQUIREMENT? UsageDeclaration KW_BY QualifiedName FeatureChain? UsageBody
-                    / KW_ASSERT KW_NOT? KW_SATISFY QualifiedName FeatureChain? KW_BY QualifiedName FeatureChain? UsageBody
+SatisfyUsage <- < KW_NOT? KW_SATISFY KW_REQUIREMENT? UsageDeclaration (KW_BY QualifiedName FeatureChain?)? UsageBody > { if (auxil->build_ctx) sysml2_capture_satisfy(auxil->build_ctx, $1, $1e - $1s); }
+              / < KW_NOT? KW_SATISFY QualifiedName FeatureChain? (KW_BY QualifiedName FeatureChain?)? UsageBody > { if (auxil->build_ctx) sysml2_capture_satisfy(auxil->build_ctx, $2, $2e - $2s); }
+AssertSatisfyUsage <- < KW_ASSERT KW_NOT? KW_SATISFY KW_REQUIREMENT? UsageDeclaration KW_BY QualifiedName FeatureChain? UsageBody > { if (auxil->build_ctx) sysml2_capture_satisfy(auxil->build_ctx, $1, $1e - $1s); }
+                    / < KW_ASSERT KW_NOT? KW_SATISFY QualifiedName FeatureChain? KW_BY QualifiedName FeatureChain? UsageBody > { if (auxil->build_ctx) sysml2_capture_satisfy(auxil->build_ctx, $2, $2e - $2s); }
 
 # === ASSUME/REQUIRE IN REQUIREMENTS ===
 # Mark the start before parsing so we can clean up elements created inside the body
