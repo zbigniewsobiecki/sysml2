@@ -102,12 +102,13 @@ static const struct option long_options[] = {
     {"create-scope", no_argument,       0, 'C'},
     {"replace-scope", no_argument,      0, 'r'},
     {"dry-run",      no_argument,       0, 'D'},
+    {"allow-semantic-errors", no_argument, 0, 'e'},
     {"help",         no_argument,       0, 'h'},
     {"version",      no_argument,       0, 'V'},
     {0, 0, 0, 0}
 };
 
-static const char *short_options = "o:f:s:W:I:S:a:d:hVvTAPFRCDr";
+static const char *short_options = "o:f:s:W:I:S:a:d:hVvTAPFRCDre";
 
 /* Parse color mode from string */
 static Sysml2ColorMode parse_color_mode(const char *arg) {
@@ -274,6 +275,10 @@ Sysml2Result sysml2_cli_parse(Sysml2CliOptions *options, int argc, char **argv) 
                 options->dry_run = true;
                 break;
 
+            case 'e':
+                options->allow_semantic_errors = true;
+                break;
+
             case 'h':
                 options->show_help = true;
                 return SYSML2_OK;
@@ -353,6 +358,8 @@ void sysml2_cli_print_help(FILE *output) {
         "  --create-scope             Create target scope if it doesn't exist\n"
         "  --replace-scope            Clear target scope before inserting (preserves order)\n"
         "  --dry-run                  Preview changes without writing files\n"
+        "  --allow-semantic-errors    Write files even with semantic errors (E3xxx)\n"
+        "                             Parse errors still abort. Exit code 2 signals errors.\n"
         "\n"
         "Query/Delete patterns:\n"
         "  Pkg::Element           Specific element (and children for delete)\n"
@@ -1015,10 +1022,21 @@ static int run_modify_mode(
         Sysml2Result val_result = sysml2_pipeline_validate_all(ctx);
         if (val_result != SYSML2_OK || diag->error_count > error_count_before) {
             sysml2_pipeline_print_diagnostics(ctx, stderr);
-            fprintf(stderr, "error: modification aborted due to validation errors (no files modified)\n");
-            free(models);
-            free(modified_models);
-            return sysml2_diag_has_parse_errors(diag) ? 1 : 2;
+
+            /* Check if we have parse errors (always fatal) or only semantic errors */
+            bool has_parse_errors = sysml2_diag_has_parse_errors(diag);
+
+            /* Abort on parse errors, or semantic errors unless --allow-semantic-errors */
+            if (has_parse_errors || !options->allow_semantic_errors) {
+                fprintf(stderr, "error: modification aborted due to validation errors (no files modified)\n");
+                free(models);
+                free(modified_models);
+                return has_parse_errors ? 1 : 2;
+            }
+
+            /* --allow-semantic-errors: continue despite semantic errors */
+            fprintf(stderr, "warning: continuing with %zu semantic error(s) (--allow-semantic-errors)\n",
+                    diag->error_count - error_count_before);
         }
     }
 

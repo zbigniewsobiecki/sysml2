@@ -64,6 +64,7 @@ typedef struct {
     bool parse_only;            /* Skip semantic validation */
     bool fix_in_place;          /* --fix: rewrite files with formatting */
     bool no_resolve;            /* --no-resolve: disable import resolution */
+    bool allow_semantic_errors; /* --allow-semantic-errors: write files despite E3xxx errors */
 
     /* Meta */
     bool show_help;

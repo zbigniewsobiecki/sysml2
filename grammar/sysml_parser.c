@@ -17,6 +17,7 @@
 /* Forward declarations for trivia capture functions (use size_t offsets) */
 void sysml2_capture_line_comment(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
 void sysml2_capture_block_comment(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
+void sysml2_capture_regular_block_comment(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
 void sysml2_capture_blank_lines(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
 void sysml2_capture_documentation(SysmlParserContext *ctx, size_t start_offset, size_t end_offset);
 
@@ -6225,6 +6226,20 @@ static void pcc_action_ObjectiveUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
 #define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
 #define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    if (auxil->build_ctx) sysml2_mark_raw_constraint_start(auxil->build_ctx);
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
+static void pcc_action_ObjectiveUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
@@ -6991,6 +7006,20 @@ static void pcc_action_AssumeConstraint_0(sysml2_context_t *__pcc_ctx, pcc_thunk
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
 #define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
 #define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    if (auxil->build_ctx) sysml2_mark_raw_constraint_start(auxil->build_ctx);
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
+static void pcc_action_AssumeConstraint_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
@@ -7011,6 +7040,20 @@ static void pcc_action_RequireConstraint_0(sysml2_context_t *__pcc_ctx, pcc_thun
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
 #define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
 #define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    if (auxil->build_ctx) sysml2_mark_raw_constraint_start(auxil->build_ctx);
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
+static void pcc_action_RequireConstraint_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
@@ -7025,7 +7068,21 @@ static void pcc_action_RequireConstraint_0(sysml2_context_t *__pcc_ctx, pcc_thun
 #undef auxil
 }
 
-static void pcc_action_RequireConstraint_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_RequireConstraint_2(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    if (auxil->build_ctx) sysml2_mark_raw_constraint_start(auxil->build_ctx);
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
+static void pcc_action_RequireConstraint_3(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -7045,7 +7102,21 @@ static void pcc_action_RequireConstraint_1(sysml2_context_t *__pcc_ctx, pcc_thun
 #undef auxil
 }
 
-static void pcc_action_RequireConstraint_2(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+static void pcc_action_RequireConstraint_4(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
+#define auxil (__pcc_ctx->auxil)
+#define __ (*__pcc_out)
+#define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
+#define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
+#define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
+    if (auxil->build_ctx) sysml2_mark_raw_constraint_start(auxil->build_ctx);
+#undef _0e
+#undef _0s
+#undef _0
+#undef __
+#undef auxil
+}
+
+static void pcc_action_RequireConstraint_5(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc_in, pcc_value_t *__pcc_out) {
 #define auxil (__pcc_ctx->auxil)
 #define __ (*__pcc_out)
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
@@ -33653,6 +33724,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ObjectiveUsage(pcc_context_t *ctx) {
     pcc_capture_table__resize(ctx->auxil, &chunk->capts, 1);
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_OBJECTIVE, &chunk->thunks, NULL)) goto L0000;
     {
+        pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_ObjectiveUsage_0, 0, 1);
+        thunk->data.leaf.capt0.range.start = chunk->pos;
+        thunk->data.leaf.capt0.range.end = ctx->cur;
+        pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+        pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
+    }
+    {
         const size_t p = ctx->cur;
         size_t q;
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_UsageDeclaration, &chunk->thunks, NULL)) goto L0000;
@@ -33663,7 +33741,7 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_ObjectiveUsage(pcc_context_t *ctx) {
         pcc_char_array__resize(ctx->auxil, &chunk->capts.buf[0].string, 0);
     }
     {
-        pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_ObjectiveUsage_0, 0, 1);
+        pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_ObjectiveUsage_1, 0, 1);
         thunk->data.leaf.capts.buf[0] = &(chunk->capts.buf[0]);
         thunk->data.leaf.capt0.range.start = chunk->pos;
         thunk->data.leaf.capt0.range.end = ctx->cur;
@@ -39491,6 +39569,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_AssumeConstraint(pcc_context_t *ctx)
     pcc_capture_table__resize(ctx->auxil, &chunk->capts, 1);
     if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_ASSUME, &chunk->thunks, NULL)) goto L0000;
     {
+        pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_AssumeConstraint_0, 0, 1);
+        thunk->data.leaf.capt0.range.start = chunk->pos;
+        thunk->data.leaf.capt0.range.end = ctx->cur;
+        pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+        pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
+    }
+    {
         const size_t p = ctx->cur;
         size_t q;
         {
@@ -39526,7 +39611,7 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_AssumeConstraint(pcc_context_t *ctx)
         pcc_char_array__resize(ctx->auxil, &chunk->capts.buf[0].string, 0);
     }
     {
-        pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_AssumeConstraint_0, 0, 1);
+        pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_AssumeConstraint_1, 0, 1);
         thunk->data.leaf.capts.buf[0] = &(chunk->capts.buf[0]);
         thunk->data.leaf.capt0.range.start = chunk->pos;
         thunk->data.leaf.capt0.range.end = ctx->cur;
@@ -39555,6 +39640,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_RequireConstraint(pcc_context_t *ctx
         MARK_VAR_AS_USED
         const size_t n = chunk->thunks.len;
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_REQUIRE, &chunk->thunks, NULL)) goto L0002;
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_RequireConstraint_0, 0, 3);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
+        }
         {
             const size_t p = ctx->cur;
             size_t q;
@@ -39591,7 +39683,7 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_RequireConstraint(pcc_context_t *ctx
             pcc_char_array__resize(ctx->auxil, &chunk->capts.buf[0].string, 0);
         }
         {
-            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_RequireConstraint_0, 0, 3);
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_RequireConstraint_1, 0, 3);
             thunk->data.leaf.capts.buf[0] = &(chunk->capts.buf[0]);
             thunk->data.leaf.capt0.range.start = chunk->pos;
             thunk->data.leaf.capt0.range.end = ctx->cur;
@@ -39603,6 +39695,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_RequireConstraint(pcc_context_t *ctx
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_REQUIRE, &chunk->thunks, NULL)) goto L0006;
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_RequireConstraint_2, 0, 3);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
+        }
         {
             const size_t p = ctx->cur;
             size_t q;
@@ -39628,7 +39727,7 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_RequireConstraint(pcc_context_t *ctx
             pcc_char_array__resize(ctx->auxil, &chunk->capts.buf[1].string, 0);
         }
         {
-            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_RequireConstraint_1, 0, 3);
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_RequireConstraint_3, 0, 3);
             thunk->data.leaf.capts.buf[1] = &(chunk->capts.buf[1]);
             thunk->data.leaf.capt0.range.start = chunk->pos;
             thunk->data.leaf.capt0.range.end = ctx->cur;
@@ -39640,6 +39739,13 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_RequireConstraint(pcc_context_t *ctx
         ctx->cur = p;
         pcc_thunk_array__revert(ctx, &chunk->thunks, n);
         if (!pcc_apply_rule(ctx, pcc_evaluate_rule_KW_REQUIRE, &chunk->thunks, NULL)) goto L0008;
+        {
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_RequireConstraint_4, 0, 3);
+            thunk->data.leaf.capt0.range.start = chunk->pos;
+            thunk->data.leaf.capt0.range.end = ctx->cur;
+            pcc_char_array__resize(ctx->auxil, &thunk->data.leaf.capt0.string, 0);
+            pcc_thunk_array__add(ctx, &chunk->thunks, thunk);
+        }
         {
             const size_t p = ctx->cur;
             size_t q;
@@ -39664,7 +39770,7 @@ static pcc_thunk_chunk_t *pcc_evaluate_rule_RequireConstraint(pcc_context_t *ctx
             pcc_char_array__resize(ctx->auxil, &chunk->capts.buf[2].string, 0);
         }
         {
-            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_RequireConstraint_2, 0, 3);
+            pcc_thunk_t *const thunk = pcc_thunk__create_leaf(ctx, pcc_action_RequireConstraint_5, 0, 3);
             thunk->data.leaf.capts.buf[2] = &(chunk->capts.buf[2]);
             thunk->data.leaf.capt0.range.start = chunk->pos;
             thunk->data.leaf.capt0.range.end = ctx->cur;
