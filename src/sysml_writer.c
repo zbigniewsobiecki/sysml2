@@ -1501,6 +1501,10 @@ static void write_node(Sysml2Writer *w, const SysmlNode *node, const SysmlSemant
     /* Write connector/allocation part (connect (a, b, c) or allocate X to Y) */
     if (node->connector_part) {
         fputc(' ', w->out);
+        /* Interface usages: output "connect" keyword if it was present */
+        if (node->has_connect_keyword && node->kind == SYSML_KIND_INTERFACE_USAGE) {
+            fputs("connect ", w->out);
+        }
         fputs(node->connector_part, w->out);
     }
 
