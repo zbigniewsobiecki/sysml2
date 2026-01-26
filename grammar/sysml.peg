@@ -2115,7 +2115,7 @@ TerminateActionTarget <- KW_TERMINATE QualifiedName FeatureChain? SEMICOLON { if
 TerminateActionSimple <- KW_TERMINATE SEMICOLON { if (auxil->build_ctx) sysml2_capture_terminate(auxil->build_ctx); }
 
 # === RESULT EXPRESSION (bare expression in bodies) ===
-ResultExpression <- OwnedExpression
+ResultExpression <- < OwnedExpression > { if (auxil->build_ctx) sysml2_capture_result_expr(auxil->build_ctx, $1, $1e - $1s); }
 
 # Expressions
 OwnedExpression <- ConditionalExpression
