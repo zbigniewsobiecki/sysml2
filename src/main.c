@@ -1021,10 +1021,10 @@ static int run_modify_mode(
     free(models);
     free(modified_models);
 
-    /* Exit codes: 0 = success, 1 = parse error, 2 = semantic error */
+    /* Exit codes: 0 = success, 1 = parse/operational error, 2 = semantic error */
     if (diag->error_count == 0 && !has_errors) {
         return 0;
-    } else if (sysml2_diag_has_parse_errors(diag)) {
+    } else if (has_errors || sysml2_diag_has_parse_errors(diag)) {
         return 1;
     } else {
         return 2;

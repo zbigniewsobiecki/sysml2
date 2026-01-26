@@ -210,14 +210,27 @@ EOF
 "$PARSER" -P --set "/nonexistent/fragment.sysml" --at 'P' "$WORKDIR/good_for_io.sysml" 2>&1 && EXIT_CODE=0 || EXIT_CODE=$?
 assert_exit_code $EXIT_CODE 1 "Non-existent fragment file exits 1"
 
-# Verify base unchanged
-OUTPUT=$("$PARSER" -P -f sysml "$WORKDIR/good_for_io.sysml" 2>&1)
+# Verify base unchanged (only capture stdout, not stderr with stray error messages)
+OUTPUT=$("$PARSER" -P -f sysml "$WORKDIR/good_for_io.sysml" 2>/dev/null)
 assert_not_contains "$OUTPUT" "part" "File unchanged after I/O error"
 
 # TEST: Directory instead of file (for base)
 mkdir -p "$WORKDIR/adir"
 echo 'part def X;' | "$PARSER" -P --set - --at 'P' "$WORKDIR/adir" 2>&1 && EXIT_CODE=0 || EXIT_CODE=$?
 assert_exit_code $EXIT_CODE 1 "Directory as base file exits 1"
+
+# TEST: Write failure due to read-only directory (exit 1, operational error)
+mkdir -p "$WORKDIR/readonly_dir"
+cat > "$WORKDIR/readonly_dir/test.sysml" << 'EOF'
+package P { }
+EOF
+chmod 555 "$WORKDIR/readonly_dir"
+
+echo 'part def X;' | "$PARSER" -P --set - --at 'P' "$WORKDIR/readonly_dir/test.sysml" 2>&1 && EXIT_CODE=0 || EXIT_CODE=$?
+assert_exit_code $EXIT_CODE 1 "Write to read-only directory exits 1 (operational error)"
+
+# Restore write permission for cleanup
+chmod 755 "$WORKDIR/readonly_dir"
 
 # ============================================================
 # Edge case errors
