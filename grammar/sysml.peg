@@ -1849,7 +1849,7 @@ ConnectionUsageAnon <- UsagePrefix* KW_CONNECT NaryConnectorPart UsageBody
                      / UsagePrefix* KW_CONNECT < ConnectorEndMember > KW_TO < ConnectorEndMember > UsageBody { if (auxil->build_ctx) sysml2_capture_connect(auxil->build_ctx, $1, $1e - $1s, $2, $2e - $2s); }
 ConnectionPart <- BinaryConnectorPart / NaryConnectorPart
 BinaryConnectorPart <- ConnectorEndMember KW_TO ConnectorEndMember
-NaryConnectorPart <- LPAREN ConnectorEndMember (COMMA ConnectorEndMember)+ RPAREN
+NaryConnectorPart <- < LPAREN ConnectorEndMember (COMMA ConnectorEndMember)+ RPAREN > { if (auxil->build_ctx) sysml2_capture_nary_connector(auxil->build_ctx, $1, $1e - $1s); }
 ConnectorEndMember <- (NAME REFERENCES)? Multiplicity? QualifiedName FeatureChain? (REFERENCES QualifiedName FeatureChain?)?
 # Flow can be: flow name of Type from x to y; OR flow x to y; OR flow name;
 # Named flows get scope tracking; anonymous and shorthand flows do not
