@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(sysml2
     VERSION 0.1.0
-    DESCRIPTION "SysML v2 Parser and Validator"
+    DESCRIPTION "SysML v2 CLI"
     LANGUAGES C
 )
 

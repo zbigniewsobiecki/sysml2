@@ -1,17 +1,20 @@
-# SysML v2 Parser
+# 🔧 SysML v2 CLI
 
-A state-of-the-art SysML v2 and KerML parser CLI written in C for validating `.sysml` and `.kerml` files with helpful, actionable error messages.
+The Swiss Army knife for SysML v2 — parse, validate, query, and modify models from the command line. Written in C with Clang-style diagnostics.
 
-## Features
+## ✨ Features
 
-- **Hand-written recursive descent parser** - Better error recovery, no dependencies
-- **Arena memory allocation** - Fast allocation/deallocation, cache-friendly
-- **Clang-style diagnostics** - Clear error messages with source context and suggestions
-- **KerML and SysML v2 support** - Parses both language layers
-- **JSON semantic graph output** - Elements and relationships for visualization tools
-- **Semantic analysis** - Detects undefined references, duplicates, type errors
+- 🚀 **PackCC PEG parser** - Generated from `grammar/sysml.peg`, fast and maintainable
+- 🧠 **Arena memory allocation** - Fast allocation/deallocation, cache-friendly
+- 🎯 **Clang-style diagnostics** - Clear error messages with source context and suggestions
+- 📦 **KerML and SysML v2 support** - Parses both language layers
+- 📤 **JSON/SysML output** - Semantic graph output for visualization and round-trip processing
+- 🔍 **Semantic analysis** - Detects undefined references, duplicates, type errors
+- 🔎 **Query API** - `--select` for pattern-based element selection
+- ✏️ **Modification API** - `--delete` and `--set --at` for CRUD operations
+- 👀 **Dry-run mode** - `--dry-run` for safe previewing of modifications
 
-## Building
+## 🏗️ Building
 
 Requirements:
 - CMake 3.16+
@@ -28,10 +31,10 @@ For debug builds:
 cmake -DCMAKE_BUILD_TYPE=Debug ..
 ```
 
-## Usage
+## 💻 Usage
 
 ```
-sysml2 - SysML v2 Parser and Validator
+sysml2 - SysML v2 CLI
 
 Usage: sysml2 [options] <file>...
 
@@ -43,6 +46,11 @@ Options:
   -P, --parse-only       Parse only, skip semantic validation
       --no-validate      Same as --parse-only
       --no-resolve       Disable automatic import resolution
+  -s, --select <pattern> Filter output to matching elements (repeatable)
+  --set <file> --at <scope>  Insert elements from file into scope
+  --delete <pattern>     Delete elements matching pattern (repeatable)
+  --dry-run              Preview modifications without writing
+  --create-scope         Auto-create target scope if missing
   --color[=when]         Colorize output (auto, always, never)
   --max-errors <n>       Stop after n errors (default: 20)
   -W<warning>            Enable warning (e.g., -Werror)
@@ -56,7 +64,7 @@ Environment:
   SYSML2_LIBRARY_PATH    Colon-separated list of library search paths
 ```
 
-### Examples
+### 📋 Examples
 
 Validate a KerML file:
 ```bash
@@ -84,7 +92,46 @@ Show lexer tokens (for debugging):
 ./sysml2 --dump-tokens file.kerml
 ```
 
-## Error Messages
+### 🔎 Query Examples
+
+Select specific element:
+```bash
+./sysml2 --select 'Package::Element' -f json model.sysml
+```
+
+Select all direct children:
+```bash
+./sysml2 --select 'Package::*' -f json model.sysml
+```
+
+Select all descendants recursively:
+```bash
+./sysml2 --select 'Package::**' -f json model.sysml
+```
+
+### ✏️ Modification Examples
+
+Delete an element (with `--fix` to write back):
+```bash
+./sysml2 --delete 'Pkg::OldElement' model.sysml --fix
+```
+
+Insert elements from a fragment file:
+```bash
+./sysml2 --set fragment.sysml --at 'Pkg' model.sysml --fix
+```
+
+Insert from stdin:
+```bash
+echo 'part def Car;' | sysml2 --set - --at 'Vehicles' model.sysml --fix
+```
+
+Preview changes without writing:
+```bash
+./sysml2 --delete 'Legacy::**' --dry-run model.sysml
+```
+
+## 🚨 Error Messages
 
 The parser provides Clang-style error messages with source context:
 
@@ -104,7 +151,7 @@ model.kerml:20:17: error[E3001]: undefined type 'Engin'
    = help: did you mean 'Engine'?
 ```
 
-## Semantic Validation
+## 🔍 Semantic Validation
 
 The parser performs semantic validation to catch errors beyond syntax:
 
@@ -113,11 +160,15 @@ The parser performs semantic validation to catch errors beyond syntax:
 | Code | Description |
 |------|-------------|
 | E3001 | Undefined type reference |
+| E3002 | Undefined feature in redefines |
+| E3003 | Undefined namespace in imports |
 | E3004 | Duplicate definition in same scope |
 | E3005 | Circular specialization chain |
 | E3006 | Type compatibility mismatch |
+| E3007 | Invalid multiplicity bounds |
+| E3008 | Redefinition compatibility error |
 
-### Cross-File Import Resolution
+### 📦 Cross-File Import Resolution
 
 The parser supports two modes of cross-file import resolution:
 
@@ -194,7 +245,7 @@ Supported import patterns:
 ./sysml2 --no-validate model.sysml    # Same as --parse-only
 ```
 
-## Supported Language Features
+## 📝 Supported Language Features
 
 ### KerML
 - Namespaces and packages
@@ -217,7 +268,7 @@ Supported import patterns:
 - Enumeration definitions
 - Datatype definitions (KerML primitive types)
 
-## Testing
+## 🧪 Testing
 
 Run the test suite:
 ```bash
@@ -235,11 +286,15 @@ Run individual test groups:
 ./test_lexer            # Lexer unit tests
 ./test_ast              # AST/builder/JSON unit tests
 ./test_validator        # Validator unit tests
+./test_query            # Query unit tests
+./test_modify           # Modification unit tests
+./test_memory           # Memory tests
 ctest -R json_output    # JSON fixture tests
 ctest -R validation     # Validation fixture tests
+ctest -R crud           # CRUD integration tests
 ```
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 sysml2/
@@ -254,21 +309,32 @@ sysml2/
 │   ├── ast.h           # AST node types
 │   ├── ast_builder.h   # AST builder context
 │   ├── json_writer.h       # JSON serialization
+│   ├── sysml_writer.h      # SysML/KerML output
 │   ├── import_resolver.h   # Automatic import resolution
-│   └── validator.h         # Semantic validator
+│   ├── validator.h         # Semantic validator
+│   ├── symtab.h            # Symbol table
+│   ├── query.h             # Query API
+│   ├── modify.h            # Modification API
+│   ├── pipeline.h          # Processing pipeline
+│   ├── sysml_parser.h      # Parser interface
+│   └── utils.h             # Utility functions
 ├── src/
-│   ├── arena.c         # Arena allocator implementation
-│   ├── intern.c        # String interning implementation
-│   ├── keywords.c      # Keyword recognition
-│   ├── lexer.c         # Lexer implementation
-│   ├── diagnostic.c    # Diagnostic reporting
-│   ├── ast.c           # AST utilities
-│   ├── ast_builder.c   # AST builder implementation
+│   ├── arena.c             # Arena allocator implementation
+│   ├── intern.c            # String interning implementation
+│   ├── keywords.c          # Keyword recognition
+│   ├── lexer.c             # Lexer implementation
+│   ├── diagnostic.c        # Diagnostic reporting
+│   ├── ast.c               # AST utilities
+│   ├── ast_builder.c       # AST builder implementation
 │   ├── json_writer.c       # JSON writer implementation
+│   ├── sysml_writer.c      # SysML writer implementation
 │   ├── import_resolver.c   # Import resolution implementation
 │   ├── validator.c         # Semantic validation
+│   ├── query.c             # Query implementation
+│   ├── modify.c            # Modification implementation
+│   ├── pipeline.c          # Pipeline implementation
 │   ├── main.c              # CLI entry point
-│   └── sysml_parser.c  # PackCC-generated parser
+│   └── sysml_parser.c      # PackCC-generated parser
 ├── grammar/
 │   └── sysml.peg       # PEG grammar (source of truth)
 ├── tests/
@@ -276,8 +342,16 @@ sysml2/
 │   ├── test_ast.c             # AST/builder/JSON unit tests
 │   ├── test_validator.c       # Validator unit tests
 │   ├── test_packcc_parser.c   # Parser integration tests
+│   ├── test_query.c           # Query unit tests
+│   ├── test_modify.c          # Modification unit tests
+│   ├── test_memory.c          # Memory/arena tests
+│   ├── test_diagnostic.c      # Diagnostic tests
+│   ├── test_import_resolver.c # Import resolver tests
+│   ├── test_json_writer.c     # JSON writer tests
+│   ├── test_sysml_writer.c    # SysML writer tests
 │   ├── test_json_output.sh    # JSON output fixture tests
 │   ├── test_validation.sh     # Validation fixture tests
+│   ├── test_crud.sh           # CLI CRUD integration tests
 │   └── fixtures/              # Test fixtures
 │       ├── json/              # JSON output test pairs
 │       ├── validation/        # Validation test cases
@@ -286,11 +360,11 @@ sysml2/
 └── CMakeLists.txt
 ```
 
-## License
+## 📄 License
 
 MIT License
 
-## References
+## 📚 References
 
 - [SysML v2 Release Repository](https://github.com/Systems-Modeling/SysML-v2-Release)
 - [OMG SysML v2 Specification](https://www.omg.org/sysml/sysmlv2/)

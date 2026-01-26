@@ -318,7 +318,7 @@ void sysml2_cli_cleanup(Sysml2CliOptions *options) {
 
 void sysml2_cli_print_help(FILE *output) {
     fprintf(output,
-        "sysml2 - SysML v2 Parser and Validator\n"
+        "sysml2 - SysML v2 CLI\n"
         "\n"
         "Usage: sysml2 [options] [file]...\n"
         "\n"
