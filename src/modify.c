@@ -747,6 +747,7 @@ static SysmlTrivia *sysml2_modify_copy_trivia(
     dst->kind = src->kind;
     dst->text = src->text;  /* Interned */
     dst->loc = src->loc;
+    dst->count = src->count;
 
     /* Recursively copy next in linked list */
     dst->next = sysml2_modify_copy_trivia(src->next, arena);

@@ -1413,6 +1413,57 @@ TEST(merge_clears_leading_trivia) {
     FIXTURE_TEARDOWN();
 }
 
+/* Test: Blank line count field is preserved during trivia copy */
+TEST(trivia_blank_line_count_preserved) {
+    FIXTURE_SETUP();
+
+    /* Base model: Pkg with blank line trivia that has count > 1 */
+    SysmlNode base_nodes[1];
+    memset(base_nodes, 0, sizeof(base_nodes));
+    base_nodes[0].id = "Pkg";
+    base_nodes[0].name = "Pkg";
+    base_nodes[0].kind = SYSML_KIND_PACKAGE;
+
+    /* Add blank line trivia with count=3 (represents 3 consecutive blank lines) */
+    SysmlTrivia *trivia = sysml2_arena_alloc(&arena, sizeof(SysmlTrivia));
+    memset(trivia, 0, sizeof(SysmlTrivia));
+    trivia->kind = SYSML_TRIVIA_BLANK_LINE;
+    trivia->text = NULL;
+    trivia->count = 3;  /* 3 consecutive blank lines */
+    trivia->next = NULL;
+    base_nodes[0].trailing_trivia = trivia;
+
+    SysmlSemanticModel *base = create_test_model(&arena, &intern, base_nodes, 1, NULL, 0);
+
+    /* Fragment: new element to merge */
+    SysmlNode frag_nodes[1];
+    memset(frag_nodes, 0, sizeof(frag_nodes));
+    frag_nodes[0].id = "NewElem";
+    frag_nodes[0].name = "NewElem";
+    frag_nodes[0].kind = SYSML_KIND_PART_DEF;
+
+    SysmlSemanticModel *fragment = create_test_model(&arena, &intern, frag_nodes, 1, NULL, 0);
+
+    /* Merge into Pkg */
+    size_t added = 0, replaced = 0;
+    SysmlSemanticModel *result = sysml2_modify_merge_fragment(
+        base, fragment, "Pkg", false, false, &arena, &intern, &added, &replaced
+    );
+
+    ASSERT_NOT_NULL(result);
+
+    /* Verify: Package trailing trivia count is preserved */
+    for (size_t i = 0; i < result->element_count; i++) {
+        if (strcmp(result->elements[i]->id, "Pkg") == 0) {
+            ASSERT_NOT_NULL(result->elements[i]->trailing_trivia);
+            ASSERT_EQ(result->elements[i]->trailing_trivia->kind, SYSML_TRIVIA_BLANK_LINE);
+            ASSERT_EQ(result->elements[i]->trailing_trivia->count, 3);
+        }
+    }
+
+    FIXTURE_TEARDOWN();
+}
+
 /* Test: Scope metadata preserved when fragment provides no metadata */
 TEST(merge_preserves_scope_metadata_when_fragment_has_none) {
     FIXTURE_SETUP();
@@ -2946,6 +2997,7 @@ int main(void) {
     RUN_TEST(merge_clears_body_metadata);
     RUN_TEST(merge_clears_trailing_trivia);
     RUN_TEST(merge_clears_leading_trivia);
+    RUN_TEST(trivia_blank_line_count_preserved);
     RUN_TEST(merge_preserves_scope_metadata_when_fragment_has_none);
     RUN_TEST(merge_preserves_replaced_element_metadata);
     RUN_TEST(merge_repeated_upserts_no_accumulation);
