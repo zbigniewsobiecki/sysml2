@@ -48,6 +48,7 @@ typedef struct {
 
     bool create_scope;              /* --create-scope flag */
     bool replace_scope;             /* --replace-scope flag: clear scope before inserting */
+    bool force_replace;             /* --force-replace flag: suppress data loss warning */
     bool dry_run;                   /* --dry-run flag */
 
     /* Diagnostics */

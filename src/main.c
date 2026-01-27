@@ -101,6 +101,7 @@ static const struct option long_options[] = {
     {"delete",       required_argument, 0, 'd'},
     {"create-scope", no_argument,       0, 'C'},
     {"replace-scope", no_argument,      0, 'r'},
+    {"force-replace", no_argument,      0, 'R' + 128},  /* Use high value to avoid conflicts */
     {"dry-run",      no_argument,       0, 'D'},
     {"allow-semantic-errors", no_argument, 0, 'e'},
     {"help",         no_argument,       0, 'h'},
@@ -271,6 +272,10 @@ Sysml2Result sysml2_cli_parse(Sysml2CliOptions *options, int argc, char **argv) 
                 options->replace_scope = true;
                 break;
 
+            case 'R' + 128:  /* --force-replace */
+                options->force_replace = true;
+                break;
+
             case 'D':
                 options->dry_run = true;
                 break;
@@ -357,6 +362,7 @@ void sysml2_cli_print_help(FILE *output) {
         "  --delete <pattern>         Delete elements matching pattern (repeatable)\n"
         "  --create-scope             Create target scope if it doesn't exist\n"
         "  --replace-scope            Clear target scope before inserting (preserves order)\n"
+        "  --force-replace            Suppress data loss warning for --replace-scope\n"
         "  --dry-run                  Preview changes without writing files\n"
         "  --allow-semantic-errors    Write files even with semantic errors (E3xxx)\n"
         "                             Parse errors still abort. Exit code 2 signals errors.\n"
@@ -977,6 +983,36 @@ static int run_modify_mode(
                 }
 
                 fprintf(stderr, "  hint: use --create-scope to create it\n");
+                free(models);
+                free(modified_models);
+                return 1;
+            }
+        }
+
+        /* Data loss safeguard for --replace-scope */
+        if (options->replace_scope && !options->force_replace && target_model_idx >= 0) {
+            /* Count direct children of target scope in base model */
+            size_t scope_child_count = 0;
+            SysmlSemanticModel *base_model = modified_models[target_model_idx];
+            for (size_t i = 0; i < base_model->element_count; i++) {
+                SysmlNode *node = base_model->elements[i];
+                if (node && node->parent_id && strcmp(node->parent_id, target_scope) == 0) {
+                    scope_child_count++;
+                }
+            }
+
+            /* Count elements in fragment (excluding NULL entries from unwrapping) */
+            size_t fragment_elem_count = 0;
+            for (size_t i = 0; i < fragment->element_count; i++) {
+                if (fragment->elements[i]) fragment_elem_count++;
+            }
+
+            /* Warn if fragment has significantly fewer elements than scope */
+            if (scope_child_count > 0 && fragment_elem_count < scope_child_count / 2) {
+                fprintf(stderr, "warning: --replace-scope will delete %zu elements but fragment only has %zu.\n",
+                        scope_child_count, fragment_elem_count);
+                fprintf(stderr, "  This may cause DATA LOSS. Use --force-replace to suppress this warning.\n");
+                fprintf(stderr, "  Aborting modification (no files modified).\n");
                 free(models);
                 free(modified_models);
                 return 1;
