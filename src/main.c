@@ -13,6 +13,7 @@
 #include "sysml2/sysml_writer.h"
 #include "sysml2/query.h"
 #include "sysml2/modify.h"
+#include "sysml2/utils.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -96,11 +97,12 @@ static const struct option long_options[] = {
     {"parse-only",   no_argument,       0, 'P'},
     {"no-validate",  no_argument,       0, 'P'},  /* alias for --parse-only */
     {"no-resolve",   no_argument,       0, 'R'},
+    {"recursive",    no_argument,       0, 'r'},
     {"set",          required_argument, 0, 'S'},
     {"at",           required_argument, 0, 'a'},
     {"delete",       required_argument, 0, 'd'},
     {"create-scope", no_argument,       0, 'C'},
-    {"replace-scope", no_argument,      0, 'r'},
+    {"replace-scope", no_argument,      0, 'r' + 256},  /* Long-option only to free -r for --recursive */
     {"force-replace", no_argument,      0, 'R' + 128},  /* Use high value to avoid conflicts */
     {"dry-run",      no_argument,       0, 'D'},
     {"allow-semantic-errors", no_argument, 0, 'e'},
@@ -269,6 +271,10 @@ Sysml2Result sysml2_cli_parse(Sysml2CliOptions *options, int argc, char **argv) 
                 break;
 
             case 'r':
+                options->recursive = true;
+                break;
+
+            case 'r' + 256:  /* --replace-scope (long-option only) */
                 options->replace_scope = true;
                 break;
 
@@ -344,6 +350,7 @@ void sysml2_cli_print_help(FILE *output) {
         "  -f, --format <fmt>     Output format: json, xml, sysml (default: none)\n"
         "  -s, --select <pattern> Filter output to matching elements (repeatable)\n"
         "  -I <path>              Add library search path for imports\n"
+        "  -r, --recursive        Recursively load all .sysml files from directory\n"
         "      --fix              Format and rewrite files in place\n"
         "  -P, --parse-only       Parse only, skip semantic validation\n"
         "      --no-validate      Same as --parse-only\n"
@@ -432,6 +439,109 @@ static void add_file_directory_to_resolver(Sysml2ImportResolver *resolver, const
     }
 }
 
+/*
+ * Expand input files for --recursive mode
+ *
+ * When --recursive is set, expands directories to all .sysml files within them.
+ * Regular files are passed through unchanged.
+ *
+ * Returns dynamically allocated array (caller must free with sysml2_free_file_list).
+ * Returns NULL on error.
+ */
+static const char **expand_input_files(
+    const Sysml2CliOptions *options,
+    size_t *out_count
+) {
+    if (!options->recursive) {
+        /* No expansion needed - return copy of original array */
+        const char **copy = malloc(options->input_file_count * sizeof(char *));
+        if (!copy) {
+            return NULL;
+        }
+        for (size_t i = 0; i < options->input_file_count; i++) {
+            copy[i] = strdup(options->input_files[i]);
+            if (!copy[i]) {
+                /* Free already allocated strings */
+                for (size_t j = 0; j < i; j++) {
+                    free((void *)copy[j]);
+                }
+                free(copy);
+                return NULL;
+            }
+        }
+        *out_count = options->input_file_count;
+        return copy;
+    }
+
+    /* --recursive mode: expand directories */
+    size_t capacity = 16;
+    size_t count = 0;
+    const char **result = malloc(capacity * sizeof(char *));
+    if (!result) {
+        return NULL;
+    }
+
+    for (size_t i = 0; i < options->input_file_count; i++) {
+        const char *path = options->input_files[i];
+
+        if (sysml2_is_directory(path)) {
+            /* Expand directory recursively */
+            size_t found_count = 0;
+            char **found_files = sysml2_find_files_recursive(path, ".sysml", &found_count);
+
+            if (!found_files) {
+                /* Directory not accessible - warn and continue */
+                fprintf(stderr, "warning: cannot access directory '%s'\n", path);
+                continue;
+            }
+
+            if (found_count == 0) {
+                sysml2_free_file_list(found_files, found_count);
+                continue;
+            }
+
+            /* Add found files to result */
+            for (size_t j = 0; j < found_count; j++) {
+                if (count >= capacity) {
+                    capacity *= 2;
+                    const char **new_result = realloc(result, capacity * sizeof(char *));
+                    if (!new_result) {
+                        sysml2_free_file_list(found_files, found_count);
+                        sysml2_free_file_list((char **)result, count);
+                        return NULL;
+                    }
+                    result = new_result;
+                }
+                result[count++] = found_files[j];
+                found_files[j] = NULL;  /* Transfer ownership */
+            }
+            free(found_files);  /* Free array only, not strings */
+        } else if (sysml2_is_file(path)) {
+            /* Regular file - add as-is */
+            if (count >= capacity) {
+                capacity *= 2;
+                const char **new_result = realloc(result, capacity * sizeof(char *));
+                if (!new_result) {
+                    sysml2_free_file_list((char **)result, count);
+                    return NULL;
+                }
+                result = new_result;
+            }
+            result[count] = strdup(path);
+            if (!result[count]) {
+                sysml2_free_file_list((char **)result, count);
+                return NULL;
+            }
+            count++;
+        } else {
+            fprintf(stderr, "warning: '%s' is not a file or directory\n", path);
+        }
+    }
+
+    *out_count = count;
+    return result;
+}
+
 /* Run --fix mode: parse, resolve, validate, then rewrite files */
 static int run_fix_mode(
     Sysml2PipelineContext *ctx,
@@ -441,20 +551,34 @@ static int run_fix_mode(
     Sysml2DiagContext *diag = sysml2_pipeline_get_diag(ctx);
     resolver->strict_imports = true;  /* Fail on missing imports in --fix mode */
 
+    /* Expand input files (handles --recursive) */
+    size_t input_count = 0;
+    const char **input_files = expand_input_files(options, &input_count);
+    if (!input_files && options->input_file_count > 0) {
+        fprintf(stderr, "error: out of memory expanding input files\n");
+        return 1;
+    }
+
+    if (input_count == 0) {
+        fprintf(stderr, "error: no .sysml files found\n");
+        sysml2_free_file_list((char **)input_files, input_count);
+        return 1;
+    }
+
     /* Preload from configured library paths */
     if (!options->no_resolve) {
         sysml2_resolver_preload_libraries(resolver, diag);
     }
 
     /* Add directories containing input files to search paths */
-    for (size_t i = 0; i < options->input_file_count; i++) {
-        add_file_directory_to_resolver(resolver, options->input_files[i]);
+    for (size_t i = 0; i < input_count; i++) {
+        add_file_directory_to_resolver(resolver, input_files[i]);
     }
 
     /* Discover packages in input file directories */
     if (!options->no_resolve) {
-        for (size_t i = 0; i < options->input_file_count; i++) {
-            char *path_copy = strdup(options->input_files[i]);
+        for (size_t i = 0; i < input_count; i++) {
+            char *path_copy = strdup(input_files[i]);
             if (path_copy) {
                 char *last_slash = strrchr(path_copy, '/');
                 if (last_slash) {
@@ -471,9 +595,10 @@ static int run_fix_mode(
     }
 
     /* Allocate model array */
-    SysmlSemanticModel **models = malloc(options->input_file_count * sizeof(SysmlSemanticModel *));
+    SysmlSemanticModel **models = malloc(input_count * sizeof(SysmlSemanticModel *));
     if (!models) {
         fprintf(stderr, "error: out of memory\n");
+        sysml2_free_file_list((char **)input_files, input_count);
         return 1;
     }
 
@@ -481,14 +606,14 @@ static int run_fix_mode(
     size_t error_count_before = diag->error_count;
 
     /* Pass 1: Parse ALL input files */
-    for (size_t i = 0; i < options->input_file_count; i++) {
+    for (size_t i = 0; i < input_count; i++) {
         models[i] = NULL;
-        Sysml2Result result = sysml2_pipeline_process_file(ctx, options->input_files[i], &models[i]);
+        Sysml2Result result = sysml2_pipeline_process_file(ctx, input_files[i], &models[i]);
         if (result != SYSML2_OK || models[i] == NULL) {
             has_errors = true;
         }
         if (models[i]) {
-            sysml2_resolver_cache_model(resolver, options->input_files[i], models[i]);
+            sysml2_resolver_cache_model(resolver, input_files[i], models[i]);
         }
     }
 
@@ -496,12 +621,13 @@ static int run_fix_mode(
         sysml2_pipeline_print_diagnostics(ctx, stderr);
         fprintf(stderr, "error: --fix aborted due to parse errors (no files modified)\n");
         free(models);
+        sysml2_free_file_list((char **)input_files, input_count);
         return 1;
     }
 
     /* Pass 2: Resolve imports (unless --no-resolve) */
     if (!options->no_resolve) {
-        for (size_t i = 0; i < options->input_file_count; i++) {
+        for (size_t i = 0; i < input_count; i++) {
             if (models[i]) {
                 sysml2_resolver_resolve_imports(resolver, models[i], diag);
             }
@@ -514,6 +640,7 @@ static int run_fix_mode(
             sysml2_pipeline_print_diagnostics(ctx, stderr);
             fprintf(stderr, "error: --fix aborted due to import errors (no files modified)\n");
             free(models);
+            sysml2_free_file_list((char **)input_files, input_count);
             return sysml2_diag_has_parse_errors(diag) ? 1 : 2;
         }
     }
@@ -525,14 +652,15 @@ static int run_fix_mode(
             sysml2_pipeline_print_diagnostics(ctx, stderr);
             fprintf(stderr, "error: --fix aborted due to validation errors (no files modified)\n");
             free(models);
+            sysml2_free_file_list((char **)input_files, input_count);
             return sysml2_diag_has_parse_errors(diag) ? 1 : 2;
         }
     }
 
     /* Pass 4: All checks passed, now rewrite input files using atomic writes */
-    for (size_t i = 0; i < options->input_file_count; i++) {
+    for (size_t i = 0; i < input_count; i++) {
         if (models[i]) {
-            if (!atomic_write_file(options->input_files[i], models[i],
+            if (!atomic_write_file(input_files[i], models[i],
                                    options->verbose ? "Formatted" : NULL)) {
                 has_errors = true;
             }
@@ -540,6 +668,7 @@ static int run_fix_mode(
     }
 
     free(models);
+    sysml2_free_file_list((char **)input_files, input_count);
 
     /* Exit codes: 0 = success, 1 = parse error, 2 = semantic error */
     if (diag->error_count == 0 && !has_errors) {
@@ -559,6 +688,22 @@ static int run_normal_mode(
     Sysml2ImportResolver *resolver = sysml2_pipeline_get_resolver(ctx);
     Sysml2DiagContext *diag = sysml2_pipeline_get_diag(ctx);
 
+    /* Expand input files (handles --recursive) */
+    size_t input_count = 0;
+    const char **input_files = NULL;
+    if (options->input_file_count > 0) {
+        input_files = expand_input_files(options, &input_count);
+        if (!input_files) {
+            fprintf(stderr, "error: out of memory expanding input files\n");
+            return 1;
+        }
+        if (input_count == 0 && options->recursive) {
+            fprintf(stderr, "error: no .sysml files found\n");
+            sysml2_free_file_list((char **)input_files, input_count);
+            return 1;
+        }
+    }
+
     /* Preload from configured library paths (-I and SYSML2_LIBRARY_PATH).
      * These files are fully cached for validation. */
     if (!options->no_resolve) {
@@ -566,8 +711,8 @@ static int run_normal_mode(
     }
 
     /* Add directories containing input files to search paths */
-    for (size_t i = 0; i < options->input_file_count; i++) {
-        add_file_directory_to_resolver(resolver, options->input_files[i]);
+    for (size_t i = 0; i < input_count; i++) {
+        add_file_directory_to_resolver(resolver, input_files[i]);
     }
 
     /* Discover packages in input file directories.
@@ -578,8 +723,8 @@ static int run_normal_mode(
      * shouldn't affect the exit code - only errors in the actual input files
      * and their imports matter. */
     if (!options->no_resolve) {
-        for (size_t i = 0; i < options->input_file_count; i++) {
-            char *path_copy = strdup(options->input_files[i]);
+        for (size_t i = 0; i < input_count; i++) {
+            char *path_copy = strdup(input_files[i]);
             if (path_copy) {
                 char *last_slash = strrchr(path_copy, '/');
                 if (last_slash) {
@@ -597,7 +742,7 @@ static int run_normal_mode(
 
     Sysml2Result final_result = SYSML2_OK;
 
-    if (options->input_file_count == 0) {
+    if (input_count == 0) {
         /* Read from stdin - single file mode (with import resolution) */
         SysmlSemanticModel *model = NULL;
         Sysml2Result result = sysml2_pipeline_process_stdin(ctx, &model);
@@ -637,23 +782,24 @@ static int run_normal_mode(
         }
     } else {
         /* Multiple files - with import resolution */
-        SysmlSemanticModel **input_models = malloc(options->input_file_count * sizeof(SysmlSemanticModel *));
+        SysmlSemanticModel **input_models = malloc(input_count * sizeof(SysmlSemanticModel *));
         if (!input_models) {
             fprintf(stderr, "error: out of memory\n");
+            sysml2_free_file_list((char **)input_files, input_count);
             return 1;
         }
 
         bool has_parse_errors = false;
 
         /* Pass 1: Parse all input files */
-        for (size_t i = 0; i < options->input_file_count; i++) {
+        for (size_t i = 0; i < input_count; i++) {
             input_models[i] = NULL;
-            Sysml2Result result = sysml2_pipeline_process_file(ctx, options->input_files[i], &input_models[i]);
+            Sysml2Result result = sysml2_pipeline_process_file(ctx, input_files[i], &input_models[i]);
             if (result != SYSML2_OK) {
                 has_parse_errors = true;
             }
             if (input_models[i]) {
-                sysml2_resolver_cache_model(resolver, options->input_files[i], input_models[i]);
+                sysml2_resolver_cache_model(resolver, input_files[i], input_models[i]);
             }
             if (sysml2_diag_should_stop(diag)) {
                 break;
@@ -662,7 +808,7 @@ static int run_normal_mode(
 
         /* Pass 2: Resolve imports */
         if (!options->no_resolve && !has_parse_errors) {
-            for (size_t i = 0; i < options->input_file_count; i++) {
+            for (size_t i = 0; i < input_count; i++) {
                 if (input_models[i]) {
                     sysml2_resolver_resolve_imports(resolver, input_models[i], diag);
                 }
@@ -698,7 +844,7 @@ static int run_normal_mode(
                     Sysml2QueryResult *query_result = sysml2_query_execute(
                         patterns,
                         input_models,
-                        options->input_file_count,
+                        input_count,
                         arena
                     );
 
@@ -708,7 +854,7 @@ static int run_normal_mode(
                             if (options->output_format == SYSML2_OUTPUT_JSON) {
                                 sysml2_pipeline_write_query_json(ctx, query_result, out);
                             } else if (options->output_format == SYSML2_OUTPUT_SYSML) {
-                                sysml2_pipeline_write_query_sysml(ctx, query_result, input_models, options->input_file_count, out);
+                                sysml2_pipeline_write_query_sysml(ctx, query_result, input_models, input_count, out);
                             }
                             if (options->output_file) fclose(out);
                         }
@@ -740,6 +886,11 @@ static int run_normal_mode(
         free(input_models);
     }
 
+    /* Cleanup expanded file list */
+    if (input_files) {
+        sysml2_free_file_list((char **)input_files, input_count);
+    }
+
     /* Print diagnostics */
     sysml2_pipeline_print_diagnostics(ctx, stderr);
 
@@ -768,14 +919,28 @@ static int run_modify_mode(
     Sysml2Arena *arena = sysml2_pipeline_get_arena(ctx);
     Sysml2Intern *intern = ctx->intern;
 
+    /* Expand input files (handles --recursive) */
+    size_t input_count = 0;
+    const char **input_files = expand_input_files(options, &input_count);
+    if (!input_files && options->input_file_count > 0) {
+        fprintf(stderr, "error: out of memory expanding input files\n");
+        return 1;
+    }
+
+    if (input_count == 0) {
+        fprintf(stderr, "error: no .sysml files found\n");
+        sysml2_free_file_list((char **)input_files, input_count);
+        return 1;
+    }
+
     /* Preload from configured library paths */
     if (!options->no_resolve) {
         sysml2_resolver_preload_libraries(resolver, diag);
     }
 
     /* Add directories containing input files to search paths */
-    for (size_t i = 0; i < options->input_file_count; i++) {
-        char *path_copy = strdup(options->input_files[i]);
+    for (size_t i = 0; i < input_count; i++) {
+        char *path_copy = strdup(input_files[i]);
         if (path_copy) {
             char *last_slash = strrchr(path_copy, '/');
             if (last_slash) {
@@ -790,8 +955,8 @@ static int run_modify_mode(
 
     /* Discover packages in input file directories */
     if (!options->no_resolve) {
-        for (size_t i = 0; i < options->input_file_count; i++) {
-            char *path_copy = strdup(options->input_files[i]);
+        for (size_t i = 0; i < input_count; i++) {
+            char *path_copy = strdup(input_files[i]);
             if (path_copy) {
                 char *last_slash = strrchr(path_copy, '/');
                 if (last_slash) {
@@ -808,12 +973,13 @@ static int run_modify_mode(
     }
 
     /* Allocate model array */
-    SysmlSemanticModel **models = malloc(options->input_file_count * sizeof(SysmlSemanticModel *));
-    SysmlSemanticModel **modified_models = malloc(options->input_file_count * sizeof(SysmlSemanticModel *));
+    SysmlSemanticModel **models = malloc(input_count * sizeof(SysmlSemanticModel *));
+    SysmlSemanticModel **modified_models = malloc(input_count * sizeof(SysmlSemanticModel *));
     if (!models || !modified_models) {
         fprintf(stderr, "error: out of memory\n");
         free(models);
         free(modified_models);
+        sysml2_free_file_list((char **)input_files, input_count);
         return 1;
     }
 
@@ -821,15 +987,15 @@ static int run_modify_mode(
     size_t error_count_before = diag->error_count;
 
     /* Pass 1: Parse ALL input files */
-    for (size_t i = 0; i < options->input_file_count; i++) {
+    for (size_t i = 0; i < input_count; i++) {
         models[i] = NULL;
         modified_models[i] = NULL;
-        Sysml2Result result = sysml2_pipeline_process_file(ctx, options->input_files[i], &models[i]);
+        Sysml2Result result = sysml2_pipeline_process_file(ctx, input_files[i], &models[i]);
         if (result != SYSML2_OK || models[i] == NULL) {
             has_errors = true;
         }
         if (models[i]) {
-            sysml2_resolver_cache_model(resolver, options->input_files[i], models[i]);
+            sysml2_resolver_cache_model(resolver, input_files[i], models[i]);
         }
     }
 
@@ -838,12 +1004,13 @@ static int run_modify_mode(
         fprintf(stderr, "error: modification aborted due to parse errors (no files modified)\n");
         free(models);
         free(modified_models);
+        sysml2_free_file_list((char **)input_files, input_count);
         return 1;
     }
 
     /* Resolve imports for all input files (uses -I library paths) */
     if (!options->no_resolve) {
-        for (size_t i = 0; i < options->input_file_count; i++) {
+        for (size_t i = 0; i < input_count; i++) {
             if (models[i]) {
                 sysml2_resolver_resolve_imports(resolver, models[i], diag);
             }
@@ -856,6 +1023,7 @@ static int run_modify_mode(
         fprintf(stderr, "error: out of memory creating modification plan\n");
         free(models);
         free(modified_models);
+        sysml2_free_file_list((char **)input_files, input_count);
         return 1;
     }
     plan->dry_run = options->dry_run;
@@ -867,13 +1035,14 @@ static int run_modify_mode(
             fprintf(stderr, "error: invalid delete pattern '%s'\n", options->delete_patterns[i]);
             free(models);
             free(modified_models);
+            sysml2_free_file_list((char **)input_files, input_count);
             return 1;
         }
     }
 
     /* Apply deletions to all models */
     size_t total_deleted = 0;
-    for (size_t i = 0; i < options->input_file_count; i++) {
+    for (size_t i = 0; i < input_count; i++) {
         if (!models[i]) continue;
 
         if (plan->delete_patterns) {
@@ -888,9 +1057,10 @@ static int run_modify_mode(
             total_deleted += deleted_count;
 
             if (!modified_models[i]) {
-                fprintf(stderr, "error: failed to apply deletions to '%s'\n", options->input_files[i]);
+                fprintf(stderr, "error: failed to apply deletions to '%s'\n", input_files[i]);
                 free(models);
                 free(modified_models);
+                sysml2_free_file_list((char **)input_files, input_count);
                 return 1;
             }
         } else {
@@ -911,6 +1081,7 @@ static int run_modify_mode(
             fprintf(stderr, "error: --set '%s' missing --at target scope\n", fragment_path);
             free(models);
             free(modified_models);
+            sysml2_free_file_list((char **)input_files, input_count);
             return 1;
         }
 
@@ -924,6 +1095,7 @@ static int run_modify_mode(
                 fprintf(stderr, "error: failed to parse fragment from stdin\n");
                 free(models);
                 free(modified_models);
+                sysml2_free_file_list((char **)input_files, input_count);
                 return 1;
             }
         } else {
@@ -933,13 +1105,14 @@ static int run_modify_mode(
                 fprintf(stderr, "error: failed to parse fragment file '%s'\n", fragment_path);
                 free(models);
                 free(modified_models);
+                sysml2_free_file_list((char **)input_files, input_count);
                 return 1;
             }
         }
 
         /* Find which model contains the target scope (or first model if creating) */
         int target_model_idx = -1;
-        for (size_t i = 0; i < options->input_file_count; i++) {
+        for (size_t i = 0; i < input_count; i++) {
             if (modified_models[i] && sysml2_modify_scope_exists(modified_models[i], target_scope)) {
                 target_model_idx = (int)i;
                 break;
@@ -948,7 +1121,7 @@ static int run_modify_mode(
 
         /* If not found and create_scope is set, use first model */
         if (target_model_idx < 0) {
-            if (options->create_scope && options->input_file_count > 0) {
+            if (options->create_scope && input_count > 0) {
                 target_model_idx = 0;
             } else {
                 fprintf(stderr, "error: target scope '%s' not found\n", target_scope);
@@ -956,7 +1129,7 @@ static int run_modify_mode(
                 /* List available scopes and suggest similar names */
                 const char **all_scopes = NULL;
                 size_t scope_count = 0;
-                if (sysml2_modify_list_scopes_multi(modified_models, options->input_file_count, arena, &all_scopes, &scope_count)) {
+                if (sysml2_modify_list_scopes_multi(modified_models, input_count, arena, &all_scopes, &scope_count)) {
                     /* Find similar scope names */
                     const char **suggestions = NULL;
                     size_t suggestion_count = 0;
@@ -990,6 +1163,7 @@ static int run_modify_mode(
                 fprintf(stderr, "  hint: use --create-scope to create it\n");
                 free(models);
                 free(modified_models);
+                sysml2_free_file_list((char **)input_files, input_count);
                 return 1;
             }
         }
@@ -1020,6 +1194,7 @@ static int run_modify_mode(
                 fprintf(stderr, "  Aborting modification (no files modified).\n");
                 free(models);
                 free(modified_models);
+                sysml2_free_file_list((char **)input_files, input_count);
                 return 1;
             }
         }
@@ -1043,6 +1218,7 @@ static int run_modify_mode(
             fprintf(stderr, "error: failed to merge fragment into scope '%s'\n", target_scope);
             free(models);
             free(modified_models);
+            sysml2_free_file_list((char **)input_files, input_count);
             return 1;
         }
 
@@ -1054,9 +1230,9 @@ static int run_modify_mode(
     /* Pass 4: Validation (unless --parse-only) */
     if (!options->parse_only) {
         /* Update resolver cache with modified models */
-        for (size_t i = 0; i < options->input_file_count; i++) {
+        for (size_t i = 0; i < input_count; i++) {
             if (modified_models[i]) {
-                sysml2_resolver_cache_model(resolver, options->input_files[i], modified_models[i]);
+                sysml2_resolver_cache_model(resolver, input_files[i], modified_models[i]);
             }
         }
 
@@ -1072,6 +1248,7 @@ static int run_modify_mode(
                 fprintf(stderr, "error: modification aborted due to validation errors (no files modified)\n");
                 free(models);
                 free(modified_models);
+                sysml2_free_file_list((char **)input_files, input_count);
                 return has_parse_errors ? 1 : 2;
             }
 
@@ -1097,7 +1274,7 @@ static int run_modify_mode(
 
     /* Pass 5: Write modified files (unless dry-run) */
     if (!options->dry_run) {
-        for (size_t i = 0; i < options->input_file_count; i++) {
+        for (size_t i = 0; i < input_count; i++) {
             if (!modified_models[i]) continue;
 
             /* Check if model was actually modified */
@@ -1110,7 +1287,7 @@ static int run_modify_mode(
             }
 
             if (was_modified || options->set_count > 0) {
-                if (!atomic_write_file(options->input_files[i], modified_models[i],
+                if (!atomic_write_file(input_files[i], modified_models[i],
                                        options->verbose ? "Modified" : NULL)) {
                     has_errors = true;
                 }
@@ -1122,6 +1299,7 @@ static int run_modify_mode(
 
     free(models);
     free(modified_models);
+    sysml2_free_file_list((char **)input_files, input_count);
 
     /* Exit codes: 0 = success, 1 = parse/operational error, 2 = semantic error */
     if (diag->error_count == 0 && !has_errors) {

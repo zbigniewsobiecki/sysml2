@@ -102,4 +102,29 @@ char *sysml2_get_realpath(const char *path);
  */
 uint32_t *sysml2_build_line_offsets(const char *content, size_t length, uint32_t *out_count);
 
+/*
+ * Recursively find all files matching an extension in a directory
+ *
+ * Follows symbolic links but tracks visited inodes to detect cycles.
+ * Prints warnings for permission errors and continues with accessible files.
+ *
+ * @param directory Root directory to search
+ * @param extension File extension to match (e.g., ".sysml")
+ * @param out_count Output: number of files found
+ * @return Allocated array of file paths (caller must free with sysml2_free_file_list), or NULL on error
+ */
+char **sysml2_find_files_recursive(
+    const char *directory,
+    const char *extension,
+    size_t *out_count
+);
+
+/*
+ * Free a file list returned by sysml2_find_files_recursive
+ *
+ * @param files Array of file paths
+ * @param count Number of files in array
+ */
+void sysml2_free_file_list(char **files, size_t count);
+
 #endif /* SYSML2_UTILS_H */
