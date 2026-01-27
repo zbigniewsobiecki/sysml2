@@ -108,6 +108,11 @@ typedef struct SysmlBuildContext {
     size_t pending_metadata_count;
     size_t pending_metadata_capacity;
 
+    /* File-level metadata (before first package/element) */
+    SysmlMetadataUsage **file_metadata;
+    size_t file_metadata_count;
+    size_t file_metadata_capacity;
+
     /* Current metadata usage being built */
     SysmlMetadataUsage *current_metadata;
 

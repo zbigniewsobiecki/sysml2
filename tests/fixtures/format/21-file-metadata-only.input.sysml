@@ -1,0 +1,3 @@
+@SourceFile {
+    :>> path = "test.prisma";
+}

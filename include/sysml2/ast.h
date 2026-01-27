@@ -540,6 +540,11 @@ typedef struct SysmlAlias {
 typedef struct {
     const char *source_name;  /* Source file name */
 
+    /* File-level metadata (annotations before first package/element) */
+    SysmlMetadataUsage **file_metadata;
+    size_t file_metadata_count;
+    size_t file_metadata_capacity;
+
     SysmlNode **elements;     /* Array of all elements */
     size_t element_count;
     size_t element_capacity;

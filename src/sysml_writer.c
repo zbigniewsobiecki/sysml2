@@ -1548,6 +1548,41 @@ Sysml2Result sysml2_sysml_write(
         .at_line_start = true
     };
 
+    /* Write file-level metadata first (annotations that weren't attached to any element) */
+    for (size_t i = 0; i < model->file_metadata_count; i++) {
+        SysmlMetadataUsage *m = model->file_metadata[i];
+        if (!m) continue;
+
+        fputc('@', w.out);
+        fputs(m->type_ref, w.out);
+
+        if (m->feature_count > 0) {
+            fputs(" {", w.out);
+            write_newline(&w);
+            w.indent_level++;
+            for (size_t j = 0; j < m->feature_count; j++) {
+                SysmlMetadataFeature *f = m->features[j];
+                if (!f) continue;
+                write_indent(&w);
+                /* Use :>> syntax for metadata attribute redefinitions */
+                fputs(":>> ", w.out);
+                fputs(f->name, w.out);
+                if (f->value) {
+                    fputs(" = ", w.out);
+                    fputs(f->value, w.out);
+                }
+                fputc(';', w.out);
+                write_newline(&w);
+            }
+            w.indent_level--;
+            write_indent(&w);
+            fputc('}', w.out);
+        } else {
+            fputc(';', w.out);
+        }
+        write_newline(&w);
+    }
+
     /* Get top-level imports (scope = NULL) */
     const SysmlImport **imports = NULL;
     size_t import_count = get_imports(model, NULL, &imports);

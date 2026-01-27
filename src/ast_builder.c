@@ -104,6 +104,11 @@ SysmlBuildContext *sysml2_build_context_create(
     ctx->pending_metadata = SYSML2_ARENA_NEW_ARRAY(arena, SysmlMetadataUsage *, ctx->pending_metadata_capacity);
     ctx->pending_metadata_count = 0;
 
+    /* Initialize file-level metadata */
+    ctx->file_metadata_capacity = 8;
+    ctx->file_metadata = SYSML2_ARENA_NEW_ARRAY(arena, SysmlMetadataUsage *, ctx->file_metadata_capacity);
+    ctx->file_metadata_count = 0;
+
     /* Initialize current metadata */
     ctx->current_metadata = NULL;
 
@@ -650,6 +655,40 @@ SysmlSemanticModel *sysml2_build_finalize(SysmlBuildContext *ctx) {
     if (!model) return NULL;
 
     model->source_name = ctx->source_name;
+
+    /* Move any remaining pending_metadata to file_metadata.
+     * This handles the case where metadata appears at file level but
+     * there's no subsequent element to attach it to. */
+    if (ctx->pending_metadata_count > 0) {
+        /* Ensure file_metadata has capacity */
+        size_t needed = ctx->file_metadata_count + ctx->pending_metadata_count;
+        if (needed > ctx->file_metadata_capacity) {
+            size_t new_capacity = needed * 2;
+            SysmlMetadataUsage **new_array = SYSML2_ARENA_NEW_ARRAY(
+                ctx->arena, SysmlMetadataUsage *, new_capacity);
+            if (new_array) {
+                if (ctx->file_metadata) {
+                    memcpy(new_array, ctx->file_metadata,
+                           ctx->file_metadata_count * sizeof(SysmlMetadataUsage *));
+                }
+                ctx->file_metadata = new_array;
+                ctx->file_metadata_capacity = new_capacity;
+            }
+        }
+        /* Copy pending_metadata to file_metadata */
+        if (ctx->file_metadata) {
+            memcpy(ctx->file_metadata + ctx->file_metadata_count,
+                   ctx->pending_metadata,
+                   ctx->pending_metadata_count * sizeof(SysmlMetadataUsage *));
+            ctx->file_metadata_count += ctx->pending_metadata_count;
+        }
+        ctx->pending_metadata_count = 0;
+    }
+
+    /* Transfer file-level metadata (annotations before first package/element) */
+    model->file_metadata = ctx->file_metadata;
+    model->file_metadata_count = ctx->file_metadata_count;
+    model->file_metadata_capacity = ctx->file_metadata_capacity;
 
     model->elements = ctx->elements;
     model->element_count = ctx->element_count;

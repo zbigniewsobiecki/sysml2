@@ -715,19 +715,24 @@ static int run_normal_mode(
                     }
                 }
             } else {
-                /* Normal mode: output first model */
-                if (options->output_format == SYSML2_OUTPUT_JSON) {
+                /* Normal mode: output all resolved models */
+                size_t all_model_count;
+                SysmlSemanticModel **all_models = sysml2_resolver_get_all_models(ctx->resolver, &all_model_count);
+                if (all_models && all_model_count > 0) {
                     FILE *out = options->output_file ? fopen(options->output_file, "w") : stdout;
                     if (out) {
-                        sysml2_pipeline_write_json(ctx, input_models[0], out);
+                        for (size_t i = 0; i < all_model_count; i++) {
+                            if (all_models[i]) {
+                                if (options->output_format == SYSML2_OUTPUT_JSON) {
+                                    sysml2_pipeline_write_json(ctx, all_models[i], out);
+                                } else if (options->output_format == SYSML2_OUTPUT_SYSML) {
+                                    sysml2_pipeline_write_sysml(ctx, all_models[i], out);
+                                }
+                            }
+                        }
                         if (options->output_file) fclose(out);
                     }
-                } else if (options->output_format == SYSML2_OUTPUT_SYSML) {
-                    FILE *out = options->output_file ? fopen(options->output_file, "w") : stdout;
-                    if (out) {
-                        sysml2_pipeline_write_sysml(ctx, input_models[0], out);
-                        if (options->output_file) fclose(out);
-                    }
+                    free(all_models);
                 }
             }
         }

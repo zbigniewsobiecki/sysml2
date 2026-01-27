@@ -368,6 +368,48 @@ Sysml2Result sysml2_json_write(
     fputc(',', w.out);
     write_newline(&w);
 
+    /* File-level metadata array (if any) */
+    if (model->file_metadata_count > 0) {
+        write_indent(&w);
+        fputs("\"fileMetadata\": [", w.out);
+        write_newline(&w);
+        w.indent_level++;
+
+        for (size_t i = 0; i < model->file_metadata_count; i++) {
+            SysmlMetadataUsage *m = model->file_metadata[i];
+            if (!m) continue;
+            if (i > 0) fputc(',', w.out);
+            write_newline(&w);
+            write_indent(&w);
+            fputs("{ \"type\": ", w.out);
+            write_string(&w, m->type_ref);
+            if (m->feature_count > 0) {
+                fputs(", \"features\": {", w.out);
+                for (size_t j = 0; j < m->feature_count; j++) {
+                    SysmlMetadataFeature *f = m->features[j];
+                    if (!f) continue;
+                    if (j > 0) fputc(',', w.out);
+                    fputc(' ', w.out);
+                    write_string(&w, f->name);
+                    fputs(": ", w.out);
+                    if (f->value) {
+                        write_string(&w, f->value);
+                    } else {
+                        fputs("null", w.out);
+                    }
+                }
+                fputs(" }", w.out);
+            }
+            fputs(" }", w.out);
+        }
+        write_newline(&w);
+        w.indent_level--;
+        write_indent(&w);
+        fputc(']', w.out);
+        fputc(',', w.out);
+        write_newline(&w);
+    }
+
     /* Elements array */
     write_elements(&w, model);
     fputc(',', w.out);
