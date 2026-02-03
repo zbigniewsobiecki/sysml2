@@ -62,7 +62,8 @@ TEST(resolver_create) {
     ASSERT_NOT_NULL(resolver);
     ASSERT_NOT_NULL(resolver->library_paths);
     ASSERT_EQ(resolver->path_count, 0);
-    ASSERT_NULL(resolver->cache);
+    ASSERT_NOT_NULL(resolver->file_cache);
+    ASSERT_EQ(resolver->file_cache_count, 0);
     ASSERT_FALSE(resolver->verbose);
     ASSERT_FALSE(resolver->disabled);
 
@@ -146,7 +147,7 @@ TEST(resolver_cache_model) {
 
     /* Cache it */
     sysml2_resolver_cache_model(resolver, "/tmp/test.sysml", model);
-    ASSERT_NOT_NULL(resolver->cache);
+    ASSERT_EQ(resolver->file_cache_count, 1);
 
     /* Retrieve it */
     SysmlSemanticModel *cached = sysml2_resolver_get_cached(resolver, "/tmp/test.sysml");
@@ -168,7 +169,7 @@ TEST(resolver_cache_model_null_handling) {
     sysml2_resolver_cache_model(resolver, "/tmp/test.sysml", NULL);
 
     /* Cache should still be empty */
-    ASSERT_NULL(resolver->cache);
+    ASSERT_EQ(resolver->file_cache_count, 0);
 
     sysml2_resolver_destroy(resolver);
     FIXTURE_TEARDOWN();

@@ -22,6 +22,7 @@
 #define RESOLVER_INITIAL_PATH_CAPACITY 8
 #define RESOLVER_INITIAL_STACK_CAPACITY 16
 #define RESOLVER_INITIAL_PACKAGE_MAP_CAPACITY 64
+#define RESOLVER_INITIAL_FILE_CACHE_CAPACITY 128
 
 /* Environment variable name */
 #define SYSML2_LIBRARY_PATH_ENV "SYSML2_LIBRARY_PATH"
@@ -220,7 +221,18 @@ Sysml2ImportResolver *sysml2_resolver_create(
     resolver->package_map_capacity = RESOLVER_INITIAL_PACKAGE_MAP_CAPACITY;
     resolver->package_map_count = 0;
 
-    resolver->cache = NULL;
+    /* Initialize file cache hash table */
+    resolver->file_cache = calloc(RESOLVER_INITIAL_FILE_CACHE_CAPACITY, sizeof(Sysml2FileCache *));
+    if (!resolver->file_cache) {
+        free(resolver->package_map);
+        free(resolver->resolution_stack);
+        free(resolver->library_paths);
+        free(resolver);
+        return NULL;
+    }
+    resolver->file_cache_capacity = RESOLVER_INITIAL_FILE_CACHE_CAPACITY;
+    resolver->file_cache_count = 0;
+
     resolver->verbose = false;
     resolver->disabled = false;
     resolver->strict_imports = false;
@@ -243,13 +255,18 @@ void sysml2_resolver_destroy(Sysml2ImportResolver *resolver) {
     }
     free(resolver->resolution_stack);
 
-    /* Free file cache (models are owned by arena) */
-    Sysml2FileCache *cache = resolver->cache;
-    while (cache) {
-        Sysml2FileCache *next = cache->next;
-        free(cache->path);
-        free(cache);
-        cache = next;
+    /* Free file cache hash table (models are owned by arena) */
+    if (resolver->file_cache) {
+        for (size_t i = 0; i < resolver->file_cache_capacity; i++) {
+            Sysml2FileCache *entry = resolver->file_cache[i];
+            while (entry) {
+                Sysml2FileCache *next = entry->next;
+                free(entry->path);
+                free(entry);
+                entry = next;
+            }
+        }
+        free(resolver->file_cache);
     }
 
     /* Free package map */
@@ -337,6 +354,7 @@ void sysml2_resolver_cache_model(
     SysmlSemanticModel *model
 ) {
     if (!resolver || !path || !model) return;
+    if (!resolver->file_cache) return;
 
     /* Convert to absolute path */
     char *abs_path = sysml2_get_realpath(path);
@@ -345,29 +363,31 @@ void sysml2_resolver_cache_model(
         if (!abs_path) return;
     }
 
-    /* Check if already cached */
-    Sysml2FileCache *cache = resolver->cache;
-    while (cache) {
-        if (strcmp(cache->path, abs_path) == 0) {
+    /* Hash-based lookup */
+    size_t bucket = hash_string(abs_path) % resolver->file_cache_capacity;
+    Sysml2FileCache *entry = resolver->file_cache[bucket];
+    while (entry) {
+        if (strcmp(entry->path, abs_path) == 0) {
             /* Already cached - update model */
-            cache->model = model;
+            entry->model = model;
             free(abs_path);
             return;
         }
-        cache = cache->next;
+        entry = entry->next;
     }
 
     /* Create new cache entry */
-    Sysml2FileCache *entry = malloc(sizeof(Sysml2FileCache));
-    if (!entry) {
+    Sysml2FileCache *new_entry = malloc(sizeof(Sysml2FileCache));
+    if (!new_entry) {
         free(abs_path);
         return;
     }
 
-    entry->path = abs_path;
-    entry->model = model;
-    entry->next = resolver->cache;
-    resolver->cache = entry;
+    new_entry->path = abs_path;
+    new_entry->model = model;
+    new_entry->next = resolver->file_cache[bucket];
+    resolver->file_cache[bucket] = new_entry;
+    resolver->file_cache_count++;
 
     /* Register the top-level package for discovery.
      * This allows imports to find packages even when the filename
@@ -383,6 +403,7 @@ SysmlSemanticModel *sysml2_resolver_get_cached(
     const char *path
 ) {
     if (!resolver || !path) return NULL;
+    if (!resolver->file_cache) return NULL;
 
     /* Convert to absolute path */
     char *abs_path = sysml2_get_realpath(path);
@@ -391,13 +412,15 @@ SysmlSemanticModel *sysml2_resolver_get_cached(
         if (!abs_path) return NULL;
     }
 
-    Sysml2FileCache *cache = resolver->cache;
-    while (cache) {
-        if (strcmp(cache->path, abs_path) == 0) {
+    /* Hash-based lookup */
+    size_t bucket = hash_string(abs_path) % resolver->file_cache_capacity;
+    Sysml2FileCache *entry = resolver->file_cache[bucket];
+    while (entry) {
+        if (strcmp(entry->path, abs_path) == 0) {
             free(abs_path);
-            return cache->model;
+            return entry->model;
         }
-        cache = cache->next;
+        entry = entry->next;
     }
 
     free(abs_path);
@@ -771,15 +794,8 @@ SysmlSemanticModel **sysml2_resolver_get_all_models(
         return NULL;
     }
 
-    /* Count cached models */
-    size_t n = 0;
-    Sysml2FileCache *cache = resolver->cache;
-    while (cache) {
-        n++;
-        cache = cache->next;
-    }
-
-    if (n == 0) {
+    size_t n = resolver->file_cache_count;
+    if (n == 0 || !resolver->file_cache) {
         *count = 0;
         return NULL;
     }
@@ -791,15 +807,17 @@ SysmlSemanticModel **sysml2_resolver_get_all_models(
         return NULL;
     }
 
-    /* Fill array (reverse order so first added is first in array) */
-    size_t i = n;
-    cache = resolver->cache;
-    while (cache && i > 0) {
-        models[--i] = cache->model;
-        cache = cache->next;
+    /* Iterate all hash table buckets */
+    size_t idx = 0;
+    for (size_t b = 0; b < resolver->file_cache_capacity && idx < n; b++) {
+        Sysml2FileCache *entry = resolver->file_cache[b];
+        while (entry && idx < n) {
+            models[idx++] = entry->model;
+            entry = entry->next;
+        }
     }
 
-    *count = n;
+    *count = idx;
     return models;
 }
 

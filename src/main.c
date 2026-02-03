@@ -468,6 +468,12 @@ static const char **expand_input_files(
                 free(copy);
                 return NULL;
             }
+            /* Normalize to canonical path once */
+            char *resolved = sysml2_get_realpath(copy[i]);
+            if (resolved) {
+                free((void *)copy[i]);
+                copy[i] = resolved;
+            }
         }
         *out_count = options->input_file_count;
         return copy;
@@ -512,8 +518,15 @@ static const char **expand_input_files(
                     }
                     result = new_result;
                 }
-                result[count++] = found_files[j];
+                result[count] = found_files[j];
                 found_files[j] = NULL;  /* Transfer ownership */
+                /* Normalize to canonical path once */
+                char *resolved = sysml2_get_realpath(result[count]);
+                if (resolved) {
+                    free((void *)result[count]);
+                    result[count] = resolved;
+                }
+                count++;
             }
             free(found_files);  /* Free array only, not strings */
         } else if (sysml2_is_file(path)) {
@@ -531,6 +544,12 @@ static const char **expand_input_files(
             if (!result[count]) {
                 sysml2_free_file_list((char **)result, count);
                 return NULL;
+            }
+            /* Normalize to canonical path once */
+            char *resolved = sysml2_get_realpath(result[count]);
+            if (resolved) {
+                free((void *)result[count]);
+                result[count] = resolved;
             }
             count++;
         } else {
@@ -571,12 +590,24 @@ static int run_fix_mode(
     }
 
     /* Add directories containing input files to search paths */
-    for (size_t i = 0; i < input_count; i++) {
-        add_file_directory_to_resolver(resolver, input_files[i]);
+    if (options->recursive) {
+        for (size_t i = 0; i < options->input_file_count; i++) {
+            if (sysml2_is_directory(options->input_files[i])) {
+                sysml2_resolver_add_path(resolver, options->input_files[i]);
+            } else {
+                add_file_directory_to_resolver(resolver, options->input_files[i]);
+            }
+        }
+    } else {
+        for (size_t i = 0; i < input_count; i++) {
+            add_file_directory_to_resolver(resolver, input_files[i]);
+        }
     }
 
-    /* Discover packages in input file directories */
-    if (!options->no_resolve) {
+    /* Discover packages in input file directories.
+     * Skip in recursive mode: Pass 1 parses every file and
+     * sysml2_resolver_cache_model already calls register_package_file. */
+    if (!options->no_resolve && !options->recursive) {
         for (size_t i = 0; i < input_count; i++) {
             char *path_copy = strdup(input_files[i]);
             if (path_copy) {
@@ -711,18 +742,31 @@ static int run_normal_mode(
     }
 
     /* Add directories containing input files to search paths */
-    for (size_t i = 0; i < input_count; i++) {
-        add_file_directory_to_resolver(resolver, input_files[i]);
+    if (options->recursive) {
+        for (size_t i = 0; i < options->input_file_count; i++) {
+            if (sysml2_is_directory(options->input_files[i])) {
+                sysml2_resolver_add_path(resolver, options->input_files[i]);
+            } else {
+                add_file_directory_to_resolver(resolver, options->input_files[i]);
+            }
+        }
+    } else {
+        for (size_t i = 0; i < input_count; i++) {
+            add_file_directory_to_resolver(resolver, input_files[i]);
+        }
     }
 
     /* Discover packages in input file directories.
      * This builds the package map without caching files for validation,
      * allowing imports to find packages even when filename != package name.
      *
+     * Skip in recursive mode: Pass 1 parses every file and
+     * sysml2_resolver_cache_model already calls register_package_file.
+     *
      * We clear diagnostics after discovery because errors in sibling files
      * shouldn't affect the exit code - only errors in the actual input files
      * and their imports matter. */
-    if (!options->no_resolve) {
+    if (!options->no_resolve && !options->recursive) {
         for (size_t i = 0; i < input_count; i++) {
             char *path_copy = strdup(input_files[i]);
             if (path_copy) {
@@ -939,22 +983,24 @@ static int run_modify_mode(
     }
 
     /* Add directories containing input files to search paths */
-    for (size_t i = 0; i < input_count; i++) {
-        char *path_copy = strdup(input_files[i]);
-        if (path_copy) {
-            char *last_slash = strrchr(path_copy, '/');
-            if (last_slash) {
-                *last_slash = '\0';
-                sysml2_resolver_add_path(resolver, path_copy);
+    if (options->recursive) {
+        for (size_t i = 0; i < options->input_file_count; i++) {
+            if (sysml2_is_directory(options->input_files[i])) {
+                sysml2_resolver_add_path(resolver, options->input_files[i]);
             } else {
-                sysml2_resolver_add_path(resolver, ".");
+                add_file_directory_to_resolver(resolver, options->input_files[i]);
             }
-            free(path_copy);
+        }
+    } else {
+        for (size_t i = 0; i < input_count; i++) {
+            add_file_directory_to_resolver(resolver, input_files[i]);
         }
     }
 
-    /* Discover packages in input file directories */
-    if (!options->no_resolve) {
+    /* Discover packages in input file directories.
+     * Skip in recursive mode: Pass 1 parses every file and
+     * sysml2_resolver_cache_model already calls register_package_file. */
+    if (!options->no_resolve && !options->recursive) {
         for (size_t i = 0; i < input_count; i++) {
             char *path_copy = strdup(input_files[i]);
             if (path_copy) {

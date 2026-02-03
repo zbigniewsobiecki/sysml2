@@ -50,8 +50,10 @@ struct Sysml2ImportResolver {
     size_t path_count;
     size_t path_capacity;
 
-    /* File cache */
-    Sysml2FileCache *cache;           /* Linked list of parsed files */
+    /* File cache (hash table) */
+    Sysml2FileCache **file_cache;     /* Hash table of parsed files */
+    size_t file_cache_capacity;       /* Number of hash buckets */
+    size_t file_cache_count;          /* Number of entries */
 
     /* Package map - maps package names to files */
     Sysml2PackageEntry **package_map; /* Hash table of package->file mappings */
