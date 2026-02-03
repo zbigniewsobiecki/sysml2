@@ -655,6 +655,7 @@ SysmlSemanticModel *sysml2_build_finalize(SysmlBuildContext *ctx) {
     if (!model) return NULL;
 
     model->source_name = ctx->source_name;
+    model->source_file = NULL;
 
     /* Move any remaining pending_metadata to file_metadata.
      * This handles the case where metadata appears at file level but

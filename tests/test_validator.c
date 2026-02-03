@@ -903,6 +903,136 @@ TEST(validate_options_disable_new_checks) {
     test_ctx_destroy(&ctx);
 }
 
+/* ========== Multi-Model Validation Tests ========== */
+
+TEST(validate_multi_source_file_on_diagnostics) {
+    /* Verify that sysml2_validate_multi sets source_file on diagnostics */
+    TestContext ctx;
+    test_ctx_init(&ctx);
+
+    /* Create a source file for the model */
+    Sysml2SourceFile *sf = sysml2_arena_alloc(&ctx.arena, sizeof(Sysml2SourceFile));
+    *sf = (Sysml2SourceFile){
+        .path = sysml2_intern(&ctx.intern, "operations.sysml"),
+        .content = NULL, .content_length = 0,
+        .line_offsets = NULL, .line_count = 0,
+    };
+
+    /* Create a model with an undefined type error */
+    SysmlNode *part = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "engine");
+    sysml2_build_add_typed_by(ctx.build_ctx, part, "NoSuchType");
+    sysml2_build_add_element(ctx.build_ctx, part);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx.build_ctx);
+    model->source_file = sf;
+
+    SysmlSemanticModel *models[] = { model };
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2Result result = sysml2_validate_multi(models, 1, &ctx.diag_ctx,
+        &ctx.arena, &ctx.intern, &opts);
+
+    ASSERT_EQ(result, SYSML2_ERROR_SEMANTIC);
+    ASSERT_EQ(ctx.diag_ctx.error_count, 1);
+
+    /* The diagnostic should carry the source_file from the model */
+    ASSERT_NOT_NULL(ctx.diag_ctx.first);
+    ASSERT_EQ(ctx.diag_ctx.first->file, sf);
+    ASSERT_STR_EQ(ctx.diag_ctx.first->file->path, "operations.sysml");
+
+    test_ctx_destroy(&ctx);
+}
+
+TEST(validate_multi_different_source_files) {
+    /* Verify that diagnostics from different models get the correct source_file */
+    Sysml2Arena arena;
+    sysml2_arena_init(&arena);
+    Sysml2Intern intern;
+    sysml2_intern_init(&intern, &arena);
+    Sysml2DiagContext diag_ctx;
+    sysml2_diag_context_init(&diag_ctx, &arena);
+
+    /* Create source files for two models */
+    Sysml2SourceFile *sf1 = sysml2_arena_alloc(&arena, sizeof(Sysml2SourceFile));
+    *sf1 = (Sysml2SourceFile){
+        .path = sysml2_intern(&intern, "model_a.sysml"),
+        .content = NULL, .content_length = 0,
+        .line_offsets = NULL, .line_count = 0,
+    };
+    Sysml2SourceFile *sf2 = sysml2_arena_alloc(&arena, sizeof(Sysml2SourceFile));
+    *sf2 = (Sysml2SourceFile){
+        .path = sysml2_intern(&intern, "model_b.sysml"),
+        .content = NULL, .content_length = 0,
+        .line_offsets = NULL, .line_count = 0,
+    };
+
+    /* Model A: part with undefined type */
+    SysmlBuildContext *build1 = sysml2_build_context_create(&arena, &intern, "model_a.sysml");
+    SysmlNode *part1 = sysml2_build_node(build1, SYSML_KIND_PART_USAGE, "foo");
+    sysml2_build_add_typed_by(build1, part1, "UndefinedA");
+    sysml2_build_add_element(build1, part1);
+    SysmlSemanticModel *m1 = sysml2_build_finalize(build1);
+    m1->source_file = sf1;
+
+    /* Model B: part with undefined type */
+    SysmlBuildContext *build2 = sysml2_build_context_create(&arena, &intern, "model_b.sysml");
+    SysmlNode *part2 = sysml2_build_node(build2, SYSML_KIND_PART_USAGE, "bar");
+    sysml2_build_add_typed_by(build2, part2, "UndefinedB");
+    sysml2_build_add_element(build2, part2);
+    SysmlSemanticModel *m2 = sysml2_build_finalize(build2);
+    m2->source_file = sf2;
+
+    SysmlSemanticModel *models[] = { m1, m2 };
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2Result result = sysml2_validate_multi(models, 2, &diag_ctx,
+        &arena, &intern, &opts);
+
+    ASSERT_EQ(result, SYSML2_ERROR_SEMANTIC);
+    ASSERT_EQ(diag_ctx.error_count, 2);
+
+    /* First diagnostic should reference model_a's source_file */
+    ASSERT_NOT_NULL(diag_ctx.first);
+    ASSERT_NOT_NULL(diag_ctx.first->file);
+    ASSERT_STR_EQ(diag_ctx.first->file->path, "model_a.sysml");
+
+    /* Second diagnostic should reference model_b's source_file */
+    Sysml2Diagnostic *second = diag_ctx.first->next;
+    ASSERT_NOT_NULL(second);
+    ASSERT_NOT_NULL(second->file);
+    ASSERT_STR_EQ(second->file->path, "model_b.sysml");
+
+    sysml2_build_context_destroy(build1);
+    sysml2_build_context_destroy(build2);
+    sysml2_intern_destroy(&intern);
+    sysml2_arena_destroy(&arena);
+}
+
+TEST(validate_multi_null_source_file_safe) {
+    /* Verify that validate_multi works when model->source_file is NULL */
+    TestContext ctx;
+    test_ctx_init(&ctx);
+
+    SysmlNode *part = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "engine");
+    sysml2_build_add_typed_by(ctx.build_ctx, part, "NoSuchType");
+    sysml2_build_add_element(ctx.build_ctx, part);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx.build_ctx);
+    /* source_file is NULL from build_finalize — this must not crash */
+
+    SysmlSemanticModel *models[] = { model };
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2Result result = sysml2_validate_multi(models, 1, &ctx.diag_ctx,
+        &ctx.arena, &ctx.intern, &opts);
+
+    ASSERT_EQ(result, SYSML2_ERROR_SEMANTIC);
+    ASSERT_EQ(ctx.diag_ctx.error_count, 1);
+
+    /* Diagnostic should have NULL file (backward compat with no source_file) */
+    ASSERT_NOT_NULL(ctx.diag_ctx.first);
+    ASSERT_NULL(ctx.diag_ctx.first->file);
+
+    test_ctx_destroy(&ctx);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -984,6 +1114,12 @@ int main(void) {
     /* Validation Options tests */
     printf("\n  Validation Options tests:\n");
     RUN_TEST(validate_options_disable_new_checks);
+
+    /* Multi-Model Validation tests */
+    printf("\n  Multi-Model Validation tests:\n");
+    RUN_TEST(validate_multi_source_file_on_diagnostics);
+    RUN_TEST(validate_multi_different_source_files);
+    RUN_TEST(validate_multi_null_source_file_safe);
 
     printf("\n%d/%d tests passed\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;

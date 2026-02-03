@@ -743,6 +743,7 @@ TEST(build_finalize) {
 
     ASSERT_NOT_NULL(model);
     ASSERT_STR_EQ(model->source_name, "test.sysml");
+    ASSERT_NULL(model->source_file);
     ASSERT_EQ(model->element_count, 1);
     ASSERT_EQ(model->relationship_count, 1);
 

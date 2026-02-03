@@ -1263,7 +1263,7 @@ Sysml2Result sysml2_validate_multi(
     Sysml2SymbolTable symtab;
     sysml2_symtab_init(&symtab, arena, intern);
 
-    /* Set up validation context (source_file is NULL for multi-model) */
+    /* Set up validation context (source_file set per-model in each pass) */
     ValidationContext vctx = {
         .symtab = &symtab,
         .diag_ctx = diag_ctx,
@@ -1275,6 +1275,7 @@ Sysml2Result sysml2_validate_multi(
     /* Pass 1: Build unified symbol table from ALL models */
     for (size_t i = 0; i < model_count; i++) {
         if (models[i]) {
+            vctx.source_file = models[i]->source_file;
             pass1_build_symtab(&vctx, models[i]);
         }
     }
@@ -1282,6 +1283,7 @@ Sysml2Result sysml2_validate_multi(
     /* Pass 2: Resolve types across all models */
     for (size_t i = 0; i < model_count; i++) {
         if (models[i]) {
+            vctx.source_file = models[i]->source_file;
             pass2_resolve_types(&vctx, models[i]);
         }
     }
@@ -1290,6 +1292,7 @@ Sysml2Result sysml2_validate_multi(
     if (options->check_circular_specs) {
         for (size_t i = 0; i < model_count; i++) {
             if (models[i]) {
+                vctx.source_file = models[i]->source_file;
                 pass3_detect_cycles(&vctx, models[i]);
             }
         }
@@ -1299,6 +1302,7 @@ Sysml2Result sysml2_validate_multi(
     if (options->check_multiplicity) {
         for (size_t i = 0; i < model_count; i++) {
             if (models[i]) {
+                vctx.source_file = models[i]->source_file;
                 pass4_validate_multiplicities(&vctx, models[i]);
             }
         }
@@ -1308,6 +1312,7 @@ Sysml2Result sysml2_validate_multi(
     if (options->check_undefined_features || options->check_redefinition_compat) {
         for (size_t i = 0; i < model_count; i++) {
             if (models[i]) {
+                vctx.source_file = models[i]->source_file;
                 pass5_validate_redefines(&vctx, models[i]);
             }
         }
@@ -1317,6 +1322,7 @@ Sysml2Result sysml2_validate_multi(
     if (options->check_undefined_namespaces) {
         for (size_t i = 0; i < model_count; i++) {
             if (models[i]) {
+                vctx.source_file = models[i]->source_file;
                 pass6_validate_imports(&vctx, models[i]);
             }
         }
@@ -1326,6 +1332,7 @@ Sysml2Result sysml2_validate_multi(
     if (options->warn_abstract_instantiation) {
         for (size_t i = 0; i < model_count; i++) {
             if (models[i]) {
+                vctx.source_file = models[i]->source_file;
                 pass7_check_abstract_instantiation(&vctx, models[i]);
             }
         }

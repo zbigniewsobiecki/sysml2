@@ -539,6 +539,7 @@ typedef struct SysmlAlias {
  */
 typedef struct {
     const char *source_name;  /* Source file name */
+    const Sysml2SourceFile *source_file;  /* Source file for diagnostic context (arena-owned) */
 
     /* File-level metadata (annotations before first package/element) */
     SysmlMetadataUsage **file_metadata;

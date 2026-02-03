@@ -2217,6 +2217,75 @@ TEST(sysml_roundtrip_phase2_all_fixes) {
     FIXTURE_TEARDOWN();
 }
 
+/* ========== Pipeline Source File Tests ========== */
+
+TEST(pipeline_populates_source_file) {
+    FIXTURE_SETUP();
+
+    Sysml2CliOptions options = {0};
+    options.parse_only = true;
+    options.no_resolve = true;
+
+    Sysml2PipelineContext *ctx = sysml2_pipeline_create(&arena, &intern, &options);
+    ASSERT_NOT_NULL(ctx);
+
+    const char *input = "package TestPkg { part def Engine; }";
+    SysmlSemanticModel *model = NULL;
+    Sysml2Result result = sysml2_pipeline_process_input(
+        ctx, "test/vehicle.sysml", input, strlen(input), &model
+    );
+
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(model);
+
+    /* Pipeline should have populated source_file */
+    ASSERT_NOT_NULL(model->source_file);
+    ASSERT_STR_EQ(model->source_file->path, "test/vehicle.sysml");
+    ASSERT_NOT_NULL(model->source_file->content);
+    ASSERT(model->source_file->content_length == strlen(input));
+    ASSERT(model->source_file->line_count > 0);
+    ASSERT_NOT_NULL(model->source_file->line_offsets);
+
+    /* Content should match the input */
+    ASSERT(memcmp(model->source_file->content, input, strlen(input)) == 0);
+
+    sysml2_pipeline_destroy(ctx);
+    FIXTURE_TEARDOWN();
+}
+
+TEST(pipeline_source_file_multiline) {
+    FIXTURE_SETUP();
+
+    Sysml2CliOptions options = {0};
+    options.parse_only = true;
+    options.no_resolve = true;
+
+    Sysml2PipelineContext *ctx = sysml2_pipeline_create(&arena, &intern, &options);
+    ASSERT_NOT_NULL(ctx);
+
+    const char *input =
+        "package VehiclePkg {\n"
+        "    part def Engine;\n"
+        "    part def Wheel;\n"
+        "}\n";
+    SysmlSemanticModel *model = NULL;
+    Sysml2Result result = sysml2_pipeline_process_input(
+        ctx, "vehicle.sysml", input, strlen(input), &model
+    );
+
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(model);
+    ASSERT_NOT_NULL(model->source_file);
+
+    /* Should have 4 lines (plus possibly a trailing entry) */
+    ASSERT(model->source_file->line_count >= 4);
+    /* First line offset should be 0 */
+    ASSERT_EQ(model->source_file->line_offsets[0], 0);
+
+    sysml2_pipeline_destroy(ctx);
+    FIXTURE_TEARDOWN();
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -2338,6 +2407,10 @@ int main(void) {
     RUN_TEST(sysml_perform_action_preserved);
     RUN_TEST(sysml_default_value_keyword_preserved);
     RUN_TEST(sysml_roundtrip_phase2_all_fixes);
+
+    /* Pipeline source file tests */
+    RUN_TEST(pipeline_populates_source_file);
+    RUN_TEST(pipeline_source_file_multiline);
 
     printf("\n%d/%d tests passed.\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;

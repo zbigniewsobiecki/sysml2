@@ -187,6 +187,38 @@ Sysml2Result sysml2_pipeline_process_input(
     if (parse_ok) {
         SysmlSemanticModel *model = sysml2_build_finalize(build_ctx);
         if (model) {
+            /* Create arena-owned source file for diagnostic context */
+            Sysml2SourceFile *sf = sysml2_arena_alloc(ctx->arena, sizeof(Sysml2SourceFile));
+            if (sf) {
+                char *arena_content = sysml2_arena_alloc(ctx->arena, content_length + 1);
+                if (arena_content) {
+                    memcpy(arena_content, content, content_length);
+                    arena_content[content_length] = '\0';
+                    uint32_t lc;
+                    uint32_t *offsets = sysml2_build_line_offsets(arena_content, content_length, &lc);
+                    uint32_t *arena_offsets = NULL;
+                    if (offsets) {
+                        arena_offsets = sysml2_arena_alloc(ctx->arena, lc * sizeof(uint32_t));
+                        if (arena_offsets) memcpy(arena_offsets, offsets, lc * sizeof(uint32_t));
+                        free(offsets);
+                    }
+                    *sf = (Sysml2SourceFile){
+                        .path = sysml2_intern(ctx->intern, display_name),
+                        .content = arena_content,
+                        .content_length = content_length,
+                        .line_offsets = arena_offsets,
+                        .line_count = arena_offsets ? lc : 0,
+                    };
+                } else {
+                    /* Fallback: path only */
+                    *sf = (Sysml2SourceFile){
+                        .path = sysml2_intern(ctx->intern, display_name),
+                        .content = NULL, .content_length = 0,
+                        .line_offsets = NULL, .line_count = 0,
+                    };
+                }
+                model->source_file = sf;
+            }
             /* If caller wants the model back, return it */
             if (out_model) {
                 *out_model = model;
