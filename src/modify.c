@@ -243,6 +243,29 @@ SysmlSemanticModel *sysml2_modify_clone_with_deletions(
         if (sysml2_query_matches_any(patterns, node->id)) {
             add_to_id_set(node->id, &deleted_ids, &deleted_count, &deleted_capacity, arena);
         }
+        /* Also match anonymous elements by their redefines targets.
+         * Handles: part :>> x { } where node has anonymous ID but redefines[0] = "x"
+         * and the delete pattern is "Parent::x" */
+        else if (!node->name && node->redefines_count > 0 && node->parent_id) {
+            for (size_t r = 0; r < node->redefines_count; r++) {
+                /* Build synthetic ID: parent_id::redefines_target */
+                size_t pid_len = strlen(node->parent_id);
+                size_t ref_len = strlen(node->redefines[r]);
+                size_t syn_len = pid_len + 2 + ref_len + 1;
+                char *synthetic = sysml2_arena_alloc(arena, syn_len);
+                if (!synthetic) continue;
+                memcpy(synthetic, node->parent_id, pid_len);
+                synthetic[pid_len] = ':';
+                synthetic[pid_len + 1] = ':';
+                memcpy(synthetic + pid_len + 2, node->redefines[r], ref_len);
+                synthetic[syn_len - 1] = '\0';
+
+                if (sysml2_query_matches_any(patterns, synthetic)) {
+                    add_to_id_set(node->id, &deleted_ids, &deleted_count, &deleted_capacity, arena);
+                    break;
+                }
+            }
+        }
     }
 
     /* Pass 2: Cascade to children (repeat until no change) */

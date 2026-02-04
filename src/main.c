@@ -106,12 +106,13 @@ static const struct option long_options[] = {
     {"force-replace", no_argument,      0, 'R' + 128},  /* Use high value to avoid conflicts */
     {"dry-run",      no_argument,       0, 'D'},
     {"allow-semantic-errors", no_argument, 0, 'e'},
+    {"list",         no_argument,       0, 'l'},
     {"help",         no_argument,       0, 'h'},
     {"version",      no_argument,       0, 'V'},
     {0, 0, 0, 0}
 };
 
-static const char *short_options = "o:f:s:W:I:S:a:d:hVvTAPFRCDre";
+static const char *short_options = "o:f:s:W:I:S:a:d:hVvTAPFRCDrel";
 
 /* Parse color mode from string */
 static Sysml2ColorMode parse_color_mode(const char *arg) {
@@ -290,6 +291,10 @@ Sysml2Result sysml2_cli_parse(Sysml2CliOptions *options, int argc, char **argv) 
                 options->allow_semantic_errors = true;
                 break;
 
+            case 'l':
+                options->list_mode = true;
+                break;
+
             case 'h':
                 options->show_help = true;
                 return SYSML2_OK;
@@ -349,6 +354,7 @@ void sysml2_cli_print_help(FILE *output) {
         "  -o, --output <file>    Write output to file\n"
         "  -f, --format <fmt>     Output format: json, xml, sysml (default: none)\n"
         "  -s, --select <pattern> Filter output to matching elements (repeatable)\n"
+        "  -l, --list             List element names and kinds (discovery mode)\n"
         "  -I <path>              Add library search path for imports\n"
         "  -r, --recursive        Recursively load all .sysml files from directory\n"
         "      --fix              Format and rewrite files in place\n"
@@ -391,6 +397,11 @@ void sysml2_cli_print_help(FILE *output) {
         "  cat model.sysml | sysml2        Parse from stdin\n"
         "  echo 'package P;' | sysml2      Quick syntax check\n"
         "  sysml2 --select 'DataModel::*' -f json model.sysml\n"
+        "\n"
+        "Discovery workflow:\n"
+        "  sysml2 --list -r ~/model/           List root elements\n"
+        "  sysml2 --list -s 'Pkg::*' model.sysml  List children of Pkg\n"
+        "  sysml2 --list -f json model.sysml   JSON summary output\n"
         "\n"
         "Modification examples:\n"
         "  sysml2 --delete 'Pkg::OldElement' model.sysml\n"
@@ -559,6 +570,44 @@ static const char **expand_input_files(
 
     *out_count = count;
     return result;
+}
+
+/*
+ * Write element list summary for --list mode.
+ *
+ * JSON format: [{"id": "...", "name": "...", "kind": "..."}]
+ * Text format: id\tkind\n (tab-separated, one per line)
+ */
+static void write_element_list(
+    SysmlNode **elements, size_t count,
+    Sysml2OutputFormat format, FILE *out
+) {
+    if (format == SYSML2_OUTPUT_JSON) {
+        fprintf(out, "[");
+        bool first = true;
+        for (size_t i = 0; i < count; i++) {
+            SysmlNode *node = elements[i];
+            if (!node) continue;
+            if (!first) fprintf(out, ",");
+            first = false;
+            const char *id = node->id ? node->id : "";
+            const char *name = node->name ? node->name : "";
+            const char *kind = sysml2_kind_to_keyword(node->kind);
+            /* Minimal JSON escaping - names/ids don't contain special chars */
+            fprintf(out, "\n  {\"id\": \"%s\", \"name\": \"%s\", \"kind\": \"%s\"}",
+                    id, name, kind);
+        }
+        if (!first) fprintf(out, "\n");
+        fprintf(out, "]\n");
+    } else {
+        for (size_t i = 0; i < count; i++) {
+            SysmlNode *node = elements[i];
+            if (!node) continue;
+            const char *id = node->id ? node->id : "";
+            const char *kind = sysml2_kind_to_keyword(node->kind);
+            fprintf(out, "%s\t%s\n", id, kind);
+        }
+    }
 }
 
 /* Run --fix mode: parse, resolve, validate, then rewrite files */
@@ -810,7 +859,28 @@ static int run_normal_mode(
 
         /* Output for stdin */
         if (model && final_result == SYSML2_OK) {
-            if (options->output_format == SYSML2_OUTPUT_JSON) {
+            if (options->list_mode) {
+                /* --list mode: collect root elements and output summary */
+                size_t root_count = 0;
+                for (size_t i = 0; i < model->element_count; i++) {
+                    if (model->elements[i] && model->elements[i]->parent_id == NULL)
+                        root_count++;
+                }
+                SysmlNode **roots = malloc(root_count * sizeof(SysmlNode *));
+                if (roots) {
+                    size_t idx = 0;
+                    for (size_t i = 0; i < model->element_count; i++) {
+                        if (model->elements[i] && model->elements[i]->parent_id == NULL)
+                            roots[idx++] = model->elements[i];
+                    }
+                    FILE *out = options->output_file ? fopen(options->output_file, "w") : stdout;
+                    if (out) {
+                        write_element_list(roots, root_count, options->output_format, out);
+                        if (options->output_file) fclose(out);
+                    }
+                    free(roots);
+                }
+            } else if (options->output_format == SYSML2_OUTPUT_JSON) {
                 FILE *out = options->output_file ? fopen(options->output_file, "w") : stdout;
                 if (out) {
                     sysml2_pipeline_write_json(ctx, model, out);
@@ -874,8 +944,57 @@ static int run_normal_mode(
 
         /* Output */
         if (!has_parse_errors && input_models[0]) {
-            /* Check if we have select patterns */
-            if (options->select_pattern_count > 0) {
+            if (options->list_mode && options->select_pattern_count > 0) {
+                /* --list with --select: query then output summary */
+                Sysml2Arena *arena = sysml2_pipeline_get_arena(ctx);
+                Sysml2QueryPattern *patterns = sysml2_query_parse_multi(
+                    options->select_patterns,
+                    options->select_pattern_count,
+                    arena
+                );
+                if (patterns) {
+                    Sysml2QueryResult *query_result = sysml2_query_execute(
+                        patterns, input_models, input_count, arena
+                    );
+                    if (query_result) {
+                        FILE *out = options->output_file ? fopen(options->output_file, "w") : stdout;
+                        if (out) {
+                            write_element_list(query_result->elements, query_result->element_count,
+                                               options->output_format, out);
+                            if (options->output_file) fclose(out);
+                        }
+                    }
+                }
+            } else if (options->list_mode) {
+                /* --list without --select: collect root elements across all input models */
+                size_t root_count = 0;
+                for (size_t m = 0; m < input_count; m++) {
+                    if (!input_models[m]) continue;
+                    for (size_t i = 0; i < input_models[m]->element_count; i++) {
+                        if (input_models[m]->elements[i] &&
+                            input_models[m]->elements[i]->parent_id == NULL)
+                            root_count++;
+                    }
+                }
+                SysmlNode **roots = malloc(root_count * sizeof(SysmlNode *));
+                if (roots) {
+                    size_t idx = 0;
+                    for (size_t m = 0; m < input_count; m++) {
+                        if (!input_models[m]) continue;
+                        for (size_t i = 0; i < input_models[m]->element_count; i++) {
+                            if (input_models[m]->elements[i] &&
+                                input_models[m]->elements[i]->parent_id == NULL)
+                                roots[idx++] = input_models[m]->elements[i];
+                        }
+                    }
+                    FILE *out = options->output_file ? fopen(options->output_file, "w") : stdout;
+                    if (out) {
+                        write_element_list(roots, root_count, options->output_format, out);
+                        if (options->output_file) fclose(out);
+                    }
+                    free(roots);
+                }
+            } else if (options->select_pattern_count > 0) {
                 /* Query mode: filter output using patterns */
                 Sysml2Arena *arena = sysml2_pipeline_get_arena(ctx);
                 Sysml2QueryPattern *patterns = sysml2_query_parse_multi(
@@ -1386,6 +1505,22 @@ int main(int argc, char **argv) {
     if (has_modify_options(&options) && options.input_file_count == 0) {
         fprintf(stderr, "error: --set/--delete require file arguments\n");
         return 1;
+    }
+
+    /* Validate --list is not combined with modification flags */
+    if (options.list_mode) {
+        if (options.fix_in_place) {
+            fprintf(stderr, "error: --list cannot be combined with --fix\n");
+            return 1;
+        }
+        if (options.set_count > 0) {
+            fprintf(stderr, "error: --list cannot be combined with --set\n");
+            return 1;
+        }
+        if (options.delete_pattern_count > 0) {
+            fprintf(stderr, "error: --list cannot be combined with --delete\n");
+            return 1;
+        }
     }
 
     /* Validate --set has corresponding --at */

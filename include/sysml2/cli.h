@@ -67,6 +67,7 @@ typedef struct {
     bool no_resolve;            /* --no-resolve: disable import resolution */
     bool allow_semantic_errors; /* --allow-semantic-errors: write files despite E3xxx errors */
     bool recursive;             /* --recursive: load all .sysml files from directory */
+    bool list_mode;             /* --list: output element summary (name + kind) */
 
     /* Meta */
     bool show_help;

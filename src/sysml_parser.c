@@ -449,7 +449,7 @@ static void sysml2_extract_all_type_refs(SysmlParserContext *ctx, SysmlNode *nod
 }
 
 /* Build node, add to model, push scope */
-static void sysml2_build_push(SysmlParserContext *ctx, SysmlNodeKind kind, const char *text, size_t len) {
+static void sysml2_build_push(SysmlParserContext *ctx, SysmlNodeKind kind, const char *text, size_t len, size_t offset) {
     if (!ctx->build_ctx) return;
 
     /* First, attach any pending statements to the CURRENT scope (parent) before creating child */
@@ -467,6 +467,13 @@ static void sysml2_build_push(SysmlParserContext *ctx, SysmlNodeKind kind, const
     const char *name = sysml2_extract_name(ctx, text, len);
     SysmlNode *node = sysml2_build_node(ctx->build_ctx, kind, name);
     if (node) {
+        if (offset > 0) {
+            int line, col;
+            sysml2_pos_to_line_col(ctx, offset, &line, &col);
+            node->loc.line = (uint32_t)line;
+            node->loc.column = (uint32_t)col;
+            node->loc.offset = (uint32_t)offset;
+        }
         /* Extract all type references with correct operator types */
         sysml2_extract_all_type_refs(ctx, node, text, len);
         sysml2_build_add_element(ctx->build_ctx, node);
@@ -475,7 +482,7 @@ static void sysml2_build_push(SysmlParserContext *ctx, SysmlNodeKind kind, const
 }
 
 /* Build shorthand usage node, add to model, push scope for body elements */
-static void sysml2_build_push_shorthand(SysmlParserContext *ctx, const char *text, size_t len) {
+static void sysml2_build_push_shorthand(SysmlParserContext *ctx, const char *text, size_t len, size_t offset) {
     if (!ctx->build_ctx) return;
 
     /* First, attach any pending statements to the CURRENT scope (parent) before creating child */
@@ -496,6 +503,13 @@ static void sysml2_build_push_shorthand(SysmlParserContext *ctx, const char *tex
     /* Create shorthand usage node - acts as a scope container */
     SysmlNode *node = sysml2_build_node(ctx->build_ctx, SYSML_KIND_SHORTHAND_USAGE, name);
     if (node) {
+        if (offset > 0) {
+            int line, col;
+            sysml2_pos_to_line_col(ctx, offset, &line, &col);
+            node->loc.line = (uint32_t)line;
+            node->loc.column = (uint32_t)col;
+            node->loc.offset = (uint32_t)offset;
+        }
         /* Add redefines relationship to the target */
         if (text && len > 0) {
             const char *target = sysml2_intern_n(ctx->build_ctx->intern, text, len);
@@ -507,7 +521,7 @@ static void sysml2_build_push_shorthand(SysmlParserContext *ctx, const char *tex
 }
 
 /* Push parameter usage - uses pending_param_kind if set, otherwise PARAMETER */
-static void sysml2_build_push_param(SysmlParserContext *ctx, const char *text, size_t len) {
+static void sysml2_build_push_param(SysmlParserContext *ctx, const char *text, size_t len, size_t offset) {
     if (!ctx->build_ctx) return;
 
     /* Determine node kind from pending_param_kind or default to PARAMETER (no keyword) */
@@ -533,6 +547,13 @@ static void sysml2_build_push_param(SysmlParserContext *ctx, const char *text, s
     const char *name = sysml2_extract_name(ctx, text, len);
     SysmlNode *node = sysml2_build_node(ctx->build_ctx, kind, name);
     if (node) {
+        if (offset > 0) {
+            int line, col;
+            sysml2_pos_to_line_col(ctx, offset, &line, &col);
+            node->loc.line = (uint32_t)line;
+            node->loc.column = (uint32_t)col;
+            node->loc.offset = (uint32_t)offset;
+        }
         /* Extract all type references with correct operator types */
         sysml2_extract_all_type_refs(ctx, node, text, len);
         sysml2_build_add_element(ctx->build_ctx, node);
@@ -2005,7 +2026,7 @@ static void pcc_action_Package_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pcc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_PACKAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_PACKAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2045,7 +2066,7 @@ static void pcc_action_LibraryPackage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_LIBRARY_PACKAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_LIBRARY_PACKAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2145,7 +2166,7 @@ static void pcc_action_NamespaceDefinition_0(sysml2_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_NAMESPACE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_NAMESPACE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2199,7 +2220,7 @@ static void pcc_action_TypeDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_TYPE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_TYPE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2253,7 +2274,7 @@ static void pcc_action_ClassifierDefinition_0(sysml2_context_t *__pcc_ctx, pcc_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_CLASSIFIER, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CLASSIFIER, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2293,7 +2314,7 @@ static void pcc_action_ClassDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_CLASS, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CLASS, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2333,7 +2354,7 @@ static void pcc_action_StructureDefinition_0(sysml2_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_STRUCTURE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_STRUCTURE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2373,7 +2394,7 @@ static void pcc_action_MetaclassDefinition_0(sysml2_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_METACLASS, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_METACLASS, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2413,7 +2434,7 @@ static void pcc_action_AssociationDefinition_0(sysml2_context_t *__pcc_ctx, pcc_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_ASSOCIATION, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ASSOCIATION, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2453,7 +2474,7 @@ static void pcc_action_AssociationStructureDefinition_0(sysml2_context_t *__pcc_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_ASSOC_STRUCT, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ASSOC_STRUCT, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2493,7 +2514,7 @@ static void pcc_action_InteractionDefinition_0(sysml2_context_t *__pcc_ctx, pcc_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_INTERACTION, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_INTERACTION, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2533,7 +2554,7 @@ static void pcc_action_BehaviorDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_BEHAVIOR, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_BEHAVIOR, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2587,7 +2608,7 @@ static void pcc_action_FunctionDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_FUNCTION, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_FUNCTION, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2641,7 +2662,7 @@ static void pcc_action_PredicateDefinition_0(sysml2_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_PREDICATE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_PREDICATE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2681,7 +2702,7 @@ static void pcc_action_MultiplicityDefinition_0(sysml2_context_t *__pcc_ctx, pcc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_MULTIPLICITY_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_MULTIPLICITY_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2721,7 +2742,7 @@ static void pcc_action_ImplicitFeatureDefinition_0(sysml2_context_t *__pcc_ctx, 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_FEATURE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_FEATURE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2761,7 +2782,7 @@ static void pcc_action_EndWithFeatureKeyword_0(sysml2_context_t *__pcc_ctx, pcc_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_FEATURE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_FEATURE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2801,7 +2822,7 @@ static void pcc_action_EndWithoutFeatureKeyword_0(sysml2_context_t *__pcc_ctx, p
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_FEATURE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_FEATURE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2841,7 +2862,7 @@ static void pcc_action_FeatureDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thun
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_FEATURE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_FEATURE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2881,7 +2902,7 @@ static void pcc_action_StepDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_STEP, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_STEP, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2921,7 +2942,7 @@ static void pcc_action_ExpressionDefinition_0(sysml2_context_t *__pcc_ctx, pcc_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_EXPRESSION, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_EXPRESSION, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -2961,7 +2982,7 @@ static void pcc_action_BooleanExpressionDefinition_0(sysml2_context_t *__pcc_ctx
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_BOOL_EXPRESSION, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_BOOL_EXPRESSION, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3001,7 +3022,7 @@ static void pcc_action_InvariantDefinition_0(sysml2_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_INVARIANT, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_INVARIANT, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3041,7 +3062,7 @@ static void pcc_action_ConnectorDefinition_0(sysml2_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_CONNECTOR, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CONNECTOR, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3081,7 +3102,7 @@ static void pcc_action_BindingConnectorNamed_0(sysml2_context_t *__pcc_ctx, pcc_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_BINDING_CONNECTOR, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_BINDING_CONNECTOR, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3162,7 +3183,7 @@ static void pcc_action_BindingConnectorAnon_0(sysml2_context_t *__pcc_ctx, pcc_t
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
 #define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
 #define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
-    sysml2_build_push(auxil, SYSML_KIND_BINDING_CONNECTOR, "", 0);
+    sysml2_build_push(auxil, SYSML_KIND_BINDING_CONNECTOR, "", 0, 0);
 #undef _0e
 #undef _0s
 #undef _0
@@ -3231,7 +3252,7 @@ static void pcc_action_SuccessionNamed_0(sysml2_context_t *__pcc_ctx, pcc_thunk_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_SUCCESSION, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_SUCCESSION, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3312,7 +3333,7 @@ static void pcc_action_SuccessionAnon_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
 #define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
 #define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
-    sysml2_build_push(auxil, SYSML_KIND_SUCCESSION, "", 0);
+    sysml2_build_push(auxil, SYSML_KIND_SUCCESSION, "", 0, 0);
 #undef _0e
 #undef _0s
 #undef _0
@@ -3381,7 +3402,7 @@ static void pcc_action_KerMLFlowNamed_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_KERML_FLOW, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_KERML_FLOW, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3506,7 +3527,7 @@ static void pcc_action_KerMLFlowAnon_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t 
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
 #define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
 #define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
-    sysml2_build_push(auxil, SYSML_KIND_KERML_FLOW, "", 0);
+    sysml2_build_push(auxil, SYSML_KIND_KERML_FLOW, "", 0, 0);
 #undef _0e
 #undef _0s
 #undef _0
@@ -3613,7 +3634,7 @@ static void pcc_action_SuccessionFlowNamed_0(sysml2_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_SUCCESSION_FLOW, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_SUCCESSION_FLOW, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -3738,7 +3759,7 @@ static void pcc_action_SuccessionFlowAnon_0(sysml2_context_t *__pcc_ctx, pcc_thu
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
 #define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
 #define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
-    sysml2_build_push(auxil, SYSML_KIND_SUCCESSION_FLOW, "", 0);
+    sysml2_build_push(auxil, SYSML_KIND_SUCCESSION_FLOW, "", 0, 0);
 #undef _0e
 #undef _0s
 #undef _0
@@ -4075,7 +4096,7 @@ static void pcc_action_AttributeDefinition_0(sysml2_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_ATTRIBUTE_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ATTRIBUTE_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4115,7 +4136,7 @@ static void pcc_action_EnumerationDefinition_0(sysml2_context_t *__pcc_ctx, pcc_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_ENUMERATION_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ENUMERATION_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4155,7 +4176,7 @@ static void pcc_action_DatatypeDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_DATATYPE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_DATATYPE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4195,7 +4216,7 @@ static void pcc_action_EnumeratedValueVariant_0(sysml2_context_t *__pcc_ctx, pcc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    if (auxil->build_ctx) sysml2_capture_enum_keyword(auxil->build_ctx); sysml2_build_push(auxil, SYSML_KIND_ENUMERATION_USAGE, _1, _1e - _1s);
+    if (auxil->build_ctx) sysml2_capture_enum_keyword(auxil->build_ctx); sysml2_build_push(auxil, SYSML_KIND_ENUMERATION_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4235,7 +4256,7 @@ static void pcc_action_EnumeratedValueVariant_2(sysml2_context_t *__pcc_ctx, pcc
 #define _2 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[1])
 #define _2s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[1]->range.start))
 #define _2e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[1]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_ENUMERATION_USAGE, _2, _2e - _2s);
+    sysml2_build_push(auxil, SYSML_KIND_ENUMERATION_USAGE, _2, _2e - _2s, _2s);
 #undef _2e
 #undef _2s
 #undef _2
@@ -4275,7 +4296,7 @@ static void pcc_action_OccurrenceDefinitionExplicit_0(sysml2_context_t *__pcc_ct
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_OCCURRENCE_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_OCCURRENCE_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4315,7 +4336,7 @@ static void pcc_action_OccurrenceDefinitionShorthand_0(sysml2_context_t *__pcc_c
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_OCCURRENCE_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_OCCURRENCE_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4369,7 +4390,7 @@ static void pcc_action_ItemDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_ITEM_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ITEM_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4409,7 +4430,7 @@ static void pcc_action_PartDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_PART_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_PART_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4449,7 +4470,7 @@ static void pcc_action_ConnectionDefinition_0(sysml2_context_t *__pcc_ctx, pcc_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_CONNECTION_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CONNECTION_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4489,7 +4510,7 @@ static void pcc_action_FlowDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_FLOW_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_FLOW_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4529,7 +4550,7 @@ static void pcc_action_InterfaceDefinition_0(sysml2_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_INTERFACE_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_INTERFACE_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4583,7 +4604,7 @@ static void pcc_action_PortDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_PORT_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_PORT_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4637,7 +4658,7 @@ static void pcc_action_AllocationDefinition_0(sysml2_context_t *__pcc_ctx, pcc_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_ALLOCATION_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ALLOCATION_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4697,7 +4718,7 @@ static void pcc_action_ActionDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_ACTION_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ACTION_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4771,7 +4792,7 @@ static void pcc_action_StateDefinition_1(sysml2_context_t *__pcc_ctx, pcc_thunk_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_STATE_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_STATE_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4885,7 +4906,7 @@ static void pcc_action_PerformActionUsage_0(sysml2_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_PERFORM_ACTION_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_PERFORM_ACTION_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -4945,7 +4966,7 @@ static void pcc_action_PerformActionUsage_3(sysml2_context_t *__pcc_ctx, pcc_thu
 #define _2 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[1])
 #define _2s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[1]->range.start))
 #define _2e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[1]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_PERFORM_ACTION_USAGE, _2, _2e - _2s);
+    sysml2_build_push(auxil, SYSML_KIND_PERFORM_ACTION_USAGE, _2, _2e - _2s, _2s);
 #undef _2e
 #undef _2s
 #undef _2
@@ -5005,7 +5026,7 @@ static void pcc_action_ConstraintDefinition_0(sysml2_context_t *__pcc_ctx, pcc_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5059,7 +5080,7 @@ static void pcc_action_RequirementDefinition_0(sysml2_context_t *__pcc_ctx, pcc_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_REQUIREMENT_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_REQUIREMENT_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5113,7 +5134,7 @@ static void pcc_action_ConcernDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thun
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_CONCERN_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CONCERN_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5153,7 +5174,7 @@ static void pcc_action_CalcDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_CALC_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CALC_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5207,7 +5228,7 @@ static void pcc_action_CaseDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_CASE_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CASE_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5261,7 +5282,7 @@ static void pcc_action_AnalysisDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_ANALYSIS_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ANALYSIS_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5301,7 +5322,7 @@ static void pcc_action_VerificationDefinition_0(sysml2_context_t *__pcc_ctx, pcc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_VERIFICATION_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_VERIFICATION_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5341,7 +5362,7 @@ static void pcc_action_UseCaseDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thun
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_USE_CASE_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_USE_CASE_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5381,7 +5402,7 @@ static void pcc_action_ViewDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_VIEW_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_VIEW_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5435,7 +5456,7 @@ static void pcc_action_ViewpointDefinition_0(sysml2_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_VIEWPOINT_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_VIEWPOINT_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5475,7 +5496,7 @@ static void pcc_action_RenderingDefinition_0(sysml2_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_RENDERING_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_RENDERING_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5515,7 +5536,7 @@ static void pcc_action_MetadataDefinition_0(sysml2_context_t *__pcc_ctx, pcc_thu
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_METADATA_DEF, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_METADATA_DEF, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5569,7 +5590,7 @@ static void pcc_action_PortionUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_PORTION_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_PORTION_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5629,7 +5650,7 @@ static void pcc_action_SuccessionUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_SUCCESSION, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_SUCCESSION, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5747,7 +5768,7 @@ static void pcc_action_ReferenceUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_FEATURE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_FEATURE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5787,7 +5808,7 @@ static void pcc_action_ReferenceUsage_3(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _2 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[1])
 #define _2s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[1]->range.start))
 #define _2e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[1]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_FEATURE, _2, _2e - _2s);
+    sysml2_build_push(auxil, SYSML_KIND_FEATURE, _2, _2e - _2s, _2s);
 #undef _2e
 #undef _2s
 #undef _2
@@ -5867,7 +5888,7 @@ static void pcc_action_AttributeUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_ATTRIBUTE_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ATTRIBUTE_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5907,7 +5928,7 @@ static void pcc_action_EnumerationUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_ENUMERATION_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ENUMERATION_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -5947,7 +5968,7 @@ static void pcc_action_OccurrenceUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_OCCURRENCE_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_OCCURRENCE_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -6001,7 +6022,7 @@ static void pcc_action_EventOccurrenceUsage_1(sysml2_context_t *__pcc_ctx, pcc_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -6041,7 +6062,7 @@ static void pcc_action_EventUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -6081,7 +6102,7 @@ static void pcc_action_EventUsage_2(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__
 #define _2 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[1])
 #define _2s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[1]->range.start))
 #define _2e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[1]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, _2, _2e - _2s);
+    sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, _2, _2e - _2s, _2s);
 #undef _2e
 #undef _2s
 #undef _2
@@ -6121,7 +6142,7 @@ static void pcc_action_EventUsage_4(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__
 #define _3 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[2])
 #define _3s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[2]->range.start))
 #define _3e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[2]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, _3, _3e - _3s);
+    sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, _3, _3e - _3s, _3s);
 #undef _3e
 #undef _3s
 #undef _3
@@ -6161,7 +6182,7 @@ static void pcc_action_EventUsage_6(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__
 #define _4 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[3])
 #define _4s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[3]->range.start))
 #define _4e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[3]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, _4, _4e - _4s);
+    sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, _4, _4e - _4s, _4s);
 #undef _4e
 #undef _4s
 #undef _4
@@ -6201,7 +6222,7 @@ static void pcc_action_EventUsage_8(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__
 #define _5 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[4])
 #define _5s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[4]->range.start))
 #define _5e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[4]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, _5, _5e - _5s);
+    sysml2_build_push(auxil, SYSML_KIND_EVENT_USAGE, _5, _5e - _5s, _5s);
 #undef _5e
 #undef _5s
 #undef _5
@@ -6255,7 +6276,7 @@ static void pcc_action_ItemUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__p
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_ITEM_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ITEM_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -6295,7 +6316,7 @@ static void pcc_action_PartUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__p
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_PART_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_PART_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -6335,7 +6356,7 @@ static void pcc_action_ConnectionUsageNamed_0(sysml2_context_t *__pcc_ctx, pcc_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_CONNECTION_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CONNECTION_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -6419,7 +6440,7 @@ static void pcc_action_ConnectionUsageNamed_3(sysml2_context_t *__pcc_ctx, pcc_t
 #define _4 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[3])
 #define _4s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[3]->range.start))
 #define _4e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[3]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_CONNECTION_USAGE, _4, _4e - _4s);
+    sysml2_build_push(auxil, SYSML_KIND_CONNECTION_USAGE, _4, _4e - _4s, _4s);
 #undef _4e
 #undef _4s
 #undef _4
@@ -6505,7 +6526,7 @@ static void pcc_action_FlowBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__pc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_FLOW_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_FLOW_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -6660,7 +6681,7 @@ static void pcc_action_InterfaceUsageAnon_0(sysml2_context_t *__pcc_ctx, pcc_thu
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
 #define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
 #define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
-    sysml2_build_push(auxil, SYSML_KIND_INTERFACE_USAGE, "", 0);
+    sysml2_build_push(auxil, SYSML_KIND_INTERFACE_USAGE, "", 0, 0);
 #undef _0e
 #undef _0s
 #undef _0
@@ -6729,7 +6750,7 @@ static void pcc_action_InterfaceUsageNamedBinaryConnect_0(sysml2_context_t *__pc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_INTERFACE_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_INTERFACE_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -6833,7 +6854,7 @@ static void pcc_action_InterfaceUsageNamedNaryConnect_0(sysml2_context_t *__pcc_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_INTERFACE_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_INTERFACE_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -6893,7 +6914,7 @@ static void pcc_action_InterfaceUsageNamed_0(sysml2_context_t *__pcc_ctx, pcc_th
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_INTERFACE_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_INTERFACE_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -6933,7 +6954,7 @@ static void pcc_action_PortUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__p
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_PORT_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_PORT_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -6973,7 +6994,7 @@ static void pcc_action_AllocationUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_ALLOCATION_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ALLOCATION_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -7039,7 +7060,7 @@ static void pcc_action_ActionUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_ACTION_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ACTION_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -7113,7 +7134,7 @@ static void pcc_action_StateUsage_1(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_STATE_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_STATE_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -7173,7 +7194,7 @@ static void pcc_action_ExhibitStateUsage_0(sysml2_context_t *__pcc_ctx, pcc_thun
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_STATE_USAGE, _1, _1e - _1s); if (auxil->build_ctx) sysml2_set_exhibit_on_current(auxil->build_ctx);
+    sysml2_build_push(auxil, SYSML_KIND_STATE_USAGE, _1, _1e - _1s, _1s); if (auxil->build_ctx) sysml2_set_exhibit_on_current(auxil->build_ctx);
 #undef _1e
 #undef _1s
 #undef _1
@@ -7233,7 +7254,7 @@ static void pcc_action_ExhibitStateUsage_3(sysml2_context_t *__pcc_ctx, pcc_thun
 #define _2 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[1])
 #define _2s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[1]->range.start))
 #define _2e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[1]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_STATE_USAGE, _2, _2e - _2s); if (auxil->build_ctx) sysml2_set_exhibit_on_current(auxil->build_ctx);
+    sysml2_build_push(auxil, SYSML_KIND_STATE_USAGE, _2, _2e - _2s, _2s); if (auxil->build_ctx) sysml2_set_exhibit_on_current(auxil->build_ctx);
 #undef _2e
 #undef _2s
 #undef _2
@@ -7293,7 +7314,7 @@ static void pcc_action_ConstraintUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -7333,7 +7354,7 @@ static void pcc_action_RequirementUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_REQUIREMENT_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_REQUIREMENT_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -7373,7 +7394,7 @@ static void pcc_action_ConcernUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_CONCERN_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CONCERN_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -7413,7 +7434,7 @@ static void pcc_action_CalcUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__p
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_CALC_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CALC_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -7453,7 +7474,7 @@ static void pcc_action_CaseUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__p
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_CASE_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CASE_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -7493,7 +7514,7 @@ static void pcc_action_AnalysisUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_ANALYSIS_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_ANALYSIS_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -7533,7 +7554,7 @@ static void pcc_action_VerificationUsage_0(sysml2_context_t *__pcc_ctx, pcc_thun
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_VERIFICATION_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_VERIFICATION_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -7573,7 +7594,7 @@ static void pcc_action_UseCaseUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_USE_CASE_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_USE_CASE_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -7613,7 +7634,7 @@ static void pcc_action_ViewUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *__p
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_VIEW_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_VIEW_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -7653,7 +7674,7 @@ static void pcc_action_ViewpointUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_VIEWPOINT_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_VIEWPOINT_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -7693,7 +7714,7 @@ static void pcc_action_RenderingUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_RENDERING_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_RENDERING_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -7901,7 +7922,7 @@ static void pcc_action_ParameterUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push_param(auxil, _1, _1e - _1s);
+    sysml2_build_push_param(auxil, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -8603,7 +8624,7 @@ static void pcc_action_ShorthandFeatureWithBody_0(sysml2_context_t *__pcc_ctx, p
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push_shorthand(auxil, _1, _1e - _1s);
+    sysml2_build_push_shorthand(auxil, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -8663,7 +8684,7 @@ static void pcc_action_ShorthandRedefinesWithBody_0(sysml2_context_t *__pcc_ctx,
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push_shorthand(auxil, _1, _1e - _1s);
+    sysml2_build_push_shorthand(auxil, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -8843,7 +8864,7 @@ static void pcc_action_AssertConstraintWithKW_0(sysml2_context_t *__pcc_ctx, pcc
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -8880,7 +8901,7 @@ static void pcc_action_AssertConstraintReference_0(sysml2_context_t *__pcc_ctx, 
 #define _0 pcc_get_capture_string(__pcc_ctx, &__pcc_in->data.leaf.capt0)
 #define _0s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.start))
 #define _0e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capt0.range.end))
-    sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_USAGE, "", 0);
+    sysml2_build_push(auxil, SYSML_KIND_CONSTRAINT_USAGE, "", 0, 0);
 #undef _0e
 #undef _0s
 #undef _0
@@ -9127,7 +9148,7 @@ static void pcc_action_EndMemberBody_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t 
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_END_FEATURE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_END_FEATURE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1
@@ -9167,7 +9188,7 @@ static void pcc_action_MessageUsage_0(sysml2_context_t *__pcc_ctx, pcc_thunk_t *
 #define _1 pcc_get_capture_string(__pcc_ctx, __pcc_in->data.leaf.capts.buf[0])
 #define _1s ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.start))
 #define _1e ((const size_t)(__pcc_ctx->pos + __pcc_in->data.leaf.capts.buf[0]->range.end))
-    sysml2_build_push(auxil, SYSML_KIND_MESSAGE_USAGE, _1, _1e - _1s);
+    sysml2_build_push(auxil, SYSML_KIND_MESSAGE_USAGE, _1, _1e - _1s, _1s);
 #undef _1e
 #undef _1s
 #undef _1

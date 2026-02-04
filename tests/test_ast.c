@@ -411,6 +411,30 @@ TEST(node_anonymous) {
     FIXTURE_TEARDOWN();
 }
 
+TEST(node_location_fields) {
+    FIXTURE_SETUP();
+
+    SysmlBuildContext *ctx = sysml2_build_context_create(&arena, &intern, "test.sysml");
+
+    SysmlNode *node = sysml2_build_node(ctx, SYSML_KIND_PART_DEF, "Engine");
+    node->loc.line = 10;
+    node->loc.column = 5;
+    node->loc.offset = 42;
+    sysml2_build_add_element(ctx, node);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx);
+    ASSERT_NOT_NULL(model);
+    ASSERT_EQ(model->element_count, 1);
+
+    /* Location fields should survive finalization */
+    ASSERT_EQ(model->elements[0]->loc.line, 10);
+    ASSERT_EQ(model->elements[0]->loc.column, 5);
+    ASSERT_EQ(model->elements[0]->loc.offset, 42);
+
+    sysml2_build_context_destroy(ctx);
+    FIXTURE_TEARDOWN();
+}
+
 /* ========== Element Collection Tests ========== */
 
 TEST(add_element) {
@@ -881,6 +905,7 @@ int main(void) {
     RUN_TEST(node_creation);
     RUN_TEST(node_with_parent);
     RUN_TEST(node_anonymous);
+    RUN_TEST(node_location_fields);
 
     /* Element collection tests */
     printf("\n  Element collection tests:\n");

@@ -275,6 +275,12 @@ add_test(NAME cli_package_discovery
         $<TARGET_FILE:sysml2>
 )
 
+# --list discovery mode tests
+add_test(NAME cli_list_mode
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_list.sh
+        $<TARGET_FILE:sysml2>
+)
+
 # Ensure tests run without external library path pollution
 get_property(all_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${all_tests} PROPERTIES

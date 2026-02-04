@@ -6,6 +6,7 @@
 
 #include "sysml2/sysml_writer.h"
 #include "sysml2/query.h"
+#include "sysml2/lexer.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -211,6 +212,11 @@ static bool needs_quoting(const char *name) {
               (c >= '0' && c <= '9') || c == '_')) {
             return true;
         }
+    }
+
+    /* Check if name is a reserved keyword */
+    if (sysml2_keyword_lookup(name, strlen(name)) != SYSML2_TOKEN_IDENTIFIER) {
+        return true;
     }
 
     return false;

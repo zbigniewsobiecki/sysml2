@@ -32,6 +32,7 @@ set -e
 # Parse expected file
 expected_exit=$(grep '^exit:' "$EXPECTED" | cut -d: -f2)
 expected_errors=$(grep '^error:' "$EXPECTED" | cut -d: -f2)
+expected_lines=$(grep '^line:' "$EXPECTED" | cut -d: -f2)
 
 # Check exit code
 if [ "$actual_exit" != "$expected_exit" ]; then
@@ -45,6 +46,16 @@ fi
 for err in $expected_errors; do
     if ! echo "$output" | grep -q "\[$err\]"; then
         echo "FAIL: Expected error $err not found in output"
+        echo "Output:"
+        echo "$output"
+        exit 1
+    fi
+done
+
+# Check each expected line number appears with an error
+for ln in $expected_lines; do
+    if ! echo "$output" | grep -q ":${ln}:.*error"; then
+        echo "FAIL: Expected error at line $ln not found in output"
         echo "Output:"
         echo "$output"
         exit 1

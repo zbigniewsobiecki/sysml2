@@ -19,12 +19,12 @@ cmake-build-*/
 
 # Executables
 /sysml2
-test_lexer
-test_parser
+/test_*
 
 # CMake
 CMakeCache.txt
 CMakeFiles/
+CTestTestfile.cmake
 cmake_install.cmake
 Makefile
 compile_commands.json

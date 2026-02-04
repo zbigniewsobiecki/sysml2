@@ -1033,6 +1033,138 @@ TEST(validate_multi_null_source_file_safe) {
     test_ctx_destroy(&ctx);
 }
 
+/* ========== Diagnostic Location Tests ========== */
+
+TEST(validate_e3001_diagnostic_has_line_number) {
+    TestContext ctx;
+    test_ctx_init(&ctx);
+
+    /* Create part typed by non-existent type with specific location */
+    SysmlNode *part = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "engine");
+    part->loc.line = 42;
+    part->loc.column = 10;
+    part->loc.offset = 200;
+    sysml2_build_add_typed_by(ctx.build_ctx, part, "NoSuchType");
+    sysml2_build_add_element(ctx.build_ctx, part);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx.build_ctx);
+
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2Result result = sysml2_validate(model, &ctx.diag_ctx, NULL,
+        &ctx.arena, &ctx.intern, &opts);
+
+    ASSERT_EQ(result, SYSML2_ERROR_SEMANTIC);
+    ASSERT_EQ(ctx.diag_ctx.error_count, 1);
+    ASSERT_NOT_NULL(ctx.diag_ctx.first);
+    ASSERT_EQ(ctx.diag_ctx.first->range.start.line, 42);
+    ASSERT_EQ(ctx.diag_ctx.first->range.start.column, 10);
+
+    test_ctx_destroy(&ctx);
+}
+
+TEST(validate_e3004_diagnostic_has_line_numbers) {
+    TestContext ctx;
+    test_ctx_init(&ctx);
+
+    /* First definition at line 5 */
+    SysmlNode *part1 = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "sensor");
+    part1->loc.line = 5;
+    part1->loc.column = 5;
+    part1->loc.offset = 40;
+    sysml2_build_add_element(ctx.build_ctx, part1);
+
+    /* Duplicate at line 12 (manually created to avoid ID collision) */
+    SysmlNode *part2 = sysml2_arena_alloc(&ctx.arena, sizeof(SysmlNode));
+    memset(part2, 0, sizeof(SysmlNode));
+    part2->id = sysml2_intern(&ctx.intern, "sensor_dup2");
+    part2->name = sysml2_intern(&ctx.intern, "sensor");
+    part2->kind = SYSML_KIND_PART_USAGE;
+    part2->loc.line = 12;
+    part2->loc.column = 5;
+    part2->loc.offset = 100;
+    sysml2_build_add_element(ctx.build_ctx, part2);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx.build_ctx);
+
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2Result result = sysml2_validate(model, &ctx.diag_ctx, NULL,
+        &ctx.arena, &ctx.intern, &opts);
+
+    ASSERT_EQ(result, SYSML2_ERROR_SEMANTIC);
+    ASSERT_EQ(ctx.diag_ctx.error_count, 1);
+
+    /* Diagnostic should point to the duplicate (line 12) */
+    ASSERT_NOT_NULL(ctx.diag_ctx.first);
+    ASSERT_EQ(ctx.diag_ctx.first->range.start.line, 12);
+
+    /* Note should point to the original (line 5) */
+    ASSERT_NOT_NULL(ctx.diag_ctx.first->notes);
+    ASSERT_EQ(ctx.diag_ctx.first->notes->range.start.line, 5);
+
+    test_ctx_destroy(&ctx);
+}
+
+TEST(validate_e3005_diagnostic_has_line_number) {
+    TestContext ctx;
+    test_ctx_init(&ctx);
+
+    /* Create A :> A (direct cycle) at line 20 */
+    SysmlNode *part_def = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_DEF, "A");
+    part_def->loc.line = 20;
+    part_def->loc.column = 3;
+    part_def->loc.offset = 150;
+    sysml2_build_add_typed_by(ctx.build_ctx, part_def, "A");
+    sysml2_build_add_element(ctx.build_ctx, part_def);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx.build_ctx);
+
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2Result result = sysml2_validate(model, &ctx.diag_ctx, NULL,
+        &ctx.arena, &ctx.intern, &opts);
+
+    ASSERT_EQ(result, SYSML2_ERROR_SEMANTIC);
+    ASSERT(ctx.diag_ctx.error_count >= 1);
+
+    /* Find E3005 diagnostic - may coexist with E3006 */
+    Sysml2Diagnostic *diag = ctx.diag_ctx.first;
+    while (diag && diag->code != SYSML2_DIAG_E3005_CIRCULAR_SPECIALIZATION)
+        diag = diag->next;
+    ASSERT_NOT_NULL(diag);
+    ASSERT_EQ(diag->range.start.line, 20);
+
+    test_ctx_destroy(&ctx);
+}
+
+TEST(validate_e3006_diagnostic_has_line_number) {
+    TestContext ctx;
+    test_ctx_init(&ctx);
+
+    /* Create action def */
+    SysmlNode *action_def = sysml2_build_node(ctx.build_ctx, SYSML_KIND_ACTION_DEF, "DoSomething");
+    sysml2_build_add_element(ctx.build_ctx, action_def);
+
+    /* Try to type a part by the action def at line 7 */
+    SysmlNode *part = sysml2_build_node(ctx.build_ctx, SYSML_KIND_PART_USAGE, "myPart");
+    part->loc.line = 7;
+    part->loc.column = 5;
+    part->loc.offset = 60;
+    sysml2_build_add_typed_by(ctx.build_ctx, part, "DoSomething");
+    sysml2_build_add_element(ctx.build_ctx, part);
+
+    SysmlSemanticModel *model = sysml2_build_finalize(ctx.build_ctx);
+
+    Sysml2ValidationOptions opts = SYSML_VALIDATION_OPTIONS_DEFAULT;
+    Sysml2Result result = sysml2_validate(model, &ctx.diag_ctx, NULL,
+        &ctx.arena, &ctx.intern, &opts);
+
+    ASSERT_EQ(result, SYSML2_ERROR_SEMANTIC);
+    ASSERT_EQ(ctx.diag_ctx.error_count, 1);
+    ASSERT_NOT_NULL(ctx.diag_ctx.first);
+    ASSERT_EQ(ctx.diag_ctx.first->range.start.line, 7);
+
+    test_ctx_destroy(&ctx);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -1120,6 +1252,13 @@ int main(void) {
     RUN_TEST(validate_multi_source_file_on_diagnostics);
     RUN_TEST(validate_multi_different_source_files);
     RUN_TEST(validate_multi_null_source_file_safe);
+
+    /* Diagnostic Location tests */
+    printf("\n  Diagnostic Location tests:\n");
+    RUN_TEST(validate_e3001_diagnostic_has_line_number);
+    RUN_TEST(validate_e3004_diagnostic_has_line_numbers);
+    RUN_TEST(validate_e3005_diagnostic_has_line_number);
+    RUN_TEST(validate_e3006_diagnostic_has_line_number);
 
     printf("\n%d/%d tests passed\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;

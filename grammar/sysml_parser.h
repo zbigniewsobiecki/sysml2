@@ -215,6 +215,13 @@ static const char *sysml2_keyword_help(const char *keyword) {
         return "syntax: import QualifiedName::*;";
     if (strcmp(keyword, "LANGUAGE") == 0)
         return "syntax: language \"lang-name\"";
+    /* Reserved identifier keywords - suggest single-quoted unrestricted name */
+    if (strcmp(keyword, "FROM") == 0 || strcmp(keyword, "TO") == 0 ||
+        strcmp(keyword, "ABOUT") == 0 || strcmp(keyword, "LOCALE") == 0 ||
+        strcmp(keyword, "OF") == 0 || strcmp(keyword, "VIA") == 0 ||
+        strcmp(keyword, "FIRST") == 0 || strcmp(keyword, "THEN") == 0) {
+        return "this keyword cannot be used as an identifier; use single-quoted name: 'from', 'to', etc.";
+    }
     return NULL;
 }
 

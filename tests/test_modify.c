@@ -3189,6 +3189,146 @@ TEST(roundtrip_write_idempotent) {
     FIXTURE_TEARDOWN();
 }
 
+/* Test: Succession statement with trailing comment — no duplication */
+TEST(writer_succession_comment_no_duplication) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "action def Process {\n"
+        "    action parseSegments;\n"
+        "    action signalOutbound;\n"
+        "    first parseSegments; // Logic: if direction == 'out' then signalOutbound\n"
+        "\n"
+        "    // Next step\n"
+        "    action signalInbound;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* The Logic comment should appear exactly once */
+    int count = 0;
+    const char *pos = output;
+    while ((pos = strstr(pos, "// Logic:")) != NULL) {
+        count++;
+        pos++;
+    }
+    ASSERT_EQ(count, 1);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Entry/exit/do actions with trailing comments — no duplication */
+TEST(writer_entry_exit_do_comment_no_duplication) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "state def Active {\n"
+        "    entry startMonitor; // Start the monitoring loop\n"
+        "    do runChecks; // Periodic health checks\n"
+        "    exit stopMonitor; // Cleanup monitoring\n"
+        "\n"
+        "    // Transition logic\n"
+        "    transition first then idle;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Each comment should appear exactly once */
+    const char *comments[] = {
+        "// Start the monitoring loop",
+        "// Periodic health checks",
+        "// Cleanup monitoring",
+        "// Transition logic"
+    };
+    for (int i = 0; i < 4; i++) {
+        int count = 0;
+        const char *pos = output;
+        while ((pos = strstr(pos, comments[i])) != NULL) {
+            count++;
+            pos++;
+        }
+        ASSERT_EQ(count, 1);
+    }
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: Comments after entry/exit/do don't accumulate across roundtrips.
+ * Counts must not grow between pass 1 and pass 2 (the core duplication bug). */
+TEST(writer_action_stmts_double_roundtrip_stable) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "state def Monitor {\n"
+        "    entry startMonitor; // Initialize monitoring\n"
+        "    do runChecks; // Periodic checks\n"
+        "\n"
+        "    // State body\n"
+        "    part sensor;\n"
+        "}\n";
+
+    /* First round-trip */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+
+    char *output1 = NULL;
+    Sysml2Result res1 = sysml2_sysml_write_string(model1, &output1);
+    ASSERT_EQ(res1, SYSML2_OK);
+    ASSERT_NOT_NULL(output1);
+
+    /* Second round-trip — parse output1 and write again */
+    Sysml2Arena arena2;
+    sysml2_arena_init(&arena2);
+    Sysml2Intern intern2;
+    sysml2_intern_init(&intern2, &arena2);
+
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena2, &intern2, output1);
+    ASSERT_NOT_NULL(model2);
+
+    char *output2 = NULL;
+    Sysml2Result res2 = sysml2_sysml_write_string(model2, &output2);
+    ASSERT_EQ(res2, SYSML2_OK);
+    ASSERT_NOT_NULL(output2);
+
+    /* Count comments in both outputs — count must not grow */
+    const char *comments[] = {
+        "// Initialize monitoring",
+        "// Periodic checks",
+        "// State body"
+    };
+    for (int i = 0; i < 3; i++) {
+        int count1 = 0, count2 = 0;
+        const char *pos;
+        pos = output1;
+        while ((pos = strstr(pos, comments[i])) != NULL) { count1++; pos++; }
+        pos = output2;
+        while ((pos = strstr(pos, comments[i])) != NULL) { count2++; pos++; }
+        /* Comment count must not grow between roundtrips */
+        ASSERT(count2 <= count1);
+        /* And should be at least 1 (comment preserved) */
+        ASSERT(count1 >= 1);
+    }
+
+    free(output1);
+    free(output2);
+    sysml2_arena_destroy(&arena2);
+    FIXTURE_TEARDOWN();
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -3315,6 +3455,11 @@ int main(void) {
     RUN_TEST(upsert_blank_lines_stable);
     RUN_TEST(multiple_writes_idempotent);
     RUN_TEST(roundtrip_write_idempotent);
+
+    /* Trailing comment duplication regression tests */
+    RUN_TEST(writer_succession_comment_no_duplication);
+    RUN_TEST(writer_entry_exit_do_comment_no_duplication);
+    RUN_TEST(writer_action_stmts_double_roundtrip_stable);
 
     printf("\n%d/%d tests passed.\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;

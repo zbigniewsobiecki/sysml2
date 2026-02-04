@@ -968,6 +968,45 @@ TEST(sysml_enum_member_no_keyword_preserved) {
     FIXTURE_TEARDOWN();
 }
 
+/* Test: reserved keywords used as names are quoted in round-trip */
+TEST(sysml_reserved_keyword_quoting_roundtrip) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package TestPkg {\n"
+        "    attribute 'from' : String;\n"
+        "    attribute 'to' : String;\n"
+        "    attribute 'import' : String;\n"
+        "    attribute normal : String;\n"
+        "}\n";
+
+    /* First round: parse and write back */
+    SysmlSemanticModel *model1 = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model1);
+    char *output1 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model1, &output1), SYSML2_OK);
+    ASSERT_NOT_NULL(output1);
+
+    /* Reserved keywords must be quoted */
+    ASSERT(strstr(output1, "'from'") != NULL);
+    ASSERT(strstr(output1, "'to'") != NULL);
+    ASSERT(strstr(output1, "'import'") != NULL);
+    /* Non-keyword should NOT be quoted */
+    ASSERT(strstr(output1, "'normal'") == NULL);
+    ASSERT(strstr(output1, "normal") != NULL);
+
+    /* Second round: verify the output is parseable and idempotent */
+    SysmlSemanticModel *model2 = parse_sysml_string(&arena, &intern, output1);
+    ASSERT_NOT_NULL(model2);
+    char *output2 = NULL;
+    ASSERT_EQ(sysml2_sysml_write_string(model2, &output2), SYSML2_OK);
+    ASSERT_STR_EQ(output1, output2);
+
+    free(output1);
+    free(output2);
+    FIXTURE_TEARDOWN();
+}
+
 /* ========== Batch 3: Endpoint Capture Tests ========== */
 
 /* Test: flow endpoints preserved */
@@ -2407,6 +2446,9 @@ int main(void) {
     RUN_TEST(sysml_perform_action_preserved);
     RUN_TEST(sysml_default_value_keyword_preserved);
     RUN_TEST(sysml_roundtrip_phase2_all_fixes);
+
+    /* Reserved keyword quoting */
+    RUN_TEST(sysml_reserved_keyword_quoting_roundtrip);
 
     /* Pipeline source file tests */
     RUN_TEST(pipeline_populates_source_file);

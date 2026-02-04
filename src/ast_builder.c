@@ -1651,6 +1651,69 @@ void sysml2_capture_enum_keyword(SysmlBuildContext *ctx) {
 }
 
 /*
+ * Helper: Strip trailing line comments from captured text.
+ *
+ * The PEG grammar's SEMICOLON rule consumes trailing whitespace AND comments.
+ * When grammar captures include SEMICOLON (via SuccessionBody, ActionBody, etc.),
+ * trailing // comments get embedded in the captured text AND separately captured
+ * as trivia. This causes +1 duplication per parse-write cycle.
+ *
+ * Handles two patterns:
+ * 1. Standalone comment lines: "name;\n    // Logic: ...\n"
+ * 2. Inline trailing comments: "name; // Logic: ...\n"
+ */
+static size_t strip_trailing_line_comments(const char *text, size_t len) {
+    while (len > 0) {
+        /* Skip trailing whitespace */
+        size_t end = len;
+        while (end > 0 && (text[end-1] == ' ' || text[end-1] == '\t' ||
+                           text[end-1] == '\n' || text[end-1] == '\r')) {
+            end--;
+        }
+        if (end == 0) break;
+
+        /* Find the start of the last line */
+        size_t line_start = end;
+        while (line_start > 0 && text[line_start-1] != '\n') {
+            line_start--;
+        }
+
+        /* Skip leading whitespace on this line */
+        size_t content_start = line_start;
+        while (content_start < end && (text[content_start] == ' ' || text[content_start] == '\t')) {
+            content_start++;
+        }
+
+        /* Case 1: Standalone comment line (starts with //) — remove entire line */
+        if (content_start + 1 < end && text[content_start] == '/' && text[content_start + 1] == '/') {
+            len = line_start;
+            continue;
+        }
+
+        /* Case 2: Inline trailing comment — find // on this line and strip from there */
+        {
+            bool found = false;
+            for (size_t i = content_start; i + 1 < end; i++) {
+                if (text[i] == '/' && text[i + 1] == '/') {
+                    size_t new_end = i;
+                    while (new_end > line_start &&
+                           (text[new_end-1] == ' ' || text[new_end-1] == '\t')) {
+                        new_end--;
+                    }
+                    len = new_end;
+                    found = true;
+                    break;
+                }
+            }
+            if (found) continue;
+        }
+
+        break;
+    }
+    return len;
+}
+
+/*
  * Helper: Trim whitespace from a string
  */
 static const char *trim_and_intern(SysmlBuildContext *ctx, const char *text, size_t len) {
@@ -1821,6 +1884,10 @@ void sysml2_capture_succession(
 ) {
     if (!ctx) return;
 
+    /* Strip trailing line comments that SEMICOLON rule may have captured */
+    source_len = strip_trailing_line_comments(source, source_len);
+    target_len = strip_trailing_line_comments(target, target_len);
+
     /* Skip if both source and target are empty (malformed input) */
     const char *trimmed_source = trim_and_intern(ctx, source, source_len);
     const char *trimmed_target = trim_and_intern(ctx, target, target_len);
@@ -1844,6 +1911,8 @@ void sysml2_capture_succession(
 void sysml2_capture_entry(SysmlBuildContext *ctx, const char *text, size_t len) {
     if (!ctx) return;
 
+    len = strip_trailing_line_comments(text, len);
+
     SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_ENTRY);
     if (!stmt) return;
 
@@ -1857,6 +1926,8 @@ void sysml2_capture_entry(SysmlBuildContext *ctx, const char *text, size_t len) 
  */
 void sysml2_capture_exit(SysmlBuildContext *ctx, const char *text, size_t len) {
     if (!ctx) return;
+
+    len = strip_trailing_line_comments(text, len);
 
     SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_EXIT);
     if (!stmt) return;
@@ -1872,6 +1943,8 @@ void sysml2_capture_exit(SysmlBuildContext *ctx, const char *text, size_t len) {
 void sysml2_capture_do(SysmlBuildContext *ctx, const char *text, size_t len) {
     if (!ctx) return;
 
+    len = strip_trailing_line_comments(text, len);
+
     SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_DO);
     if (!stmt) return;
 
@@ -1885,6 +1958,8 @@ void sysml2_capture_do(SysmlBuildContext *ctx, const char *text, size_t len) {
  */
 void sysml2_capture_transition(SysmlBuildContext *ctx, const char *text, size_t len) {
     if (!ctx) return;
+
+    len = strip_trailing_line_comments(text, len);
 
     SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_TRANSITION);
     if (!stmt) return;
@@ -1928,6 +2003,8 @@ void sysml2_capture_send(SysmlBuildContext *ctx, const char *text, size_t len) {
  */
 void sysml2_capture_accept_action(SysmlBuildContext *ctx, const char *text, size_t len) {
     if (!ctx) return;
+
+    len = strip_trailing_line_comments(text, len);
 
     SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_ACCEPT_ACTION);
     if (!stmt) return;
@@ -2326,6 +2403,8 @@ void sysml2_capture_assume_constraint(SysmlBuildContext *ctx, const char *text, 
 void sysml2_capture_subject(SysmlBuildContext *ctx, const char *text, size_t len) {
     if (!ctx) return;
 
+    len = strip_trailing_line_comments(text, len);
+
     SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_SUBJECT);
     if (!stmt) return;
 
@@ -2389,6 +2468,8 @@ void sysml2_capture_flow_payload(SysmlBuildContext *ctx, const char *text, size_
 void sysml2_capture_actor(SysmlBuildContext *ctx, const char *text, size_t len) {
     if (!ctx) return;
 
+    len = strip_trailing_line_comments(text, len);
+
     SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_ACTOR);
     if (!stmt) return;
 
@@ -2403,6 +2484,8 @@ void sysml2_capture_actor(SysmlBuildContext *ctx, const char *text, size_t len) 
  */
 void sysml2_capture_stakeholder(SysmlBuildContext *ctx, const char *text, size_t len) {
     if (!ctx) return;
+
+    len = strip_trailing_line_comments(text, len);
 
     SysmlStatement *stmt = create_statement(ctx, SYSML_STMT_STAKEHOLDER);
     if (!stmt) return;
