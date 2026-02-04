@@ -378,6 +378,10 @@ static void pass2_resolve_types(
                             snprintf(help, sizeof(help), "did you mean '%s'?", suggestions[0]);
                             sysml2_diag_add_help(diag, vctx->diag_ctx,
                                 sysml2_intern(vctx->symtab->intern, help));
+                        } else {
+                            sysml2_diag_add_help(diag, vctx->diag_ctx,
+                                sysml2_intern(vctx->symtab->intern,
+                                    "define this type before use, or add an import for the package that defines it"));
                         }
                     }
 

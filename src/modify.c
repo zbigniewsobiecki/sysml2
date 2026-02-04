@@ -1558,6 +1558,9 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
                         if (!stmt) continue;
 
                         if (stmt->kind == SYSML_STMT_SHORTHAND_FEATURE && stmt->raw_text) {
+                            /* Never preserve :>> doc — 'doc' is a keyword, not a redefinable feature */
+                            const char *_pname = sysml2_extract_shorthand_stmt_name(stmt->raw_text, arena, intern);
+                            if (_pname && strcmp(_pname, "doc") == 0) continue;
                             if (!STMT_IS_DUPLICATE(stmt)) {
                                 preserve_count++;
                             }
@@ -1581,6 +1584,8 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
                                 if (!stmt) continue;
 
                                 if (stmt->kind == SYSML_STMT_SHORTHAND_FEATURE && stmt->raw_text) {
+                                    const char *_pname = sysml2_extract_shorthand_stmt_name(stmt->raw_text, arena, intern);
+                                    if (_pname && strcmp(_pname, "doc") == 0) continue;
                                     if (!STMT_IS_DUPLICATE(stmt)) {
                                         merged[idx++] = sysml2_modify_copy_statement(stmt, arena);
                                     }
@@ -1767,6 +1772,9 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
 
                         /* Only merge shorthand features by name */
                         if (stmt->kind == SYSML_STMT_SHORTHAND_FEATURE && stmt->raw_text) {
+                            /* Never preserve :>> doc — 'doc' is a keyword, not a redefinable feature */
+                            const char *_pname = sysml2_extract_shorthand_stmt_name(stmt->raw_text, arena, intern);
+                            if (_pname && strcmp(_pname, "doc") == 0) continue;
                             if (!STMT_IS_DUPLICATE2(stmt)) {
                                 preserve_count++;
                             }
@@ -1794,6 +1802,8 @@ SysmlSemanticModel *sysml2_modify_merge_fragment(
                                 if (!stmt) continue;
 
                                 if (stmt->kind == SYSML_STMT_SHORTHAND_FEATURE && stmt->raw_text) {
+                                    const char *_pname = sysml2_extract_shorthand_stmt_name(stmt->raw_text, arena, intern);
+                                    if (_pname && strcmp(_pname, "doc") == 0) continue;
                                     if (!STMT_IS_DUPLICATE2(stmt)) {
                                         /* Deep copy the preserved statement */
                                         merged[idx++] = sysml2_modify_copy_statement(stmt, arena);

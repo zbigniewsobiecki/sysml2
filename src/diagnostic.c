@@ -7,6 +7,7 @@
  */
 
 #include "sysml2/diagnostic.h"
+#include "sysml2/utils.h"
 #include <string.h>
 #include <unistd.h>
 
@@ -250,6 +251,41 @@ const char *sysml2_diag_code_to_string(Sysml2DiagCode code) {
     }
 }
 
+/* Lazily load source content and build line offsets on demand.
+ * Called before diagnostic printing needs source context.
+ * Handles two cases:
+ * - Content present but line offsets not yet built (transferred from pipeline)
+ * - No content at all: re-reads the file from disk (path must be a real file)
+ * Allocated memory (content/offsets) is intentionally not freed - acceptable
+ * for a CLI tool that exits shortly after. */
+static void ensure_source_loaded(Sysml2SourceFile *sf) {
+    if (!sf) return;
+
+    /* Case 1: Content available but line offsets not yet built */
+    if (sf->content && !sf->line_offsets) {
+        uint32_t line_count;
+        uint32_t *offsets = sysml2_build_line_offsets(sf->content, sf->content_length, &line_count);
+        sf->line_offsets = offsets;
+        sf->line_count = offsets ? line_count : 0;
+        return;
+    }
+
+    /* Case 2: No content - try to load from file path */
+    if (!sf->content && sf->path && sf->path[0] != '<') {
+        size_t length;
+        char *content = sysml2_read_file(sf->path, &length);
+        if (!content) return;
+
+        sf->content = content;
+        sf->content_length = length;
+
+        uint32_t line_count;
+        uint32_t *offsets = sysml2_build_line_offsets(content, length, &line_count);
+        sf->line_offsets = offsets;
+        sf->line_count = offsets ? line_count : 0;
+    }
+}
+
 /* Get source line at a given line number */
 static const char *get_source_line(const Sysml2SourceFile *file, uint32_t line, size_t *out_length) {
     if (!file || !file->content || line == 0 || line > file->line_count) {
@@ -335,6 +371,9 @@ void sysml2_diag_print(
 
     /* Source context */
     if (options->show_source_context && diag->file && diag->range.start.line > 0) {
+        /* Lazily load source content and line offsets if not yet available */
+        ensure_source_loaded((Sysml2SourceFile *)diag->file);
+
         size_t line_len;
         const char *line = get_source_line(diag->file, diag->range.start.line, &line_len);
 

@@ -23,6 +23,7 @@
 #define RESOLVER_INITIAL_STACK_CAPACITY 16
 #define RESOLVER_INITIAL_PACKAGE_MAP_CAPACITY 64
 #define RESOLVER_INITIAL_FILE_CACHE_CAPACITY 128
+#define RESOLVER_INITIAL_FAILED_LOOKUP_CAPACITY 32
 
 /* Environment variable name */
 #define SYSML2_LIBRARY_PATH_ENV "SYSML2_LIBRARY_PATH"
@@ -130,6 +131,116 @@ static const char *lookup_package_file(
     return NULL;
 }
 
+/* Internal: get cached model using already-absolute path (skip realpath) */
+static SysmlSemanticModel *get_cached_abs(
+    Sysml2ImportResolver *resolver,
+    const char *abs_path
+) {
+    if (!resolver || !abs_path || !resolver->file_cache) return NULL;
+
+    size_t bucket = hash_string(abs_path) % resolver->file_cache_capacity;
+    Sysml2FileCache *entry = resolver->file_cache[bucket];
+    while (entry) {
+        if (strcmp(entry->path, abs_path) == 0) {
+            return entry->model;
+        }
+        entry = entry->next;
+    }
+    return NULL;
+}
+
+/* Internal: cache model using already-absolute path (skip realpath) */
+static void cache_model_abs(
+    Sysml2ImportResolver *resolver,
+    const char *abs_path,
+    SysmlSemanticModel *model
+) {
+    if (!resolver || !abs_path || !model || !resolver->file_cache) return;
+
+    size_t bucket = hash_string(abs_path) % resolver->file_cache_capacity;
+    Sysml2FileCache *entry = resolver->file_cache[bucket];
+    while (entry) {
+        if (strcmp(entry->path, abs_path) == 0) {
+            entry->model = model;
+            return;
+        }
+        entry = entry->next;
+    }
+
+    Sysml2FileCache *new_entry = malloc(sizeof(Sysml2FileCache));
+    if (!new_entry) return;
+
+    new_entry->path = strdup(abs_path);
+    if (!new_entry->path) {
+        free(new_entry);
+        return;
+    }
+    new_entry->model = model;
+    new_entry->next = resolver->file_cache[bucket];
+    resolver->file_cache[bucket] = new_entry;
+    resolver->file_cache_count++;
+
+    const char *pkg_name = extract_top_level_package(model);
+    if (pkg_name) {
+        register_package_file(resolver, pkg_name, abs_path);
+    }
+}
+
+/* Check if a package is in the failed lookup cache */
+static bool is_failed_lookup(Sysml2ImportResolver *resolver, const char *package_name) {
+    if (!resolver || !package_name || !resolver->failed_lookups) return false;
+
+    size_t bucket = hash_string(package_name) % resolver->failed_lookups_capacity;
+    Sysml2FailedLookup *entry = resolver->failed_lookups[bucket];
+    while (entry) {
+        if (strcmp(entry->package_name, package_name) == 0) {
+            return true;
+        }
+        entry = entry->next;
+    }
+    return false;
+}
+
+/* Add a package to the failed lookup cache */
+static void add_failed_lookup(Sysml2ImportResolver *resolver, const char *package_name) {
+    if (!resolver || !package_name || !resolver->failed_lookups) return;
+
+    size_t bucket = hash_string(package_name) % resolver->failed_lookups_capacity;
+
+    Sysml2FailedLookup *entry = resolver->failed_lookups[bucket];
+    while (entry) {
+        if (strcmp(entry->package_name, package_name) == 0) return;
+        entry = entry->next;
+    }
+
+    Sysml2FailedLookup *new_entry = malloc(sizeof(Sysml2FailedLookup));
+    if (!new_entry) return;
+
+    new_entry->package_name = strdup(package_name);
+    if (!new_entry->package_name) {
+        free(new_entry);
+        return;
+    }
+    new_entry->next = resolver->failed_lookups[bucket];
+    resolver->failed_lookups[bucket] = new_entry;
+}
+
+/* Clear the failed lookup cache */
+static void clear_failed_lookups(Sysml2ImportResolver *resolver) {
+    if (!resolver || !resolver->failed_lookups) return;
+
+    for (size_t i = 0; i < resolver->failed_lookups_capacity; i++) {
+        Sysml2FailedLookup *entry = resolver->failed_lookups[i];
+        while (entry) {
+            Sysml2FailedLookup *next = entry->next;
+            free(entry->package_name);
+            free(entry);
+            entry = next;
+        }
+        resolver->failed_lookups[i] = NULL;
+    }
+}
+
 /* File I/O and path utilities are now in sysml2/utils.h */
 
 /* Helper: Extract package name from import target
@@ -233,9 +344,22 @@ Sysml2ImportResolver *sysml2_resolver_create(
     resolver->file_cache_capacity = RESOLVER_INITIAL_FILE_CACHE_CAPACITY;
     resolver->file_cache_count = 0;
 
+    /* Initialize negative lookup cache */
+    resolver->failed_lookups = calloc(RESOLVER_INITIAL_FAILED_LOOKUP_CAPACITY, sizeof(Sysml2FailedLookup *));
+    if (!resolver->failed_lookups) {
+        free(resolver->file_cache);
+        free(resolver->package_map);
+        free(resolver->resolution_stack);
+        free(resolver->library_paths);
+        free(resolver);
+        return NULL;
+    }
+    resolver->failed_lookups_capacity = RESOLVER_INITIAL_FAILED_LOOKUP_CAPACITY;
+
     resolver->verbose = false;
     resolver->disabled = false;
     resolver->strict_imports = false;
+    resolver->preloaded = false;
 
     return resolver;
 }
@@ -283,6 +407,12 @@ void sysml2_resolver_destroy(Sysml2ImportResolver *resolver) {
         free(resolver->package_map);
     }
 
+    /* Free failed lookup cache */
+    if (resolver->failed_lookups) {
+        clear_failed_lookups(resolver);
+        free(resolver->failed_lookups);
+    }
+
     free(resolver);
 }
 
@@ -319,6 +449,9 @@ void sysml2_resolver_add_path(Sysml2ImportResolver *resolver, const char *path) 
     }
 
     resolver->library_paths[resolver->path_count++] = abs_path;
+
+    /* Invalidate negative lookup cache - new path might contain previously-missing packages */
+    clear_failed_lookups(resolver);
 
     if (resolver->verbose) {
         fprintf(stderr, "note: added library path: %s\n", abs_path);
@@ -363,39 +496,8 @@ void sysml2_resolver_cache_model(
         if (!abs_path) return;
     }
 
-    /* Hash-based lookup */
-    size_t bucket = hash_string(abs_path) % resolver->file_cache_capacity;
-    Sysml2FileCache *entry = resolver->file_cache[bucket];
-    while (entry) {
-        if (strcmp(entry->path, abs_path) == 0) {
-            /* Already cached - update model */
-            entry->model = model;
-            free(abs_path);
-            return;
-        }
-        entry = entry->next;
-    }
-
-    /* Create new cache entry */
-    Sysml2FileCache *new_entry = malloc(sizeof(Sysml2FileCache));
-    if (!new_entry) {
-        free(abs_path);
-        return;
-    }
-
-    new_entry->path = abs_path;
-    new_entry->model = model;
-    new_entry->next = resolver->file_cache[bucket];
-    resolver->file_cache[bucket] = new_entry;
-    resolver->file_cache_count++;
-
-    /* Register the top-level package for discovery.
-     * This allows imports to find packages even when the filename
-     * doesn't match the package name (e.g., SystemBehavior in _index.sysml). */
-    const char *pkg_name = extract_top_level_package(model);
-    if (pkg_name) {
-        register_package_file(resolver, pkg_name, abs_path);
-    }
+    cache_model_abs(resolver, abs_path, model);
+    free(abs_path);
 }
 
 SysmlSemanticModel *sysml2_resolver_get_cached(
@@ -412,19 +514,9 @@ SysmlSemanticModel *sysml2_resolver_get_cached(
         if (!abs_path) return NULL;
     }
 
-    /* Hash-based lookup */
-    size_t bucket = hash_string(abs_path) % resolver->file_cache_capacity;
-    Sysml2FileCache *entry = resolver->file_cache[bucket];
-    while (entry) {
-        if (strcmp(entry->path, abs_path) == 0) {
-            free(abs_path);
-            return entry->model;
-        }
-        entry = entry->next;
-    }
-
+    SysmlSemanticModel *model = get_cached_abs(resolver, abs_path);
     free(abs_path);
-    return NULL;
+    return model;
 }
 
 char *sysml2_resolver_find_file(
@@ -437,7 +529,7 @@ char *sysml2_resolver_find_file(
     char *package_name = extract_package_name(import_target);
     if (!package_name) return NULL;
 
-    /* NEW: Check package map first (populated by preload) */
+    /* Check package map first (populated by preload) */
     const char *mapped_path = lookup_package_file(resolver, package_name);
     if (mapped_path) {
         if (resolver->verbose) {
@@ -446,6 +538,15 @@ char *sysml2_resolver_find_file(
         }
         free(package_name);
         return strdup(mapped_path);
+    }
+
+    /* Check negative lookup cache - skip expensive search if already failed */
+    if (is_failed_lookup(resolver, package_name)) {
+        if (resolver->verbose) {
+            fprintf(stderr, "note: '%s' in negative cache, skipping search\n", package_name);
+        }
+        free(package_name);
+        return NULL;
     }
 
     /* Try each library path */
@@ -489,6 +590,9 @@ char *sysml2_resolver_find_file(
             return found;
         }
     }
+
+    /* Remember this failure to avoid repeating expensive searches */
+    add_failed_lookup(resolver, package_name);
 
     free(package_name);
     return NULL;
@@ -650,8 +754,8 @@ static Sysml2Result resolve_single_import(
         free(found_path);
     }
 
-    /* Check if already cached */
-    if (sysml2_resolver_get_cached(resolver, abs_path)) {
+    /* Check if already cached (path is already absolute, skip realpath) */
+    if (get_cached_abs(resolver, abs_path)) {
         free(abs_path);
         return SYSML2_OK;
     }
@@ -688,8 +792,8 @@ static Sysml2Result resolve_single_import(
         return SYSML2_ERROR_SYNTAX;
     }
 
-    /* Cache the model */
-    sysml2_resolver_cache_model(resolver, abs_path, model);
+    /* Cache the model (path is already absolute, skip realpath) */
+    cache_model_abs(resolver, abs_path, model);
 
     /* Recursively resolve its imports */
     Sysml2Result result = resolve_file_imports(resolver, abs_path, diag);
@@ -706,8 +810,8 @@ static Sysml2Result resolve_file_imports(
     const char *file_path,
     Sysml2DiagContext *diag
 ) {
-    /* Get the model from cache */
-    SysmlSemanticModel *model = sysml2_resolver_get_cached(resolver, file_path);
+    /* Get the model from cache (file_path comes from cache, already absolute) */
+    SysmlSemanticModel *model = get_cached_abs(resolver, file_path);
     if (!model) {
         return SYSML2_OK;  /* Nothing to do */
     }
@@ -853,21 +957,14 @@ static void preload_directory(
             bool is_kerml = (len > 6 && strcmp(entry->d_name + len - 6, ".kerml") == 0);
 
             if (is_sysml || is_kerml) {
-                /* Check if already cached */
                 char *abs_path = sysml2_get_realpath(full_path);
                 if (!abs_path) abs_path = strdup(full_path);
 
-                if (abs_path && !sysml2_resolver_get_cached(resolver, abs_path)) {
+                if (abs_path && !get_cached_abs(resolver, abs_path)) {
                     /* Parse and cache the file */
                     SysmlSemanticModel *model = parse_file(resolver, abs_path, diag);
                     if (model) {
-                        sysml2_resolver_cache_model(resolver, abs_path, model);
-
-                        /* NEW: Register top-level package for discovery */
-                        const char *pkg_name = extract_top_level_package(model);
-                        if (pkg_name) {
-                            register_package_file(resolver, pkg_name, abs_path);
-                        }
+                        cache_model_abs(resolver, abs_path, model);
                     }
                 }
                 free(abs_path);
@@ -916,7 +1013,7 @@ static void discover_packages_in_directory(
                 if (!abs_path) abs_path = strdup(full_path);
 
                 /* Check if package already registered for this file */
-                if (abs_path && !sysml2_resolver_get_cached(resolver, abs_path)) {
+                if (abs_path && !get_cached_abs(resolver, abs_path)) {
                     /* Parse file just for package discovery */
                     SysmlSemanticModel *model = parse_file(resolver, abs_path, diag);
                     if (model) {
@@ -943,6 +1040,9 @@ Sysml2Result sysml2_resolver_preload_libraries(
 ) {
     if (!resolver) return SYSML2_ERROR_SEMANTIC;
 
+    /* Skip if already preloaded (idempotent) */
+    if (resolver->preloaded) return SYSML2_OK;
+
     /* Preload all SysML/KerML files from each library path */
     for (size_t i = 0; i < resolver->path_count; i++) {
         const char *lib_path = resolver->library_paths[i];
@@ -952,6 +1052,7 @@ Sysml2Result sysml2_resolver_preload_libraries(
         preload_directory(resolver, lib_path, diag, 10);
     }
 
+    resolver->preloaded = true;
     return SYSML2_OK;
 }
 

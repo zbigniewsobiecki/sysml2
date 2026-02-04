@@ -1,0 +1,4 @@
+state def Sm{transition first then idle; // transition comment
+}
+action def Ac{accept evt; // accept comment
+action next;}

@@ -42,6 +42,15 @@ typedef struct Sysml2PackageEntry {
 } Sysml2PackageEntry;
 
 /*
+ * Failed lookup entry - tracks import targets that weren't found
+ * (negative cache to avoid repeated failed directory searches)
+ */
+typedef struct Sysml2FailedLookup {
+    char *package_name;              /* Package name (owned) */
+    struct Sysml2FailedLookup *next; /* Next entry in bucket chain */
+} Sysml2FailedLookup;
+
+/*
  * Import Resolver - manages library paths, file caching, and cycle detection
  */
 struct Sysml2ImportResolver {
@@ -60,6 +69,10 @@ struct Sysml2ImportResolver {
     size_t package_map_capacity;      /* Number of hash buckets */
     size_t package_map_count;         /* Number of entries */
 
+    /* Negative lookup cache - packages known to not exist in library paths */
+    Sysml2FailedLookup **failed_lookups;
+    size_t failed_lookups_capacity;
+
     /* Cycle detection */
     char **resolution_stack;         /* Stack of files being resolved (owned) */
     size_t stack_depth;
@@ -73,6 +86,7 @@ struct Sysml2ImportResolver {
     bool verbose;                    /* Print verbose messages */
     bool disabled;                   /* --no-resolve flag */
     bool strict_imports;             /* Emit errors for missing imports (for --fix mode) */
+    bool preloaded;                  /* Whether preload_libraries has been called */
 };
 
 /*

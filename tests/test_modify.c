@@ -3307,6 +3307,88 @@ TEST(writer_action_stmts_double_roundtrip_stable) {
     FIXTURE_TEARDOWN();
 }
 
+/* Test: transition trailing comment appears exactly once after parse→write */
+TEST(writer_transition_trailing_comment) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "state def Sm {\n"
+        "    transition first then idle; // transition comment\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* The transition comment should appear exactly once */
+    int count = 0;
+    const char *pos = output;
+    while ((pos = strstr(pos, "// transition comment")) != NULL) {
+        count++;
+        pos++;
+    }
+    ASSERT_EQ(count, 1);
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
+/* Test: accept, subject, actor, stakeholder trailing comments each appear
+ * exactly once after parse→write */
+TEST(writer_accept_subject_actor_stakeholder_comment) {
+    FIXTURE_SETUP();
+
+    const char *input =
+        "package Pkg {\n"
+        "    part def User;\n"
+        "    part def System;\n"
+        "    part def PM;\n"
+        "    use case def UC {\n"
+        "        subject sys:System; // subject note\n"
+        "        actor u:User; // actor note\n"
+        "    }\n"
+        "    concern def C {\n"
+        "        stakeholder pm:PM; // stakeholder note\n"
+        "    }\n"
+        "}\n"
+        "action def Ac {\n"
+        "    accept evt; // accept note\n"
+        "    action next;\n"
+        "}\n";
+
+    SysmlSemanticModel *model = parse_sysml_string(&arena, &intern, input);
+    ASSERT_NOT_NULL(model);
+
+    char *output = NULL;
+    Sysml2Result result = sysml2_sysml_write_string(model, &output);
+    ASSERT_EQ(result, SYSML2_OK);
+    ASSERT_NOT_NULL(output);
+
+    /* Each comment should appear exactly once */
+    const char *comments[] = {
+        "// subject note",
+        "// actor note",
+        "// stakeholder note",
+        "// accept note"
+    };
+    for (int i = 0; i < 4; i++) {
+        int count = 0;
+        const char *pos = output;
+        while ((pos = strstr(pos, comments[i])) != NULL) {
+            count++;
+            pos++;
+        }
+        ASSERT_EQ(count, 1);
+    }
+
+    free(output);
+    FIXTURE_TEARDOWN();
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -3438,6 +3520,8 @@ int main(void) {
     RUN_TEST(writer_succession_comment_no_duplication);
     RUN_TEST(writer_entry_exit_do_comment_no_duplication);
     RUN_TEST(writer_action_stmts_double_roundtrip_stable);
+    RUN_TEST(writer_transition_trailing_comment);
+    RUN_TEST(writer_accept_subject_actor_stakeholder_comment);
 
     printf("\n%d/%d tests passed.\n", tests_passed, tests_run);
     return tests_passed == tests_run ? 0 : 1;

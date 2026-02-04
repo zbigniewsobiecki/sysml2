@@ -2277,16 +2277,17 @@ TEST(pipeline_populates_source_file) {
     ASSERT_EQ(result, SYSML2_OK);
     ASSERT_NOT_NULL(model);
 
-    /* Pipeline should have populated source_file */
+    /* Pipeline should have populated source_file with content pointer (no copy) */
     ASSERT_NOT_NULL(model->source_file);
     ASSERT_STR_EQ(model->source_file->path, "test/vehicle.sysml");
     ASSERT_NOT_NULL(model->source_file->content);
     ASSERT(model->source_file->content_length == strlen(input));
-    ASSERT(model->source_file->line_count > 0);
-    ASSERT_NOT_NULL(model->source_file->line_offsets);
 
-    /* Content should match the input */
-    ASSERT(memcmp(model->source_file->content, input, strlen(input)) == 0);
+    /* Content pointer should reference the original input (zero-copy) */
+    ASSERT(model->source_file->content == input);
+
+    /* Line offsets are built lazily by diagnostic printing (ensure_source_loaded) */
+    ASSERT(model->source_file->line_offsets == NULL);
 
     sysml2_pipeline_destroy(ctx);
     FIXTURE_TEARDOWN();
@@ -2316,10 +2317,14 @@ TEST(pipeline_source_file_multiline) {
     ASSERT_NOT_NULL(model);
     ASSERT_NOT_NULL(model->source_file);
 
-    /* Should have 4 lines (plus possibly a trailing entry) */
-    ASSERT(model->source_file->line_count >= 4);
-    /* First line offset should be 0 */
-    ASSERT_EQ(model->source_file->line_offsets[0], 0);
+    /* Content pointer should reference the original input (zero-copy) */
+    ASSERT_NOT_NULL(model->source_file->content);
+    ASSERT(model->source_file->content == input);
+    ASSERT(model->source_file->content_length == strlen(input));
+
+    /* Line offsets are built lazily by diagnostic printing */
+    ASSERT(model->source_file->line_offsets == NULL);
+    ASSERT_EQ(model->source_file->line_count, 0);
 
     sysml2_pipeline_destroy(ctx);
     FIXTURE_TEARDOWN();
