@@ -243,45 +243,57 @@ static void pass1_build_symtab(
         /* Try to add symbol */
         Sysml2Symbol *existing = sysml2_symtab_lookup(scope, node->name);
         if (existing) {
-            /* Duplicate! */
-            if (vctx->options->check_duplicate_names) {
-                /* Create error message */
-                char msg[256];
-                snprintf(msg, sizeof(msg),
-                    "duplicate definition of '%s'", node->name);
+            /*
+             * Package contribution (SysML v2 §7.5): multiple files may
+             * contribute members to the same package.  When the existing
+             * symbol and the new node are both packages, we silently
+             * merge — the shared scope already exists and children from
+             * each file will be added to it.
+             */
+            bool is_package_merge = SYSML_KIND_IS_PACKAGE(node->kind)
+                && existing->node
+                && SYSML_KIND_IS_PACKAGE(existing->node->kind);
 
-                Sysml2SourceRange range = SYSML2_RANGE_INVALID;
-                range.start = node->loc;
-                range.end = node->loc;
+            if (!is_package_merge) {
+                /* Genuine duplicate — not a package merge */
+                if (vctx->options->check_duplicate_names) {
+                    char msg[256];
+                    snprintf(msg, sizeof(msg),
+                        "duplicate definition of '%s'", node->name);
 
-                Sysml2Diagnostic *diag = sysml2_diag_create(
-                    vctx->diag_ctx,
-                    SYSML2_DIAG_E3004_DUPLICATE_NAME,
-                    SYSML2_SEVERITY_ERROR,
-                    vctx->source_file,
-                    range,
-                    sysml2_intern(vctx->symtab->intern, msg)
-                );
+                    Sysml2SourceRange range = SYSML2_RANGE_INVALID;
+                    range.start = node->loc;
+                    range.end = node->loc;
 
-                /* Add note about previous definition */
-                if (existing->node) {
-                    char note_msg[256];
-                    snprintf(note_msg, sizeof(note_msg),
-                        "previous definition at line %u",
-                        existing->node->loc.line);
+                    Sysml2Diagnostic *diag = sysml2_diag_create(
+                        vctx->diag_ctx,
+                        SYSML2_DIAG_E3004_DUPLICATE_NAME,
+                        SYSML2_SEVERITY_ERROR,
+                        vctx->source_file,
+                        range,
+                        sysml2_intern(vctx->symtab->intern, msg)
+                    );
 
-                    Sysml2SourceRange prev_range = SYSML2_RANGE_INVALID;
-                    prev_range.start = existing->node->loc;
-                    prev_range.end = existing->node->loc;
+                    if (existing->node) {
+                        char note_msg[256];
+                        snprintf(note_msg, sizeof(note_msg),
+                            "previous definition at line %u",
+                            existing->node->loc.line);
 
-                    sysml2_diag_add_note(diag, vctx->diag_ctx,
-                        vctx->source_file, prev_range,
-                        sysml2_intern(vctx->symtab->intern, note_msg));
+                        Sysml2SourceRange prev_range = SYSML2_RANGE_INVALID;
+                        prev_range.start = existing->node->loc;
+                        prev_range.end = existing->node->loc;
+
+                        sysml2_diag_add_note(diag, vctx->diag_ctx,
+                            vctx->source_file, prev_range,
+                            sysml2_intern(vctx->symtab->intern, note_msg));
+                    }
+
+                    sysml2_diag_emit(vctx->diag_ctx, diag);
+                    vctx->has_errors = true;
                 }
-
-                sysml2_diag_emit(vctx->diag_ctx, diag);
-                vctx->has_errors = true;
             }
+            /* For package merges, fall through to scope creation below. */
         } else {
             /* Add new symbol */
             sysml2_symtab_add(vctx->symtab, scope, node->name, node->id, node);

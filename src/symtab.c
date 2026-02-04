@@ -428,13 +428,33 @@ static const char *get_final_segment(const char *qname) {
     return last;
 }
 
-/* Resolve a simple name via imports in a scope */
-static Sysml2Symbol *resolve_via_imports(
+/*
+ * Transitive import resolution with cycle detection.
+ *
+ * SysML v2 imports are public by default, so `import A::*;` inside
+ * package B makes A's members visible to anyone who imports B::*.
+ * We track visited scopes on a small stack to break cycles.
+ */
+#define MAX_IMPORT_DEPTH 32
+
+static Sysml2Symbol *resolve_via_imports_depth(
     Sysml2SymbolTable *symtab,
     const Sysml2Scope *scope,
-    const char *name
+    const char *name,
+    const Sysml2Scope **visited,
+    size_t *visited_count
 ) {
     if (!scope || !name) return NULL;
+
+    /* Cycle check — have we already visited this scope? */
+    for (size_t v = 0; v < *visited_count; v++) {
+        if (visited[v] == scope) return NULL;
+    }
+    if (*visited_count >= MAX_IMPORT_DEPTH) return NULL;
+
+    /* Mark current scope as visited (shared set — avoids re-exploring from other paths) */
+    visited[*visited_count] = scope;
+    (*visited_count)++;
 
     for (Sysml2ImportEntry *imp = scope->imports; imp; imp = imp->next) {
         switch (imp->import_kind) {
@@ -442,7 +462,6 @@ static Sysml2Symbol *resolve_via_imports(
                 /* Direct import: import A::B::Engine -> check if name matches "Engine" */
                 const char *imported_name = get_final_segment(imp->target);
                 if (imported_name && strcmp(imported_name, name) == 0) {
-                    /* Resolve the full qualified name */
                     Sysml2Scope *target_parent = find_scope(symtab, NULL);
                     return sysml2_symtab_resolve(symtab, target_parent, imp->target);
                 }
@@ -453,7 +472,13 @@ static Sysml2Symbol *resolve_via_imports(
                 /* Namespace import: import A::B::* -> look in A::B scope */
                 Sysml2Scope *target_scope = find_scope(symtab, imp->target);
                 if (target_scope) {
+                    /* 1. Check direct symbols in target scope */
                     Sysml2Symbol *sym = sysml2_symtab_lookup(target_scope, name);
+                    if (sym) return sym;
+
+                    /* 2. Transitively check target scope's own imports */
+                    sym = resolve_via_imports_depth(symtab, target_scope,
+                        name, visited, visited_count);
                     if (sym) return sym;
                 }
                 break;
@@ -465,8 +490,11 @@ static Sysml2Symbol *resolve_via_imports(
                 if (target_scope) {
                     Sysml2Symbol *sym = sysml2_symtab_lookup(target_scope, name);
                     if (sym) return sym;
-                    /* For recursive, we'd need to search nested scopes too */
-                    /* This is a simplified implementation - just check direct scope */
+
+                    /* Transitively check target scope's own imports */
+                    sym = resolve_via_imports_depth(symtab, target_scope,
+                        name, visited, visited_count);
+                    if (sym) return sym;
                 }
                 break;
             }
@@ -477,4 +505,15 @@ static Sysml2Symbol *resolve_via_imports(
     }
 
     return NULL;
+}
+
+/* Public entry point — resolve a simple name via imports in a scope */
+static Sysml2Symbol *resolve_via_imports(
+    Sysml2SymbolTable *symtab,
+    const Sysml2Scope *scope,
+    const char *name
+) {
+    const Sysml2Scope *visited[MAX_IMPORT_DEPTH];
+    size_t count = 0;
+    return resolve_via_imports_depth(symtab, scope, name, visited, &count);
 }
